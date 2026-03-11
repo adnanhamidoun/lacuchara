@@ -79,7 +79,6 @@ yarn.lock
 Pipfile.lock
 
 # ML/Data
-*.pkl
 *.joblib
 *.h5
 *.pth
