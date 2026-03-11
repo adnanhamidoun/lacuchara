@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Azca ML Service
 
 Model-as-a-Service prediction engine para servicios de restaurante.
@@ -142,3 +143,4 @@ Pinned versions in `requirements.txt` ensure reproducibility.
 
 - Model: `azca/artifacts/model.pkl`
 - Tests: `azca/tests/`
+
