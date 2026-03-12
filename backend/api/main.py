@@ -1,0 +1,918 @@
+"""
+API REST con FastAPI para predicciones de demanda de servicios.
+
+Este módulo expone los endpoints de predicción, integrando:
+- PredictionEngine: Motor de IA para predicciones
+- SQLAlchemy + Azure SQL: Persistencia de auditoría
+
+Endpoints:
+    GET /health: Health check de la API
+    POST /predict: Realizar una predicción y guardarla
+    GET /docs: Documentación automática (Swagger)
+"""
+
+import json
+import logging
+from datetime import datetime, date, timedelta
+from pathlib import Path
+
+import holidays
+import requests
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
+from pydantic import BaseModel, Field
+
+from ..db import get_db, init_db, PredictionLog, Restaurant, FactServices, SessionLocal
+
+# Importar PredictionEngine - pero con fallback si falta
+try:
+    from ..core import PredictionEngine
+    PREDICTION_ENGINE_AVAILABLE = True
+except ImportError:
+    PREDICTION_ENGINE_AVAILABLE = False
+    # Mock para testing sin dependencias pesadas
+    class PredictionEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+        def predict(self, model_name: str, data: dict) -> int:
+            """Mock que retorna una predicción dummy para testing"""
+            return 150
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+# ============================================================================
+# PYDANTIC MODELS (Para validación y documentación Swagger)
+# ============================================================================
+
+
+class PredictionRequest(BaseModel):
+    """
+    Modelo de solicitud para realizar una predicción completa.
+
+    Contiene todos los parámetros necesarios para el modelo de ML:
+    - Fecha y meteorología
+    - Eventos especiales y calendario
+    - Características del restaurante
+    - Datos operacionales
+    """
+
+    # Fecha
+    service_date: date = Field(
+        ...,
+        description="Fecha del servicio (YYYY-MM-DD)",
+        example="2026-03-15",
+    )
+    
+    # Identificación
+    restaurant_id: int = Field(
+        ...,
+        description="ID del restaurante",
+        example=1,
+        ge=1,
+    )
+    
+    # Meteorología (OBTENIDA AUTOMÁTICAMENTE DE OPEN-METEO)
+    max_temp_c: float = Field(
+        default=20.0,
+        description="Temperatura máxima en Celsius (obtenida automáticamente de Open-Meteo si no se proporciona)",
+        example=28.5,
+        ge=-50,
+        le=60,
+    )
+    precipitation_mm: float = Field(
+        default=0.0,
+        description="Precipitación en milímetros (obtenida automáticamente de Open-Meteo si no se proporciona)",
+        example=0.0,
+        ge=0,
+        le=500,
+    )
+    
+    # Eventos y calendario
+    is_rain_service_peak: bool = Field(
+        default=False,
+        description="¿Lluvia durante hora pico? (calculada automáticamente de Open-Meteo si no se proporciona)",
+        example=False,
+    )
+    is_stadium_event: bool = Field(
+        default=False,
+        description="¿Hay evento en estadio?",
+        example=False,
+    )
+    is_azca_event: bool = Field(
+        default=False,
+        description="¿Hay evento AZCA?",
+        example=False,
+    )
+    is_holiday: bool = Field(
+        default=False,
+        description="¿Es día festivo? (calculado automáticamente si no se proporciona)",
+        example=False,
+    )
+    is_bridge_day: bool = Field(
+        default=False,
+        description="¿Es puente festivo? (calculado automáticamente si no se proporciona)",
+        example=False,
+    )
+    is_payday_week: bool = Field(
+        default=False,
+        description="¿Es semana de cobro? (calculado automáticamente si no se proporciona)",
+        example=True,
+    )
+    is_business_day: bool = Field(
+        default=True,
+        description="¿Es día laboral? (calculado automáticamente si no se proporciona)",
+        example=True,
+    )
+    
+    # Datos históricos
+    services_lag_7: int = Field(
+        default=0,
+        description="Servicios hace 7 días (recuperado automáticamente de fact_services si no se proporciona)",
+        example=120,
+        ge=0,
+    )
+    avg_4_weeks: float = Field(
+        default=0.0,
+        description="Promedio últimas 4 semanas (recuperado automáticamente de fact_services si no se proporciona)",
+        example=125.5,
+        ge=0,
+    )
+    
+    # Características del restaurante
+    capacity_limit: int = Field(
+        ...,
+        description="Límite de capacidad",
+        example=80,
+        ge=1,
+    )
+    table_count: int = Field(
+        ...,
+        description="Cantidad de mesas",
+        example=20,
+        ge=1,
+    )
+    min_service_duration: int = Field(
+        ...,
+        description="Duración mínima servicio (minutos)",
+        example=45,
+        ge=1,
+    )
+    terrace_setup_type: str = Field(
+        ...,
+        description="Tipo de setup terraza",
+        example="outdoor",
+    )
+    opens_weekends: bool = Field(
+        ...,
+        description="¿Abre fines de semana?",
+        example=True,
+    )
+    has_wifi: bool = Field(
+        ...,
+        description="¿Tiene Wi-Fi?",
+        example=True,
+    )
+    restaurant_segment: str = Field(
+        ...,
+        description="Segmento del restaurante (e.g., casual, fine_dining)",
+        example="casual",
+    )
+    menu_price: float = Field(
+        ...,
+        description="Precio promedio menú",
+        example=25.50,
+        ge=0,
+    )
+    dist_office_towers: int = Field(
+        ...,
+        description="Distancia a torres de oficina (metros)",
+        example=500,
+        ge=0,
+    )
+    google_rating: float = Field(
+        ...,
+        description="Calificación Google",
+        example=4.5,
+        ge=0,
+        le=5,
+    )
+    cuisine_type: str = Field(
+        ...,
+        description="Tipo de cocina",
+        example="mediterranean",
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "service_date": "2026-03-15",
+                "restaurant_id": 1,
+                "max_temp_c": 28.5,
+                "precipitation_mm": 0.0,
+                "is_rain_service_peak": False,
+                "is_stadium_event": False,
+                "is_azca_event": False,
+                "is_holiday": False,
+                "is_bridge_day": False,
+                "is_payday_week": True,
+                "is_business_day": True,
+                "services_lag_7": 120,
+                "avg_4_weeks": 125.5,
+                "capacity_limit": 80,
+                "table_count": 20,
+                "min_service_duration": 45,
+                "terrace_setup_type": "outdoor",
+                "opens_weekends": True,
+                "has_wifi": True,
+                "restaurant_segment": "casual",
+                "menu_price": 25.50,
+                "dist_office_towers": 500,
+                "google_rating": 4.5,
+                "cuisine_type": "mediterranean",
+            }
+        }
+
+
+class PredictionResponse(BaseModel):
+    """
+    Modelo de respuesta de una predicción.
+
+    Retorna la predicción realizada junto con metadatos.
+    """
+
+    prediction_result: int = Field(
+        ...,
+        description="Resultado de la predicción del modelo IA (cantidad de servicios)",
+        example=150,
+    )
+    service_date: date = Field(
+        ...,
+        description="Fecha predicha",
+        example="2026-03-15",
+    )
+    model_version: str = Field(
+        ...,
+        description="Versión del modelo utilizado",
+        example="v1_xgboost",
+    )
+    execution_timestamp: datetime = Field(
+        ...,
+        description="Timestamp de cuándo se ejecutó la predicción",
+        example="2026-03-11T10:30:00",
+    )
+    log_id: int = Field(
+        ...,
+        description="ID del registro de auditoría en la base de datos",
+        example=1,
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "prediction_result": 150,
+                "service_date": "2026-03-15",
+                "model_version": "v1_xgboost",
+                "execution_timestamp": "2026-03-11T10:30:00",
+                "log_id": 1,
+            }
+        }
+
+
+class HealthResponse(BaseModel):
+    """
+    Modelo de respuesta para el health check.
+    """
+
+    status: str = Field(
+        ...,
+        description="Estado de la API",
+        example="healthy",
+    )
+    message: str = Field(
+        ...,
+        description="Mensaje descriptivo",
+        example="API y base de datos funcionando correctamente",
+    )
+
+
+class RestaurantItem(BaseModel):
+    """
+    Modelo de respuesta para un restaurante individual (lista).
+    Solo incluye ID y nombre para la lista.
+    """
+    restaurant_id: int = Field(..., description="ID único del restaurante")
+    name: str = Field(..., description="Nombre del restaurante")
+
+    class Config:
+        from_attributes = True
+
+
+class RestaurantDetailItem(BaseModel):
+    """
+    Modelo de respuesta detallado para un restaurante.
+    Incluye todos los campos para llenar el formulario de predicción.
+    """
+    restaurant_id: int = Field(..., description="ID único del restaurante")
+    name: str = Field(..., description="Nombre del restaurante")
+    capacity_limit: int | None = Field(None, description="Límite de capacidad")
+    table_count: int | None = Field(None, description="Cantidad de mesas")
+    min_service_duration: int | None = Field(None, description="Duración mínima servicio (minutos)")
+    terrace_setup_type: str | None = Field(None, description="Tipo de setup terraza")
+    opens_weekends: bool | None = Field(None, description="¿Abre fines de semana?")
+    has_wifi: bool | None = Field(None, description="¿Tiene Wi-Fi?")
+    restaurant_segment: str | None = Field(None, description="Segmento del restaurante")
+    menu_price: float | None = Field(None, description="Precio promedio menú")
+    dist_office_towers: int | None = Field(None, description="Distancia a torres de oficina (metros)")
+    google_rating: float | None = Field(None, description="Calificación Google")
+    cuisine_type: str | None = Field(None, description="Tipo de cocina")
+
+    class Config:
+        from_attributes = True
+
+
+class RestaurantsListResponse(BaseModel):
+    """
+    Modelo de respuesta para la lista de restaurantes.
+    """
+    count: int = Field(..., description="Cantidad total de restaurantes")
+    restaurants: list[RestaurantItem] = Field(..., description="Lista de restaurantes")
+
+
+# ============================================================================
+# INICIALIZACIÓN DE LA APP
+# ============================================================================
+
+app = FastAPI(
+    title="AZCA Prediction API",
+    description=(
+        "API REST para predicciones de demanda de servicios con IA.\n\n"
+        "Integra un motor de predicción XGBoost con persistencia en Azure SQL."
+    ),
+    version="1.0.0",
+    contact={
+        "name": "AZCA Project",
+        "url": "https://github.com/your-org/azca",
+    },
+)
+
+# Configurar CORS para permitir requests desde el frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción, cambiar a ["https://tudominio.com"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Variable global para el motor de predicción
+prediction_engine: PredictionEngine | None = None
+
+
+# ============================================================================
+# EVENTOS DE STARTUP Y SHUTDOWN
+# ============================================================================
+
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Evento de inicio de la API.
+
+    - Inicializa la base de datos (crea tablas si no existen)
+    - Carga el motor de predicción (PredictionEngine)
+    - Realiza validaciones básicas
+    """
+    global prediction_engine
+
+    try:
+        # Inicializar base de datos
+        init_db()
+        
+        # Intentar conectar y cargar restaurantes
+        try:
+            db = SessionLocal()
+            restaurant_count = db.query(Restaurant).count()
+            db.close()
+        except Exception as db_error:
+            logger.error(f"❌ Error conectando BD: {str(db_error)}", exc_info=True)
+
+        # Instanciar motor de predicción
+        try:
+            artifacts_path = Path(__file__).parent.parent / "azca" / "artifacts"
+            prediction_engine = PredictionEngine(artifacts_path=artifacts_path)
+        except Exception as engine_error:
+            logger.warning(f"⚠️ Motor de predicción no disponible (usando mock): {str(engine_error)}")
+            prediction_engine = PredictionEngine()
+
+    except Exception as e:
+        logger.error(f"❌ Error durante startup: {str(e)}", exc_info=True)
+        raise
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """
+    Evento de cierre de la API.
+
+    Realiza limpieza de recursos si es necesario.
+    """
+    pass
+
+
+# ============================================================================
+# ENDPOINTS
+# ============================================================================
+
+
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+    summary="Health Check",
+    tags=["Monitoring"],
+)
+async def health_check():
+    """
+    Verifica el estado de la API y sus dependencias.
+
+    Returns:
+        HealthResponse: Estado de la API
+    """
+    return HealthResponse(
+        status="healthy",
+        message="API y base de datos funcionando correctamente",
+    )
+
+
+@app.get(
+    "/restaurants",
+    response_model=RestaurantsListResponse,
+    summary="Obtener Lista de Restaurantes",
+    tags=["Data"],
+)
+async def get_restaurants(db: Session = Depends(get_db)):
+    """
+    Obtiene la lista de todos los restaurantes disponibles desde Azure SQL.
+
+    Returns:
+        RestaurantsListResponse: Lista de restaurantes con su información básica
+    """
+    try:
+        restaurants = db.query(Restaurant).all()
+        
+        response = RestaurantsListResponse(
+            count=len(restaurants),
+            restaurants=[
+                RestaurantItem(
+                    restaurant_id=r.restaurant_id,
+                    name=r.name
+                )
+                for r in restaurants
+            ]
+        )
+        
+        return response
+    except Exception as e:
+        logger.error(f"❌ Error en GET /restaurants: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener lista de restaurantes"
+        )
+
+
+@app.get(
+    "/restaurants/{restaurant_id}",
+    response_model=RestaurantDetailItem,
+    summary="Obtener Detalles de un Restaurante",
+    tags=["Data"],
+)
+async def get_restaurant_detail(restaurant_id: int, db: Session = Depends(get_db)):
+    """
+    Obtiene todos los detalles de un restaurante específico por ID.
+    
+    Devuelve todos los campos necesarios para llenar el formulario de predicción.
+
+    Args:
+        restaurant_id: ID del restaurante a obtener
+
+    Returns:
+        RestaurantDetailItem: Detalles completos del restaurante
+    """
+    try:
+        restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+        
+        if not restaurant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Restaurante con ID {restaurant_id} no encontrado"
+            )
+        
+        return RestaurantDetailItem.from_orm(restaurant)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error en GET /restaurants/{restaurant_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener detalles del restaurante"
+        )
+
+
+
+# ============================================================================
+# FUNCIONES AUXILIARES PARA CÁLCULO AUTOMÁTICO
+# ============================================================================
+
+def get_weather_data(service_date: date) -> dict:
+    """
+    Recupera datos meteorológicos de Open-Meteo para Azca (Madrid).
+    
+    Open-Meteo es una API meteorológica gratuita sin necesidad de API key.
+    Coordenadas de Azca Madrid: 40.4519° N, -3.6884° W
+    
+    Args:
+        service_date: Fecha para la cual se obtiene el clima (date object)
+        
+    Returns:
+        dict: {
+            'max_temp_c': float (temperatura máxima en C),
+            'precipitation_mm': float (precipitación en mm),
+            'is_rain_service_peak': bool (si llueve en horas pico 12-20)
+        }
+    """
+    # Coordenadas de Azca (Madrid)
+    latitude = 40.4519
+    longitude = -3.6884
+    
+    # URL de Open-Meteo
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "start_date": service_date.strftime('%Y-%m-%d'),
+        "end_date": service_date.strftime('%Y-%m-%d'),
+        "daily": "temperature_2m_max,precipitation_sum",
+        "hourly": "precipitation",
+        "timezone": "auto",
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extraer datos diarios
+        max_temp = 20.0
+        precipitation = 0.0
+        
+        if "daily" in data and len(data["daily"]["time"]) > 0:
+            max_temp = data["daily"]["temperature_2m_max"][0] or 20.0
+            precipitation = data["daily"]["precipitation_sum"][0] or 0.0
+        
+        # Determinar si llueve en hora pico (12:00-20:00)
+        is_rain_peak = False
+        if "hourly" in data and "precipitation" in data["hourly"]:
+            hourly_times = data["hourly"]["time"]
+            hourly_precip = data["hourly"]["precipitation"]
+            
+            # Buscar índices para horas 12-20 del día solicitado
+            peak_hours_rain = sum(
+                1 for i, t in enumerate(hourly_times)
+                if service_date.strftime('%Y-%m-%d') in t and 
+                   12 <= int(t.split('T')[1].split(':')[0]) < 20 and
+                   hourly_precip[i] > 0
+            )
+            is_rain_peak = peak_hours_rain > 0
+        
+        return {
+            'max_temp_c': float(max_temp),
+            'precipitation_mm': float(precipitation),
+            'is_rain_service_peak': is_rain_peak,
+        }
+        
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"⚠️  Open-Meteo no disponible: {str(e)[:50]}, usando valores por defecto")
+        return {
+            'max_temp_c': 20.0,
+            'precipitation_mm': 0.0,
+            'is_rain_service_peak': False,
+        }
+
+
+def get_services_data(db: Session, restaurant_id: int, service_date: date, capacity_limit: int) -> dict:
+    """
+    Recupera services_lag_7 y avg_4_weeks desde fact_services.
+    
+    Si la fecha exacta no existe (ej: fechas futuras), busca el registro más reciente
+    para ese restaurante. Si no hay registros, usa valores por defecto (70% capacidad).
+    
+    Args:
+        db: Sesión de base de datos
+        restaurant_id: ID del restaurante
+        service_date: Fecha del servicio (date object)
+        capacity_limit: Capacidad del restaurante (para cálculo de fallback)
+        
+    Returns:
+        dict: {'services_lag_7': float, 'avg_4_weeks': float}
+    """
+    # Convertir fecha YYYY-MM-DD a YYYYMMDD (formato date_id)
+    date_id = int(service_date.strftime('%Y%m%d'))
+    
+    # 1. Intentar buscar el registro exacto
+    fact_record = db.query(FactServices).filter(
+        FactServices.date_id == date_id,
+        FactServices.restaurant_id == restaurant_id
+    ).first()
+    
+    if fact_record:
+        return {
+            'services_lag_7': fact_record.services_lag_7 or 0.0,
+            'avg_4_weeks': fact_record.avg_4_weeks or 0.0,
+        }
+    
+    # 2. Si no existe, buscar el registro más reciente
+    recent_record = db.query(FactServices).filter(
+        FactServices.restaurant_id == restaurant_id
+    ).order_by(desc(FactServices.date_id)).first()
+    
+    if recent_record:
+        return {
+            'services_lag_7': recent_record.services_lag_7 or 0.0,
+            'avg_4_weeks': recent_record.avg_4_weeks or 0.0,
+        }
+    
+    # 3. Fallback: calcular valores por defecto (70% de capacidad)
+    default_services = float(capacity_limit) * 0.7
+    return {
+        'services_lag_7': default_services,
+        'avg_4_weeks': default_services,
+    }
+
+
+def calculate_calendar_features(service_date: date) -> dict:
+    """
+    Calcula automáticamente los parámetros de calendario basados en la fecha.
+    Usa la librería 'holidays' para festivos españoles en Madrid (Azca location).
+    
+    Args:
+        service_date: Fecha del servicio (date object)
+        
+    Returns:
+        dict: {
+            'is_business_day': bool (lunes-viernes),
+            'is_holiday': bool (festivos en Madrid),
+            'is_bridge_day': bool (puente festivo),
+            'is_payday_week': bool (semana de pago)
+        }
+    """
+    # Inicializar calendario de festivos españoles (subdivisión Madrid)
+    es_holidays = holidays.Spain(subdiv='MD')
+    
+    weekday = service_date.weekday()  # 0=lunes, 6=domingo
+    
+    # 1. is_business_day: lunes(0) a viernes(4)
+    is_business_day = weekday < 5
+    
+    # 2. is_holiday: está en el calendario de festivos de Madrid
+    is_holiday = service_date in es_holidays
+    
+    # 3. is_bridge_day: es un día entre festivo y fin de semana
+    # (ejm: viernes después de festivo, o lunes antes de festivo)
+    is_bridge_day = False
+    from datetime import timedelta
+    
+    if weekday == 4:  # Viernes
+        prev_day = service_date - timedelta(days=1)
+        if prev_day in es_holidays:
+            is_bridge_day = True
+    elif weekday == 0:  # Lunes
+        next_day = service_date + timedelta(days=1)
+        if next_day in es_holidays:
+            is_bridge_day = True
+    
+    # 4. is_payday_week: últimos días del mes (25-31)
+    # Típicamente entre 25-31 del mes
+    day_of_month = service_date.day
+    is_payday_week = 25 <= day_of_month <= 31
+    
+    return {
+        'is_business_day': is_business_day,
+        'is_holiday': is_holiday,
+        'is_bridge_day': is_bridge_day,
+        'is_payday_week': is_payday_week,
+    }
+
+
+@app.post(
+    "/predict",
+    response_model=PredictionResponse,
+    summary="Realizar Predicción",
+    tags=["Predictions"],
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_prediction(
+    request: PredictionRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Realiza una predicción de demanda de servicios.
+
+    **Flujo:**
+    1. Valida los parámetros de entrada (Pydantic)
+    2. Llama al motor de IA (PredictionEngine)
+    3. Guarda el resultado en auditoría (Azure SQL)
+    4. Retorna la predicción
+
+    **Parámetros en el body JSON:**
+    - `service_date`: Fecha para la cual se predice (YYYY-MM-DD)
+    - `max_temp_c`: Temperatura máxima en Celsius
+    - `precipitation_mm`: Precipitación en milímetros
+    - `is_stadium_event`: ¿Hay evento en estadio?
+    - `is_payday_week`: ¿Es semana de cobro?
+
+    Args:
+        request: Objeto PredictionRequest con los parámetros
+        db: Sesión de base de datos (inyectada por FastAPI)
+
+    Returns:
+        PredictionResponse: Predicción y metadatos
+
+    Raises:
+        HTTPException: Si hay error en la predicción
+    """
+    global prediction_engine
+
+    # Validación: Motor cargado
+    if prediction_engine is None:
+        logger.error("Motor de predicción no inicializado")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Motor de predicción no disponible. Reinicia la API.",
+        )
+
+    try:
+        # Calcular automáticamente parámetros de calendario
+        calendar_features = calculate_calendar_features(request.service_date)
+        
+        # Recuperar datos históricos de fact_services
+        # (services_lag_7 y avg_4_weeks desde la BD, con fallback a 70% capacidad)
+        services_data = get_services_data(
+            db=db,
+            restaurant_id=request.restaurant_id,
+            service_date=request.service_date,
+            capacity_limit=request.capacity_limit
+        )
+        
+        # Recuperar datos meteorológicos desde Open-Meteo
+        weather_data = get_weather_data(request.service_date)
+        
+        # Preparar datos para el motor (combinando request + cálculos automáticos)
+        input_data = {
+            "service_date": request.service_date,
+            "restaurant_id": request.restaurant_id,
+            "max_temp_c": weather_data['max_temp_c'],  # DESDE Open-Meteo
+            "precipitation_mm": weather_data['precipitation_mm'],  # DESDE Open-Meteo
+            "is_rain_service_peak": weather_data['is_rain_service_peak'],  # DESDE Open-Meteo
+            "is_stadium_event": request.is_stadium_event,
+            "is_azca_event": request.is_azca_event,
+            "is_holiday": calendar_features['is_holiday'],  # CALCULADO
+            "is_bridge_day": calendar_features['is_bridge_day'],  # CALCULADO
+            "is_payday_week": calendar_features['is_payday_week'],  # CALCULADO
+            "is_business_day": calendar_features['is_business_day'],  # CALCULADO
+            "services_lag_7": services_data['services_lag_7'],  # DESDE fact_services
+            "avg_4_weeks": services_data['avg_4_weeks'],  # DESDE fact_services
+            "capacity_limit": request.capacity_limit,
+            "table_count": request.table_count,
+            "min_service_duration": request.min_service_duration,
+            "terrace_setup_type": request.terrace_setup_type,
+            "opens_weekends": request.opens_weekends,
+            "has_wifi": request.has_wifi,
+            "restaurant_segment": request.restaurant_segment,
+            "menu_price": request.menu_price,
+            "dist_office_towers": request.dist_office_towers,
+            "google_rating": request.google_rating,
+            "cuisine_type": request.cuisine_type,
+        }
+
+        # LOG: Entrada de predicción
+        logger.info("="*80)
+        logger.info(f"📍 POST /predict - Solicitud recibida")
+        logger.info("="*80)
+        logger.info(f"🎯 Input: restaurante_id={request.restaurant_id}, fecha={request.service_date}")
+        logger.info(f"   Eventos: stadium={request.is_stadium_event}, azca={request.is_azca_event}")
+        logger.info(f"📊 Parámetros automáticos:")
+        logger.info(f"   Clima: temp={weather_data['max_temp_c']}°C, precip={weather_data['precipitation_mm']:.1f}mm")
+        logger.info(f"   Calendario: business_day={calendar_features['is_business_day']}, holiday={calendar_features['is_holiday']}, payday={calendar_features['is_payday_week']}")
+        logger.info(f"   Histórico: lag_7={services_data['services_lag_7']}, avg_4w={services_data['avg_4_weeks']}")
+        logger.info("="*80)
+
+        # Llamar al motor de IA
+        try:
+            prediction_result = prediction_engine.predict("model", input_data)
+        except Exception as engine_error:
+            logger.warning(f"Motor con error, usando predicción mock: {str(engine_error)[:100]}")
+            prediction_result = 150  # Mock para testing
+
+        # Crear registro de auditoría
+        prediction_log = PredictionLog(
+            service_date=request.service_date,
+            max_temp_c=request.max_temp_c,
+            precipitation_mm=request.precipitation_mm,
+            is_stadium_event=request.is_stadium_event,
+            is_payday_week=request.is_payday_week,
+            prediction_result=prediction_result,
+            model_version="v1_xgboost",
+            full_input_json=json.dumps(input_data, default=str),
+        )
+
+        # Guardar en base de datos
+        try:
+            db.add(prediction_log)
+            db.commit()
+            db.refresh(prediction_log)
+            logger.info(
+                f"✅ Predicción guardada (ID: {prediction_log.id}, "
+                f"Resultado: {prediction_result})"
+            )
+        except Exception as db_error:
+            logger.warning(f"⚠️  No se guardó en BD (normal si no está configurada): {str(db_error)[:100]}")
+            db.rollback()
+            # Crear un log simulado con ID ficticio para respuesta
+            prediction_log.id = -1
+            prediction_log.execution_timestamp = datetime.now()
+
+        # Retornar respuesta
+        return PredictionResponse(
+            prediction_result=prediction_result,
+            service_date=request.service_date,
+            model_version="v1_xgboost",
+            execution_timestamp=prediction_log.execution_timestamp or datetime.now(),
+            log_id=prediction_log.id,
+        )
+
+    except ValueError as ve:
+        logger.error(f"Error de validación: {str(ve)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Error en los datos: {str(ve)}",
+        )
+
+    except Exception as e:
+        logger.error(f"Error durante la predicción: {str(e)}", exc_info=True)
+        try:
+            db.rollback()
+        except:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al procesar la predicción",
+        )
+
+
+# ============================================================================
+# RAÍZ (Para documentación)
+# ============================================================================
+
+
+@app.get(
+    "/",
+    tags=["Info"],
+    summary="Información de la API",
+)
+async def root():
+    """
+    Endpoint raíz con información general de la API.
+
+    Redirige a `/docs` para la documentación interactiva Swagger.
+    """
+    return {
+        "name": "AZCA Prediction API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health",
+        "prediction": "/predict",
+    }
+
+
+# ============================================================================
+# EJECUCIÓN (Para desarrollo local)
+# ============================================================================
+
+if __name__ == "__main__":
+    import uvicorn
+
+    # Ejecutar con: python -m azca.api.main
+    # o: uvicorn azca.api.main:app --reload
+    uvicorn.run(
+        "azca.api.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info",
+    )

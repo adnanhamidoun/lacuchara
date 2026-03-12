@@ -48,6 +48,59 @@ Thumbs.db
 # Testing
 .pytest_cache/
 .coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
+server.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/package-lock.json
+
+# Temporary files
+.DS_Store
+*.swp
+*.swo
+*~
+.temp/
+.tmp/
+
+# IDE
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.sublime-workspace
+.project
+.pydevproject
+.settings/
+*.iml
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Credentials & Secrets
+*.pem
+*.key
+*.crt
+.aws/credentials
+.azure/
+
+# ML Artifacts (if large)
+# Uncomment if storing model weights in repo
+# *.pkl
+# *.joblib
+# *.h5
 .coverage.*
 htmlcov/
 .tox/
