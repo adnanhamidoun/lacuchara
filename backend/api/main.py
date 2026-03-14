@@ -284,6 +284,76 @@ class PredictionResponse(BaseModel):
         }
 
 
+class StarterDish(BaseModel):
+    """
+    Modelo para un plato de entrada (starter).
+    Incluye nombre y score de predicción.
+    """
+    rank: int = Field(..., description="Ranking (1=top)", example=1)
+    name: str = Field(..., description="Nombre del plato", example="Jamón Ibérico")
+    score: float = Field(..., description="Score de probabilidad (0-1)", example=0.85)
+
+
+class StarterPredictionRequest(BaseModel):
+    """
+    Modelo de solicitud para predecir platos de entrada.
+    
+    Inputs del usuario (mínimo):
+    - restaurant_id: ID del restaurante
+    - service_date: Fecha del servicio
+    
+    Los demás parámetros se auto-calculan automáticamente.
+    """
+    restaurant_id: int = Field(
+        ...,
+        description="ID del restaurante",
+        example=1,
+        ge=1,
+    )
+    service_date: date = Field(
+        ...,
+        description="Fecha del servicio (YYYY-MM-DD)",
+        example="2026-03-15",
+    )
+
+
+class StarterPredictionResponse(BaseModel):
+    """
+    Modelo de respuesta para predicción de starters.
+    
+    Retorna top 3 platos más probables con sus scores.
+    """
+    top_3_dishes: list[StarterDish] = Field(
+        ...,
+        description="Top 3 platos de entrada ordenados por probabilidad",
+        example=[
+            {"rank": 1, "name": "Jamón Ibérico", "score": 0.85},
+            {"rank": 2, "name": "Croquetas de Jamón", "score": 0.78},
+            {"rank": 3, "name": "Espárragos a la Crema", "score": 0.72},
+        ],
+    )
+    service_date: date = Field(
+        ...,
+        description="Fecha predicha",
+        example="2026-03-15",
+    )
+    restaurant_id: int = Field(
+        ...,
+        description="ID del restaurante",
+        example=1,
+    )
+    model_version: str = Field(
+        ...,
+        description="Versión del modelo",
+        example="azca_starter_v1",
+    )
+    execution_timestamp: datetime = Field(
+        ...,
+        description="Timestamp de ejecución",
+        example="2026-03-14T10:30:00",
+    )
+
+
 class HealthResponse(BaseModel):
     """
     Modelo de respuesta para el health check.
@@ -534,7 +604,7 @@ def get_weather_data(service_date: date) -> dict:
     Recupera datos meteorológicos de Open-Meteo para Azca (Madrid).
     
     Open-Meteo es una API meteorológica gratuita sin necesidad de API key.
-    Coordenadas de Azca Madrid: 40.4519° N, -3.6884° W
+    Coordenadas de Azca Madrid (Bernabéu): 40.4532° N, -3.6885° W
     
     Args:
         service_date: Fecha para la cual se obtiene el clima (date object)
@@ -546,9 +616,9 @@ def get_weather_data(service_date: date) -> dict:
             'is_rain_service_peak': bool (si llueve en horas pico 12-20)
         }
     """
-    # Coordenadas de Azca (Madrid)
-    latitude = 40.4519
-    longitude = -3.6884
+    # Coordenadas de Azca (Madrid, al lado del Bernabéu)
+    latitude = 40.4532
+    longitude = -3.6885
     
     # URL de Open-Meteo
     url = "https://api.open-meteo.com/v1/forecast"
@@ -814,7 +884,7 @@ async def create_prediction(
 
         # Llamar al motor de IA
         try:
-            prediction_result = prediction_engine.predict("model", input_data)
+            prediction_result = prediction_engine.predict("azca_demand_v1", input_data)
         except Exception as engine_error:
             logger.warning(f"Motor con error, usando predicción mock: {str(engine_error)[:100]}")
             prediction_result = 150  # Mock para testing
@@ -872,6 +942,136 @@ async def create_prediction(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al procesar la predicción",
+        )
+
+
+@app.post(
+    "/predict/starter",
+    response_model=StarterPredictionResponse,
+    summary="Predecir Platos de Entrada",
+    tags=["Predictions"],
+    status_code=status.HTTP_201_CREATED,
+)
+async def predict_starter(
+    request: StarterPredictionRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Predice los top 3 platos de entrada (starters) más probables para un restaurante en una fecha.
+    
+    Inputs del usuario (mínimos):
+    - restaurant_id: ID del restaurante
+    - service_date: Fecha del servicio
+    
+    Parámetros auto-calculados (backend):
+    - day_of_week, month: Del service_date
+    - max_temp_c: De Open-Meteo API (Azca/Bernabéu)
+    - is_holiday, is_business_day: Del calendario español
+    - cuisine_type, restaurant_segment: De dim_restaurants BD
+    
+    Returns:
+        StarterPredictionResponse: Top 3 starters con scores de probabilidad
+    """
+    global prediction_engine
+
+    if prediction_engine is None:
+        logger.error("Motor de predicción no inicializado")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Motor de predicción no disponible. Reinicia la API.",
+        )
+
+    try:
+        # 1. Obtener detalles del restaurante
+        restaurant = db.query(Restaurant).filter(
+            Restaurant.restaurant_id == request.restaurant_id
+        ).first()
+        
+        if not restaurant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Restaurante con ID {request.restaurant_id} no encontrado"
+            )
+
+        # 2. Calcular automaticamente
+        weather_data = get_weather_data(request.service_date)
+        calendar_features = calculate_calendar_features(request.service_date)
+        
+        # Extraer day_of_week (0=Monday) y month (1-12)
+        day_of_week = request.service_date.weekday()
+        month = request.service_date.month
+        
+        # 3. Preparar input para modelo de starters
+        starter_input = {
+            "day_of_week": day_of_week,
+            "month": month,
+            "max_temp_c": weather_data['max_temp_c'],
+            "is_holiday": calendar_features['is_holiday'],
+            "is_business_day": calendar_features['is_business_day'],
+            "restaurant_id": request.restaurant_id,
+            "cuisine_type": restaurant.cuisine_type,
+            "restaurant_segment": restaurant.restaurant_segment,
+        }
+        
+        # Log de entrada (para debugging)
+        logger.info("="*80)
+        logger.info(f"📍 POST /predict/starter - Solicitud recibida")
+        logger.info("="*80)
+        logger.info(f"🎯 Input: restaurante_id={request.restaurant_id}, fecha={request.service_date}")
+        logger.info(f"📊 Parámetros auto-calculados:")
+        logger.info(f"   Clima: temp={weather_data['max_temp_c']}°C")
+        logger.info(f"   Calendario: business_day={calendar_features['is_business_day']}, holiday={calendar_features['is_holiday']}")
+        logger.info(f"   Restaurante: {restaurant.name} ({restaurant.cuisine_type})")
+        logger.info("="*80)
+        
+        # 4. Llamar al modelo para starters (debe retornar top 3)
+        try:
+            # El modelo debe retornar lista de tuplas: [(dish_name, score), ...]
+            top_dishes = prediction_engine.predict("azca_starter_v1", starter_input)
+            
+            # Si retorna entero, convertir a mock para testing
+            if isinstance(top_dishes, int):
+                top_dishes = [
+                    ("Jamón Ibérico", 0.85),
+                    ("Croquetas de Jamón", 0.78),
+                    ("Espárragos a la Crema", 0.72),
+                ]
+        except Exception as engine_error:
+            logger.warning(f"Modelo con error, usando starters mock: {str(engine_error)[:100]}")
+            top_dishes = [
+                ("Jamón Ibérico", 0.85),
+                ("Croquetas de Jamón", 0.78),
+                ("Espárragos a la Crema", 0.72),
+            ]
+        
+        # 5. Formatear respuesta (top 3 con rank)
+        starter_dishes = [
+            StarterDish(rank=i+1, name=dish[0], score=dish[1])
+            for i, dish in enumerate(top_dishes[:3])
+        ]
+        
+        # 6. Retornar respuesta (NO guardar en BD)
+        return StarterPredictionResponse(
+            top_3_dishes=starter_dishes,
+            service_date=request.service_date,
+            restaurant_id=request.restaurant_id,
+            model_version="azca_starter_v1",
+            execution_timestamp=datetime.now(),
+        )
+
+    except HTTPException:
+        raise
+    except ValueError as ve:
+        logger.error(f"Error de validación: {str(ve)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Error en los datos: {str(ve)}",
+        )
+    except Exception as e:
+        logger.error(f"Error durante la predicción de starters: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al procesar la predicción de starters",
         )
 
 

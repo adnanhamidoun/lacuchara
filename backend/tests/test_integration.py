@@ -34,7 +34,7 @@ def test_integration_e2e():
     }
 
     try:
-        prediction = engine.predict("model", data)
+        prediction = engine.predict("azca_demand_v1", data)
         print(f"✓ Prediction generated: {prediction} services")
         assert isinstance(prediction, int)
         assert prediction > 0

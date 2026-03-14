@@ -14,6 +14,8 @@ function App() {
   const [loadingRestaurant, setLoadingRestaurant] = useState(false)
   const [isStadiumEvent, setIsStadiumEvent] = useState(false)
   const [isAzcaEvent, setIsAzcaEvent] = useState(false)
+  const [starterResult, setStarterResult] = useState(null)
+  const [starterLoading, setStarterLoading] = useState(false)
   
   // Campos de predicción (cargados automáticamente desde BD)
   const [capacityLimit, setCapacityLimit] = useState('')
@@ -174,6 +176,44 @@ function App() {
     }
   }
 
+  const handlePredictStarter = async (e) => {
+    e.preventDefault()
+    
+    if (!restaurantId) {
+      setError("Por favor selecciona un restaurante")
+      return
+    }
+    
+    setStarterLoading(true)
+    setError(null)
+    setStarterResult(null)
+
+    try {
+      const starterData = {
+        restaurant_id: parseInt(restaurantId),
+        service_date: serviceDate,
+      }
+
+      console.log("🍽️ Prediciendo starters:", starterData)
+
+      const response = await fetch('/predict/starter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(starterData)
+      })
+
+      if (!response.ok) throw new Error(`HTTP error: ${response.status}`)
+      const data = await response.json()
+      console.log("✅ Starters predichos:", data)
+      setStarterResult(data)
+    } catch (err) {
+      console.error("❌ Error prediciendo starters:", err)
+      setError(err.message)
+    } finally {
+      setStarterLoading(false)
+    }
+  }
+
   if (mode === 'test') {
     return <TestMode onBack={() => setMode('user')} />
   }
@@ -287,42 +327,63 @@ function App() {
                   </div>
                 </div>
 
-                {/* Botón Enviar */}
-                <button
-                  type="submit"
-                  disabled={loading || !restaurantId || restaurants.length === 0}
-                  className="w-full py-3 sm:py-4 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 hover:from-blue-500 hover:via-purple-500 hover:to-pink-500 text-white font-bold text-sm sm:text-lg rounded-xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      <span className="animate-spin">⏳</span>
-                      <span className="hidden sm:inline">Procesando...</span>
-                      <span className="sm:hidden">Cargando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>🚀</span>
-                      <span>Predecir</span>
-                    </>
-                  )}
-                </button>
+                {/* Botones */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <button
+                    type="submit"
+                    disabled={loading || !restaurantId || restaurants.length === 0}
+                    className="py-3 sm:py-4 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 hover:from-blue-500 hover:via-purple-500 hover:to-pink-500 text-white font-bold text-sm sm:text-lg rounded-xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="animate-spin">⏳</span>
+                        <span className="hidden sm:inline">Procesando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🚀</span>
+                        <span>Demanda</span>
+                      </>
+                    )}
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={handlePredictStarter}
+                    disabled={starterLoading || !restaurantId || restaurants.length === 0}
+                    className="py-3 sm:py-4 bg-gradient-to-r from-amber-600 via-orange-600 to-red-600 hover:from-amber-500 hover:via-orange-500 hover:to-red-500 text-white font-bold text-sm sm:text-lg rounded-xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {starterLoading ? (
+                      <>
+                        <span className="animate-spin">⏳</span>
+                        <span className="hidden sm:inline">Cargando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🍽️</span>
+                        <span>Starters</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </form>
             </div>
 
             {/* Panel de Resultados - 1 columna */}
-            <div className="lg:col-span-1">
+            <div className="lg:col-span-1 space-y-4 sm:space-y-6">
               {error && (
-                <div className="bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/50 backdrop-blur-sm rounded-xl p-4 sm:p-6 mb-6">
-                  <p className="text-red-300 font-semibold mb-2 text-sm sm:text-base">⚠️ Error</p>
+                <div className="bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/50 backdrop-blur-sm rounded-xl p-4 sm:p-6">
+                  <p className="text-red-300 font-semibold mb-2 text-sm sm:text-base">⚠️ Error Demanda</p>
                   <p className="text-red-200 text-xs sm:text-sm">{error}</p>
                 </div>
               )}
 
+              {/* Resultado Demanda */}
               {result ? (
                 <div className="bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 backdrop-blur-sm rounded-xl p-4 sm:p-8">
                   <div className="text-center mb-6 sm:mb-8">
                     <p className="text-emerald-300/70 text-xs sm:text-sm font-semibold uppercase tracking-wide mb-2 sm:mb-3">
-                      Predicción
+                      Predicción Demanda
                     </p>
                     <p className="text-4xl sm:text-6xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
                       {result.prediction_result}
@@ -355,10 +416,60 @@ function App() {
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : null}
+
+              {/* Resultado Starters */}
+              {starterResult ? (
+                <div className="bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/50 backdrop-blur-sm rounded-xl p-4 sm:p-8">
+                  <div className="text-center mb-6 sm:mb-8">
+                    <p className="text-amber-300/70 text-xs sm:text-sm font-semibold uppercase tracking-wide mb-2 sm:mb-3">
+                      Top 3 Starters
+                    </p>
+                    <p className="text-amber-300 text-sm sm:text-base">Recomendaciones para los primeros</p>
+                  </div>
+
+                  <div className="space-y-3 sm:space-y-4">
+                    {starterResult.top_3_dishes && starterResult.top_3_dishes.map((dish) => (
+                      <div key={dish.rank} className="bg-amber-900/30 rounded-lg p-3 sm:p-4 border border-amber-500/30 hover:border-amber-400/50 transition-all">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+                              #{dish.rank}
+                            </span>
+                            <span className="text-amber-200 font-semibold text-sm sm:text-base">{dish.name}</span>
+                          </div>
+                          <span className="text-amber-400 font-bold text-sm sm:text-base">
+                            {Math.round(dish.score * 100)}%
+                          </span>
+                        </div>
+                        <div className="mt-2 h-1.5 bg-amber-900/50 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-amber-500 to-orange-400 rounded-full" 
+                            style={{ width: `${dish.score * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2 sm:space-y-3 border-t border-amber-500/30 pt-3 sm:pt-4 text-xs sm:text-sm mt-4 sm:mt-6">
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="text-amber-300/70">Modelo</span>
+                      <span className="text-amber-200 font-mono text-right">{starterResult.model_version}</span>
+                    </div>
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="text-amber-300/70">Fecha Predicción</span>
+                      <span className="text-amber-200 font-mono">{starterResult.service_date}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Placeholder */}
+              {!result && !starterResult && (
                 <div className="bg-gradient-to-br from-slate-700/50 to-slate-600/50 border border-slate-500/30 backdrop-blur-sm rounded-xl p-4 sm:p-8 text-center">
                   <p className="text-slate-400 text-xs sm:text-sm">💡 Completa el formulario</p>
-                  <p className="text-slate-400 text-xs sm:text-sm">y presiona Predecir</p>
+                  <p className="text-slate-400 text-xs sm:text-sm">y presiona Demanda o Starters</p>
                 </div>
               )}
             </div>

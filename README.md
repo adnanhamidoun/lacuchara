@@ -431,6 +431,6 @@ Pinned versions in `requirements.txt` ensure reproducibility.
 
 ## 🔗 Links
 
-- Model: `azca/artifacts/model.pkl`
+- Model: `azca/artifacts/azca_demand_v1.pkl`
 - Tests: `azca/tests/`
 

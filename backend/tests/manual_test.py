@@ -26,13 +26,13 @@ def test_1_model_provider():
         print(f"  Cache empty: {len(provider._cache) == 0}")
         
         # Try to load model
-        model = provider.get_model("model")
+        model = provider.get_model("azca_demand_v1")
         print(f"✓ Model loaded successfully")
         print(f"  Model type: {type(model).__name__}")
         print(f"  Cache now has: {len(provider._cache)} model(s)")
         
         # Try to get from cache
-        model2 = provider.get_model("model")
+        model2 = provider.get_model("azca_demand_v1")
         print(f"✓ Model retrieved from cache (same object: {model is model2})")
         return True
     except Exception as e:
@@ -111,7 +111,7 @@ def test_3_engine_end_to_end():
             "is_payday_week": True,
         }
         
-        prediction = engine.predict("model", data)
+        prediction = engine.predict("azca_demand_v1", data)
         print(f"✓ Prediction generated successfully")
         print(f"  Scenario: Golden day (25°C, no rain, stadium event, payday)")
         print(f"  Predicted services: {prediction}")
@@ -173,7 +173,7 @@ def test_4_multiple_scenarios():
     print()
     try:
         for name, data in scenarios.items():
-            pred = engine.predict("model", data)
+            pred = engine.predict("azca_demand_v1", data)
             temp = data["max_temp_c"]
             rain = data.get("precipitation_mm", 0)
             print(f"  {name:15} | Temp: {temp:5.1f}°C | Rain: {rain:5.1f}mm | → {pred:3d} services")
