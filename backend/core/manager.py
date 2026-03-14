@@ -16,16 +16,16 @@ class ModelProvider:
         
         # Cargar directamente el pickle (XGBoost/sklearn)
         try:
-            # Intenta con el nombre específico
             model_path = self.artifacts_path / f"{name}.pkl"
+            
+            # Verificar que el archivo específico existe
             if not model_path.exists():
-                # Si no existe, intenta buscar cualquier .pkl en el directorio
-                pkl_files = list(self.artifacts_path.glob("*.pkl"))
-                if pkl_files:
-                    model_path = pkl_files[0]
-                    print(f"📦 Usando {model_path.name}")
-                else:
-                    raise FileNotFoundError(f"No .pkl found in {self.artifacts_path}")
+                available_models = list(self.artifacts_path.glob("*.pkl"))
+                available_names = [m.stem for m in available_models]
+                raise FileNotFoundError(
+                    f"Modelo '{name}.pkl' no encontrado en {self.artifacts_path}. "
+                    f"Modelos disponibles: {available_names}"
+                )
             
             print(f"📦 Cargando modelo desde {model_path}")
             with open(model_path, "rb") as f:

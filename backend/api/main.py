@@ -21,10 +21,10 @@ import requests
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, func, distinct
 from pydantic import BaseModel, Field
 
-from ..db import get_db, init_db, PredictionLog, Restaurant, FactServices, SessionLocal
+from ..db import get_db, init_db, PredictionLog, Restaurant, FactServices, MenusAzca, SessionLocal
 
 # Importar PredictionEngine - pero con fallback si falta
 try:
@@ -287,11 +287,12 @@ class PredictionResponse(BaseModel):
 class StarterDish(BaseModel):
     """
     Modelo para un plato de entrada (starter).
-    Incluye nombre y score de predicción.
+    Incluye nombre, score de predicción y count estimado.
     """
     rank: int = Field(..., description="Ranking (1=top)", example=1)
     name: str = Field(..., description="Nombre del plato", example="Jamón Ibérico")
     score: float = Field(..., description="Score de probabilidad (0-1)", example=0.85)
+    estimated_count: int = Field(..., description="Número estimado de este plato en el restaurante", example=43)
 
 
 class StarterPredictionRequest(BaseModel):
@@ -345,7 +346,7 @@ class StarterPredictionResponse(BaseModel):
     model_version: str = Field(
         ...,
         description="Versión del modelo",
-        example="azca_starter_v1",
+        example="azca_menu_starter_v2",
     )
     execution_timestamp: datetime = Field(
         ...,
@@ -357,10 +358,12 @@ class StarterPredictionResponse(BaseModel):
 class MainDish(BaseModel):
     """
     Modelo para un plato principal (main course).
+    Incluye nombre, score de predicción y count estimado.
     """
     rank: int = Field(..., description="Ranking (1=top)", example=1)
     name: str = Field(..., description="Nombre del plato", example="Carne a la Sal")
     score: float = Field(..., description="Score de probabilidad (0-1)", example=0.88)
+    estimated_count: int = Field(..., description="Número estimado de este plato en el restaurante", example=44)
 
 
 class MainPredictionRequest(BaseModel):
@@ -388,17 +391,19 @@ class MainPredictionResponse(BaseModel):
     )
     service_date: date = Field(..., description="Fecha predicha", example="2026-03-15")
     restaurant_id: int = Field(..., description="ID del restaurante", example=1)
-    model_version: str = Field(..., description="Versión del modelo", example="azca_main_v1")
+    model_version: str = Field(..., description="Versión del modelo", example="azca_menu_main_v2")
     execution_timestamp: datetime = Field(..., description="Timestamp de ejecución", example="2026-03-14T10:30:00")
 
 
 class DessertDish(BaseModel):
     """
     Modelo para un postre (dessert).
+    Incluye nombre, score de predicción y count estimado.
     """
     rank: int = Field(..., description="Ranking (1=top)", example=1)
     name: str = Field(..., description="Nombre del postre", example="Flan Casero")
     score: float = Field(..., description="Score de probabilidad (0-1)", example=0.83)
+    estimated_count: int = Field(..., description="Número estimado de este postre en el restaurante", example=42)
 
 
 class DessertPredictionRequest(BaseModel):
@@ -426,7 +431,7 @@ class DessertPredictionResponse(BaseModel):
     )
     service_date: date = Field(..., description="Fecha predicha", example="2026-03-15")
     restaurant_id: int = Field(..., description="ID del restaurante", example=1)
-    model_version: str = Field(..., description="Versión del modelo", example="azca_dessert_v1")
+    model_version: str = Field(..., description="Versión del modelo", example="azca_menu_dessert_v2")
     execution_timestamp: datetime = Field(..., description="Timestamp de ejecución", example="2026-03-14T10:30:00")
 
 
@@ -855,6 +860,76 @@ def calculate_calendar_features(service_date: date) -> dict:
     }
 
 
+# ============================================================================
+# FUNCIONES HELPER PARA CONTAR PLATOS ÚNICOS POR RESTAURANTE
+# ============================================================================
+
+def get_total_starters(db: Session, restaurant_id: int) -> int:
+    """
+    Cuenta el total de PLATOS ÚNICOS de entrada (first_course) que tiene un restaurante en Menus_Azca.
+    
+    Args:
+        db: Sesión SQLAlchemy
+        restaurant_id: ID del restaurante
+    
+    Returns:
+        Total de platos de entrada únicos (int). Si no hay datos, retorna 1 para evitar división por 0.
+    """
+    try:
+        total = db.query(func.count(distinct(MenusAzca.first_course))).filter(
+            MenusAzca.restaurant_id == restaurant_id,
+            MenusAzca.first_course.isnot(None)
+        ).scalar()
+        return max(total or 1, 1)  # Mínimo 1 para evitar división por 0
+    except Exception as e:
+        logger.warning(f"Error contando starters únicos para restaurante {restaurant_id}: {str(e)}")
+        return 1
+
+
+def get_total_mains(db: Session, restaurant_id: int) -> int:
+    """
+    Cuenta el total de PLATOS ÚNICOS principales (second_course) que tiene un restaurante en Menus_Azca.
+    
+    Args:
+        db: Sesión SQLAlchemy
+        restaurant_id: ID del restaurante
+    
+    Returns:
+        Total de platos principales únicos (int). Si no hay datos, retorna 1 para evitar división por 0.
+    """
+    try:
+        total = db.query(func.count(distinct(MenusAzca.second_course))).filter(
+            MenusAzca.restaurant_id == restaurant_id,
+            MenusAzca.second_course.isnot(None)
+        ).scalar()
+        return max(total or 1, 1)  # Mínimo 1 para evitar división por 0
+    except Exception as e:
+        logger.warning(f"Error contando mains únicos para restaurante {restaurant_id}: {str(e)}")
+        return 1
+
+
+def get_total_desserts(db: Session, restaurant_id: int) -> int:
+    """
+    Cuenta el total de POSTRES ÚNICOS (dessert) que tiene un restaurante en Menus_Azca.
+    
+    Args:
+        db: Sesión SQLAlchemy
+        restaurant_id: ID del restaurante
+    
+    Returns:
+        Total de postres únicos (int). Si no hay datos, retorna 1 para evitar división por 0.
+    """
+    try:
+        total = db.query(func.count(distinct(MenusAzca.dessert))).filter(
+            MenusAzca.restaurant_id == restaurant_id,
+            MenusAzca.dessert.isnot(None)
+        ).scalar()
+        return max(total or 1, 1)  # Mínimo 1 para evitar división por 0
+    except Exception as e:
+        logger.warning(f"Error contando desserts únicos para restaurante {restaurant_id}: {str(e)}")
+        return 1
+
+
 @app.post(
     "/predict",
     response_model=PredictionResponse,
@@ -1077,7 +1152,7 @@ async def predict_starter(
         day_of_week = request.service_date.weekday()
         month = request.service_date.month
         
-        # 3. Preparar input para modelo de starters
+        # 3. Preparar input para modelo de starters (8 features exactas en orden)
         starter_input = {
             "day_of_week": day_of_week,
             "month": month,
@@ -1100,29 +1175,39 @@ async def predict_starter(
         logger.info(f"   Restaurante: {restaurant.name} ({restaurant.cuisine_type})")
         logger.info("="*80)
         
-        # 4. Llamar al modelo para starters (debe retornar top 3)
-        try:
-            # El modelo debe retornar lista de tuplas: [(dish_name, score), ...]
-            top_dishes = prediction_engine.predict("azca_starter_v1", starter_input)
-            
-            # Si retorna entero, convertir a mock para testing
-            if isinstance(top_dishes, int):
-                top_dishes = [
-                    ("Jamón Ibérico", 0.85),
-                    ("Croquetas de Jamón", 0.78),
-                    ("Espárragos a la Crema", 0.72),
-                ]
-        except Exception as engine_error:
-            logger.warning(f"Modelo con error, usando starters mock: {str(engine_error)[:100]}")
-            top_dishes = [
-                ("Jamón Ibérico", 0.85),
-                ("Croquetas de Jamón", 0.78),
-                ("Espárragos a la Crema", 0.72),
-            ]
+        # 4. Llamar al modelo para starters
+        prediction = prediction_engine.predict_menu("azca_menu_starter_v2", starter_input)
         
-        # 5. Formatear respuesta (top 3 con rank)
+        # Validar que el modelo retornó top 3
+        if not isinstance(prediction, (list, tuple)) or len(prediction) < 3:
+            logger.error(f"Modelo devolvió formato inválido: {type(prediction)} - {prediction}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Modelo retornó resultado inválido (esperaba lista de 3+ items): {prediction}"
+            )
+        
+        top_dishes = prediction
+        
+        # 5. Obtener total de starters del restaurante para calcular counts estimados
+        total_starters = get_total_starters(db, request.restaurant_id)
+        logger.info(f"📊 Total de starters en el restaurante: {total_starters}")
+        
+        # Normalizar los scores del top 3 para que sumen 1, luego calcular counts
+        scores = [dish[1] for dish in top_dishes[:3]]
+        sum_scores = sum(scores)
+        if sum_scores > 0:
+            normalized_scores = [score / sum_scores for score in scores]
+        else:
+            normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
+        
+        # 5. Formatear respuesta (top 3 con rank y estimated_count normalizado)
         starter_dishes = [
-            StarterDish(rank=i+1, name=dish[0], score=dish[1])
+            StarterDish(
+                rank=i+1,
+                name=dish[0],
+                score=normalized_scores[i],  # Score normalizado (0-1, suma a 1)
+                estimated_count=round(normalized_scores[i] * total_starters)  # porcentaje normalizado * total
+            )
             for i, dish in enumerate(top_dishes[:3])
         ]
         
@@ -1131,7 +1216,7 @@ async def predict_starter(
             top_3_dishes=starter_dishes,
             service_date=request.service_date,
             restaurant_id=request.restaurant_id,
-            model_version="azca_starter_v1",
+            model_version="azca_menu_starter_v2",
             execution_timestamp=datetime.now(),
         )
 
@@ -1202,7 +1287,7 @@ async def predict_main(
         day_of_week = request.service_date.weekday()
         month = request.service_date.month
         
-        # 3. Preparar input para modelo de platos principales
+        # 3. Preparar input para modelo de platos principales (8 features exactas en orden)
         main_input = {
             "day_of_week": day_of_week,
             "month": month,
@@ -1222,26 +1307,38 @@ async def predict_main(
         logger.info("="*80)
         
         # 4. Llamar al modelo para platos principales
-        try:
-            top_dishes = prediction_engine.predict("azca_main_v1", main_input)
-            
-            if isinstance(top_dishes, int):
-                top_dishes = [
-                    ("Carne a la Sal", 0.88),
-                    ("Merluza a la Gallega", 0.82),
-                    ("Cordero Lechal", 0.76),
-                ]
-        except Exception as engine_error:
-            logger.warning(f"Modelo con error, usando mains mock: {str(engine_error)[:100]}")
-            top_dishes = [
-                ("Carne a la Sal", 0.88),
-                ("Merluza a la Gallega", 0.82),
-                ("Cordero Lechal", 0.76),
-            ]
+        prediction = prediction_engine.predict_menu("azca_menu_main_v2", main_input)
+        
+        # Validar que el modelo retornó top 3
+        if not isinstance(prediction, (list, tuple)) or len(prediction) < 3:
+            logger.error(f"Modelo devolvió formato inválido: {type(prediction)} - {prediction}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Modelo retornó resultado inválido (esperaba lista de 3+ items): {prediction}"
+            )
+        
+        top_dishes = prediction
+        
+        # 5. Obtener total de platos principales del restaurante para calcular counts estimados
+        total_mains = get_total_mains(db, request.restaurant_id)
+        logger.info(f"📊 Total de platos principales en el restaurante: {total_mains}")
+        
+        # Normalizar los scores del top 3 para que sumen 1, luego calcular counts
+        scores = [dish[1] for dish in top_dishes[:3]]
+        sum_scores = sum(scores)
+        if sum_scores > 0:
+            normalized_scores = [score / sum_scores for score in scores]
+        else:
+            normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
         
         # 5. Formatear respuesta
         main_dishes = [
-            MainDish(rank=i+1, name=dish[0], score=dish[1])
+            MainDish(
+                rank=i+1,
+                name=dish[0],
+                score=normalized_scores[i],  # Score normalizado (0-1, suma a 1)
+                estimated_count=round(normalized_scores[i] * total_mains)  # porcentaje normalizado * total
+            )
             for i, dish in enumerate(top_dishes[:3])
         ]
         
@@ -1250,7 +1347,7 @@ async def predict_main(
             top_3_dishes=main_dishes,
             service_date=request.service_date,
             restaurant_id=request.restaurant_id,
-            model_version="azca_main_v1",
+            model_version="azca_menu_main_v2",
             execution_timestamp=datetime.now(),
         )
 
@@ -1321,7 +1418,7 @@ async def predict_dessert(
         day_of_week = request.service_date.weekday()
         month = request.service_date.month
         
-        # 3. Preparar input para modelo de postres
+        # 3. Preparar input para modelo de postres (8 features exactas en orden)
         dessert_input = {
             "day_of_week": day_of_week,
             "month": month,
@@ -1341,26 +1438,38 @@ async def predict_dessert(
         logger.info("="*80)
         
         # 4. Llamar al modelo para postres
-        try:
-            top_dishes = prediction_engine.predict("azca_dessert_v1", dessert_input)
-            
-            if isinstance(top_dishes, int):
-                top_dishes = [
-                    ("Flan Casero", 0.83),
-                    ("Tiramisú", 0.79),
-                    ("Churros con Chocolate", 0.75),
-                ]
-        except Exception as engine_error:
-            logger.warning(f"Modelo con error, usando desserts mock: {str(engine_error)[:100]}")
-            top_dishes = [
-                ("Flan Casero", 0.83),
-                ("Tiramisú", 0.79),
-                ("Churros con Chocolate", 0.75),
-            ]
+        prediction = prediction_engine.predict_menu("azca_menu_dessert_v2", dessert_input)
+        
+        # Validar que el modelo retornó top 3
+        if not isinstance(prediction, (list, tuple)) or len(prediction) < 3:
+            logger.error(f"Modelo devolvió formato inválido: {type(prediction)} - {prediction}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Modelo retornó resultado inválido (esperaba lista de 3+ items): {prediction}"
+            )
+        
+        top_dishes = prediction
+        
+        # 5. Obtener total de postres del restaurante para calcular counts estimados
+        total_desserts = get_total_desserts(db, request.restaurant_id)
+        logger.info(f"📊 Total de postres en el restaurante: {total_desserts}")
+        
+        # Normalizar los scores del top 3 para que sumen 1, luego calcular counts
+        scores = [dish[1] for dish in top_dishes[:3]]
+        sum_scores = sum(scores)
+        if sum_scores > 0:
+            normalized_scores = [score / sum_scores for score in scores]
+        else:
+            normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
         
         # 5. Formatear respuesta
         dessert_dishes = [
-            DessertDish(rank=i+1, name=dish[0], score=dish[1])
+            DessertDish(
+                rank=i+1,
+                name=dish[0],
+                score=normalized_scores[i],  # Score normalizado (0-1, suma a 1)
+                estimated_count=round(normalized_scores[i] * total_desserts)  # porcentaje normalizado * total
+            )
             for i, dish in enumerate(top_dishes[:3])
         ]
         
@@ -1369,7 +1478,7 @@ async def predict_dessert(
             top_3_dishes=dessert_dishes,
             service_date=request.service_date,
             restaurant_id=request.restaurant_id,
-            model_version="azca_dessert_v1",
+            model_version="azca_menu_dessert_v2",
             execution_timestamp=datetime.now(),
         )
 

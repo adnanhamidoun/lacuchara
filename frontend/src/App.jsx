@@ -40,6 +40,16 @@ function App() {
     fetchRestaurants()
   }, [])
 
+  // Limpiar resultados cuando cambien los parámetros de entrada
+  useEffect(() => {
+    console.log("🔄 Parámetros cambiados - Limpiando resultados anteriores")
+    setResult(null)
+    setStarterResult(null)
+    setMainResult(null)
+    setDessertResult(null)
+    setError(null)
+  }, [restaurantId, serviceDate])
+
   const fetchRestaurants = async () => {
     console.log("📍 fetchRestaurants() iniciado")
     try {

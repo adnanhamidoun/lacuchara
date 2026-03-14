@@ -138,3 +138,64 @@ class InferencePipeline:
         print(f"   Shape: {df.shape}")
         
         return df
+
+    def build_menu_features(self, data: dict) -> pd.DataFrame:
+        """
+        Build a minimal DataFrame for menu prediction models (starters, mains, desserts).
+        
+        These models only expect 8 specific features, in this exact order.
+        No feature expansion or fixed fields - just pass the 8 features as-is.
+        
+        Args:
+            data: dict with exactly these 8 keys:
+                - day_of_week: int (0-6, Monday=0)
+                - month: int (1-12)
+                - max_temp_c: float
+                - is_holiday: bool
+                - is_business_day: bool
+                - restaurant_id: int
+                - cuisine_type: str
+                - restaurant_segment: str
+        
+        Returns:
+            pd.DataFrame with 8 columns in the EXACT order expected by menu models
+        """
+        # Expected column order for menu models (from signature)
+        MENU_COLUMNS = [
+            "day_of_week",
+            "month",
+            "max_temp_c",
+            "is_holiday",
+            "is_business_day",
+            "restaurant_id",
+            "cuisine_type",
+            "restaurant_segment",
+        ]
+        
+        # Create minimal row with only these 8 features
+        row = {col: data.get(col) for col in MENU_COLUMNS}
+        
+        # Validate all required fields are present
+        missing = [col for col in MENU_COLUMNS if row[col] is None]
+        if missing:
+            raise ValueError(f"Missing required menu features: {missing}")
+        
+        # Ensure correct types
+        row["day_of_week"] = int(row["day_of_week"])
+        row["month"] = int(row["month"])
+        row["max_temp_c"] = float(row["max_temp_c"])
+        row["is_holiday"] = bool(row["is_holiday"])
+        row["is_business_day"] = bool(row["is_business_day"])
+        row["restaurant_id"] = int(row["restaurant_id"])
+        # cuisine_type and restaurant_segment are already strings
+        
+        # Create DataFrame with only these 8 columns in EXACT order
+        df = pd.DataFrame([row])
+        df = df[MENU_COLUMNS]
+        
+        print(f"📊 Menu DataFrame construido:")
+        print(f"   Columns: {list(df.columns)}")
+        print(f"   Tipos: {df.dtypes.to_dict()}")
+        print(f"   Shape: {df.shape}")
+        
+        return df

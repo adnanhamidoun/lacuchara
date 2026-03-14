@@ -180,3 +180,28 @@ class FactServices(Base):
     
     def __repr__(self):
         return f"<FactServices(date={self.date_id}, rest_id={self.restaurant_id}, lag7={self.services_lag_7}, avg4w={self.avg_4_weeks})>"
+
+
+class MenusAzca(Base):
+    """
+    Modelo ORM para la tabla Menus_Azca.
+    
+    Contiene el historial de menús servidos en cada restaurante,
+    incluyendo platos de entrada, plato principal y postre.
+    Se utiliza para contar cuántos platos de cada tipo sirve cada restaurante.
+    
+    Attributes:
+        restaurant_id: ID del restaurante
+        first_course: Nombre del plato de entrada
+        second_course: Nombre del plato principal
+        dessert: Nombre del postre
+    """
+    __tablename__ = "Menus_Azca"
+    
+    restaurant_id = Column(Integer, primary_key=True, index=True)
+    first_course = Column(String(255), primary_key=True, nullable=True)
+    second_course = Column(String(255), nullable=True)
+    dessert = Column(String(255), nullable=True)
+    
+    def __repr__(self):
+        return f"<MenusAzca(rest_id={self.restaurant_id}, first='{self.first_course}', second='{self.second_course}', dessert='{self.dessert}')>"
