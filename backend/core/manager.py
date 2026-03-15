@@ -6,7 +6,8 @@ from typing import Any
 class ModelProvider:
     def __init__(self, artifacts_path: Path | None = None) -> None:
         if artifacts_path is None:
-            artifacts_path = Path(__file__).parent.parent / "artifacts"
+            # ✅ Ruta correcta: backend/azca/artifacts/
+            artifacts_path = Path(__file__).parent.parent / "azca" / "artifacts"
         self.artifacts_path = artifacts_path
         self._cache: dict[str, Any] = {}
 

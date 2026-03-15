@@ -59,6 +59,10 @@ class DimDish(Base):
         return f"<DimDish(id={self.dish_id}, course_type='{self.course_type}', dish_name='{self.dish_name}')>"
 
 
+# Alias para compatibilidad con código que usa el nombre plural
+DimDishes = DimDish
+
+
 class PredictionLog(Base):
     """
     Modelo ORM para la tabla PredictionLogs de auditoría.
@@ -222,3 +226,128 @@ class MenusAzca(Base):
     
     def __repr__(self):
         return f"<MenusAzca(rest_id={self.restaurant_id}, first='{self.first_course}', second='{self.second_course}', dessert='{self.dessert}')>"
+
+
+# DimDishes ya está definido como alias arriba
+
+
+class FactMenuItems(Base):
+    """
+    Modelo ORM para la tabla fact_menu_items.
+    
+    Tabla de hechos que vincula menús con platos específicos.
+    """
+    __tablename__ = "fact_menu_items"
+    
+    menu_id = Column(Integer, primary_key=True)
+    dish_id = Column(Integer, primary_key=True)
+    
+    def __repr__(self):
+        return f"<FactMenuItems(menu_id={self.menu_id}, dish_id={self.dish_id})>"
+
+
+class FactMenus(Base):
+    """
+    Modelo ORM para la tabla fact_menus.
+    
+    Tabla de hechos con historial de menús servidos por restaurante y fecha.
+    """
+    __tablename__ = "fact_menus"
+    
+    menu_id = Column(Integer, primary_key=True)
+    restaurant_id = Column(Integer, nullable=False, index=True)
+    date_id = Column(Integer, nullable=False)  # YYYYMMDD format
+    
+    def __repr__(self):
+        return f"<FactMenus(menu_id={self.menu_id}, rest_id={self.restaurant_id}, date={self.date_id})>"
+
+
+class RestaurantContext(Base):
+    """
+    Modelo ORM para la vista v_current_restaurant_context.
+    
+    Vista optimizada que centraliza los datos del restaurante y los últimos platos
+    servidos por tipo de curso. Evita múltiples JOINs en el código Python.
+    
+    Atributos:
+        restaurant_id: ID del restaurante (PK)
+        cuisine_type: Tipo de cocina
+        restaurant_segment: Segmento del restaurante
+        menu_price: Precio promedio del menú
+        terrace_setup_type: Tipo de setup de terraza
+        last_starter_id: ID del último plato de entrada servido (nullable)
+        last_main_id: ID del último plato principal servido (nullable)
+        last_dessert_id: ID del último postre servido (nullable)
+    """
+    __tablename__ = "v_current_restaurant_context"
+    
+    restaurant_id = Column(Integer, primary_key=True)
+    cuisine_type = Column(String(100), nullable=True)
+    restaurant_segment = Column(String(100), nullable=True)
+    menu_price = Column(Float, nullable=True)
+    terrace_setup_type = Column(String(100), nullable=True)
+    last_starter_id = Column(Integer, nullable=True)
+    last_main_id = Column(Integer, nullable=True)
+    last_dessert_id = Column(Integer, nullable=True)
+    
+    def __repr__(self):
+        return (
+            f"<RestaurantContext(id={self.restaurant_id}, "
+            f"cuisine={self.cuisine_type}, "
+            f"last_starter={self.last_starter_id}, "
+            f"last_main={self.last_main_id}, "
+            f"last_dessert={self.last_dessert_id})>"
+        )
+
+
+class FactPredictionLog(Base):
+    """
+    Modelo ORM para la tabla fact_prediction_logs.
+    
+    Auditoría centralizada de TODAS las predicciones del sistema:
+    - Predicciones de menús (MENU_STARTER, MENU_MAIN, MENU_DESSERT)
+    - Predicciones de servicios (SERVICE_LEVEL)
+    
+    Permite rastrear qué inputs generaron qué outputs, comparar con datos reales,
+    medir latency, y auditar el rendimiento del modelo.
+    
+    Atributos:
+        prediction_id: ID único (auto-increment)
+        execution_date: Timestamp de cuándo se ejecutó
+        restaurant_id: ID del restaurante
+        prediction_domain: Tipo de predicción ('MENU_STARTER', 'MENU_MAIN', 'MENU_DESSERT', 'SERVICE_LEVEL')
+        input_context_json: JSON con los inputs (clima, calendario, restaurante, etc.)
+        output_results_json: JSON con los resultados predichos (top 3 dishes o nivel de servicio)
+        model_version: Versión del modelo usado
+        latency_ms: Tiempo de ejecución en milisegundos
+        actual_outcome_json: JSON con los datos reales (se llena después de servir)
+    """
+    __tablename__ = "fact_prediction_logs"
+    
+    prediction_id = Column(Integer, primary_key=True, autoincrement=True)
+    execution_date = Column(DateTime, default=datetime.utcnow, nullable=True, index=True)  # Coincide con Azure (nullable=True)
+    restaurant_id = Column(Integer, nullable=False, index=True)
+    
+    # Diferenciador: qué tipo de predicción es
+    prediction_domain = Column(String(50), nullable=False, index=True)  
+    
+    # Contexto de entrada (NVARCHAR(MAX) → Text en SQLAlchemy)
+    input_context_json = Column(Text, nullable=False)
+    
+    # Resultados de IA (NVARCHAR(MAX) → Text en SQLAlchemy)
+    output_results_json = Column(Text, nullable=False)
+    
+    # Rendimiento
+    model_version = Column(String(50), nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    
+    # Comparación vs realidad (NVARCHAR(MAX), nullable → Text, nullable)
+    actual_outcome_json = Column(Text, nullable=True)
+    
+    def __repr__(self):
+        return (
+            f"<FactPredictionLog(id={self.prediction_id}, "
+            f"rest_id={self.restaurant_id}, "
+            f"domain={self.prediction_domain}, "
+            f"latency={self.latency_ms}ms)>"
+        )

@@ -199,3 +199,88 @@ class InferencePipeline:
         print(f"   Shape: {df.shape}")
         
         return df
+
+    def build_unified_menu_features(self, data: dict) -> pd.DataFrame:
+        """
+        Build feature DataFrame for unified menu prediction model (azca_menu_model.pkl).
+        
+        This model accepts 15 features that determine the next dish (any course type).
+        
+        Args:
+            data: dict with these 15 keys:
+                - day_of_week: int (0-6)
+                - month: int (1-12)
+                - max_temp_c: float
+                - precipitation_mm: float
+                - is_holiday: int (0 or 1)
+                - is_payday_week: int (0 or 1)
+                - is_stadium_event: int (0 or 1)
+                - is_azca_event: int (0 or 1)
+                - restaurant_id: int
+                - cuisine_type: str
+                - restaurant_segment: str
+                - terrace_setup_type: str
+                - menu_price: float
+                - course_type: str ('first_course', 'second_course', 'dessert')
+                - prev_dish_id: float (ID del plato anterior o 0.0)
+        
+        Returns:
+            pd.DataFrame with 15 columns in exact order for the unified model
+        """
+        # Expected column order for unified menu model
+        UNIFIED_MENU_COLUMNS = [
+            "day_of_week",
+            "month",
+            "max_temp_c",
+            "precipitation_mm",
+            "is_holiday",
+            "is_payday_week",
+            "is_stadium_event",
+            "is_azca_event",
+            "restaurant_id",
+            "cuisine_type",
+            "restaurant_segment",
+            "terrace_setup_type",
+            "menu_price",
+            "course_type",
+            "prev_dish_id",
+        ]
+        
+        # Create row with all 15 features
+        print(f"🔍 Input data recibido:\n{data}")
+        row = {col: data.get(col) for col in UNIFIED_MENU_COLUMNS}
+        
+        # Validate all required fields are present
+        missing = [col for col in UNIFIED_MENU_COLUMNS if row[col] is None]
+        if missing:
+            print(f"❌ Missing fields: {missing}")
+            raise ValueError(f"Missing required unified menu features: {missing}")
+        
+        print(f"✅ Todos los campos presentes")
+        
+        # Ensure correct types
+        row["day_of_week"] = int(row["day_of_week"])
+        row["month"] = int(row["month"])
+        row["max_temp_c"] = float(row["max_temp_c"])
+        row["precipitation_mm"] = float(row["precipitation_mm"])
+        row["is_holiday"] = int(row["is_holiday"])
+        row["is_payday_week"] = int(row["is_payday_week"])
+        row["is_stadium_event"] = int(row["is_stadium_event"])
+        row["is_azca_event"] = int(row["is_azca_event"])
+        row["restaurant_id"] = int(row["restaurant_id"])
+        row["menu_price"] = float(row["menu_price"])
+        row["prev_dish_id"] = float(row["prev_dish_id"])
+        # cuisine_type, restaurant_segment, terrace_setup_type, course_type are already strings
+        
+        print(f"✅ Tipos convertidos correctamente")
+        
+        # Create DataFrame with all 15 columns in EXACT order
+        df = pd.DataFrame([row])
+        df = df[UNIFIED_MENU_COLUMNS]
+        
+        print(f"📊 Unified Menu DataFrame construido:")
+        print(f"   Columns: {list(df.columns)}")
+        print(f"   Tipos: {df.dtypes.to_dict()}")
+        print(f"   Shape: {df.shape}")
+        
+        return df

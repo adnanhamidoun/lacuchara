@@ -1,0 +1,74 @@
+dish_id,course_type,dish_name
+1,first_course,Champiñones
+2,first_course,Nachos con queso
+3,first_course,Alitas BBQ
+4,second_course,Secreto Ibérico
+5,second_course,Entrecot
+6,dessert,Cheesecake
+7,first_course,Potaje de garbanzos
+8,first_course,Lentejas estofadas
+9,second_course,Merluza a la romana
+10,dessert,Fruta
+11,first_course,Ravioli boloñesa
+12,first_course,Tortellini nata
+13,second_course,Ossobuco
+14,second_course,Lasagna
+15,dessert,Profiteroles
+16,first_course,Minestrone
+17,second_course,Pizza Margarita
+18,dessert,Panna Cotta
+19,first_course,Sopa de tomate
+20,second_course,Escalope Milanese
+21,first_course,Berenjena rellena
+22,first_course,Crema de calabacín
+23,second_course,Moussaka
+24,second_course,Brochetas de pavo
+25,first_course,Sopa castellana
+26,second_course,Cachopo
+27,dessert,Natillas
+28,first_course,Sopa de marisco
+29,first_course,Falafel
+30,second_course,Salmón plancha
+31,first_course,Gnocchi
+32,second_course,Risotto de setas
+33,dessert,Gelato
+34,second_course,Pollo al horno
+35,dessert,Yogur con miel
+36,dessert,Tiramisú
+37,second_course,Lubina
+38,dessert,Macedonia
+39,first_course,Aros de cebolla
+40,second_course,T-Bone
+41,second_course,Costillas BBQ
+42,dessert,Brownie
+43,dessert,Batido
+44,first_course,Crema de verduras
+45,first_course,Cocido Madrileño
+46,second_course,Carrilleras al vino
+47,dessert,Cuajada
+48,dessert,Flan
+49,first_course,Sopa de cebolla
+50,second_course,Hamburguesa Gourmet
+51,second_course,Tortilla de patata
+52,dessert,Arroz con leche
+53,dessert,Tarta de manzana
+54,second_course,Filete de ternera
+55,dessert,Sorbete
+56,first_course,Paella Valenciana
+57,first_course,Tosta de aguacate
+58,first_course,Ensalada César
+59,first_course,Salmorejo
+60,first_course,Ensalada mixta
+61,first_course,Gazpacho
+62,first_course,Bruschettas
+63,first_course,Carpaccio
+64,first_course,Ensalada Caprese
+65,first_course,Ensalada de pasta
+66,first_course,Hummus
+67,first_course,Tabulé
+68,first_course,Escalivada
+69,first_course,Ensalada Griega
+70,first_course,Ceviche
+71,first_course,Coleslaw
+72,first_course,Pisto manchego
+73,first_course,Ensaladilla Rusa
