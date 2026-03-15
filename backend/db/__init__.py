@@ -16,6 +16,10 @@ from .models import (
     FactMenus,
     RestaurantContext,
     FactPredictionLog,
+    Inscripcion,
+    SEGMENT_OPTIONS,
+    TERRACE_OPTIONS,
+    CUISINE_OPTIONS,
 )
 
 __all__ = [
@@ -34,4 +38,8 @@ __all__ = [
     "FactMenus",
     "RestaurantContext",
     "FactPredictionLog",
+    "Inscripcion",
+    "SEGMENT_OPTIONS",
+    "TERRACE_OPTIONS",
+    "CUISINE_OPTIONS",
 ]
