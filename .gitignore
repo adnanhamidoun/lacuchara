@@ -30,6 +30,11 @@ env/
 azca_310_env/  # Project-specific venv
 .venv
 
+# Environment Variables (SENSITIVE - NEVER COMMIT)
+.env
+.env.local
+.env.*.local
+
 # IDE & Editors
 .vscode/
 .idea/

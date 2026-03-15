@@ -1,3 +1,226 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+	:root {
+		--font-display: 'Playfair Display', serif;
+		--bg: #ffffff;
+		--surface: #ffffff;
+		--surface-soft: #f4f6f8;
+		--text: #1a1a2e;
+		--text-muted: #4b5563;
+		--border: #d9e0e8;
+		--primary: #1a1a2e;
+		--accent: #e07b54;
+		--accent-tech: #4f8cff;
+	}
+
+	.dark {
+		--bg: #080a0f;
+		--surface: #11151d;
+		--surface-soft: #1a202c;
+		--text: #f6f2ea;
+		--text-muted: #b8b2a5;
+		--border: #2c2730;
+		--primary: #f6f2ea;
+		--accent: #d88b5a;
+		--accent-tech: #7aa2ff;
+	}
+
+	body {
+		font-family: 'Inter', sans-serif;
+		background-color: var(--bg);
+		background-image:
+			radial-gradient(circle at 15% 0%, rgba(216, 139, 90, 0.08), transparent 28%),
+			radial-gradient(circle at 82% 12%, rgba(79, 140, 255, 0.06), transparent 32%);
+		color: var(--text);
+		transition: background-color 200ms ease, color 200ms ease;
+		position: relative;
+	}
+
+	body::before {
+		content: '';
+		position: fixed;
+		inset: 0;
+		pointer-events: none;
+		z-index: -1;
+		background-image:
+			linear-gradient(130deg, rgba(8, 10, 15, 0.82), rgba(8, 10, 15, 0.55)),
+			url('https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=2200&q=80');
+		background-size: cover;
+		background-position: center;
+		filter: blur(2px) saturate(1.06);
+		opacity: 0.12;
+		transform: scale(1.03);
+	}
+
+	.dark body::before {
+		opacity: 0.22;
+		filter: blur(3px) saturate(1.1);
+	}
+
+	* {
+		@apply antialiased;
+	}
+}
+
+@layer utilities {
+	.font-display {
+		font-family: var(--font-display);
+	}
+
+	@keyframes gridShimmer {
+		0% {
+			background-position: 0% 0%, 100% 100%, 0 0;
+		}
+		100% {
+			background-position: 0% 0%, 100% 100%, 28px 28px;
+		}
+	}
+
+	@keyframes cardIn {
+		0% {
+			opacity: 0;
+			transform: translateY(14px);
+		}
+		100% {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@keyframes chipGlow {
+		0%,
+		100% {
+			box-shadow: 0 0 5px rgba(224, 123, 84, 0.35);
+		}
+		50% {
+			box-shadow: 0 0 10px rgba(224, 123, 84, 0.55);
+		}
+	}
+
+	@keyframes floatUp {
+		0% {
+			opacity: 0;
+			transform: translateY(100vh);
+		}
+		20% {
+			opacity: 1;
+		}
+		80% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 0;
+			transform: translateY(-100px);
+		}
+	}
+
+	@keyframes sideSway {
+		0% {
+			transform: translateX(-50%) rotate(0deg);
+		}
+		50% {
+			transform: translateX(-50%) rotate(5deg);
+		}
+		100% {
+			transform: translateX(-50%) rotate(0deg);
+		}
+	}
+
+	@keyframes ambientShift {
+		0%,
+		100% {
+			transform: translate3d(0, 0, 0);
+		}
+		50% {
+			transform: translate3d(0, -8px, 0);
+		}
+	}
+
+	.animate-grid-shimmer {
+		animation: gridShimmer 30s linear infinite;
+	}
+
+	.animate-card-in {
+		opacity: 0;
+		animation: cardIn 0.45s ease-out forwards;
+	}
+
+	.animate-chip-glow {
+		animation: chipGlow 1.8s ease-in-out infinite;
+	}
+
+	.animate-side-float {
+		animation-name: floatUp;
+		animation-timing-function: linear;
+		animation-iteration-count: infinite;
+	}
+
+	.animate-side-sway {
+		animation: sideSway 6s ease-in-out infinite;
+	}
+
+	.animate-ambient-shift {
+		animation: ambientShift 18s ease-in-out infinite;
+	}
+
+	.restaurant-grid-bg {
+		background-color: #0f0f0f;
+	}
+
+	.luxury-panel {
+		background: linear-gradient(140deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+		backdrop-filter: blur(4px);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.animate-grid-shimmer,
+		.animate-card-in,
+		.animate-chip-glow,
+		.animate-side-float,
+		.animate-side-sway,
+		.animate-ambient-shift {
+			animation: none !important;
+		}
+	}
+
+	.selection-surface {
+		position: relative;
+		overflow: hidden;
+		background:
+			linear-gradient(155deg, rgba(255, 255, 255, 0.9), rgba(244, 246, 251, 0.85)),
+			radial-gradient(circle at 88% 10%, rgba(79, 140, 255, 0.1), transparent 35%);
+		border: 1px solid rgba(216, 139, 90, 0.16);
+		box-shadow: 0 14px 28px rgba(10, 12, 20, 0.08);
+	}
+
+	.dark .selection-surface {
+		background:
+			linear-gradient(160deg, rgba(14, 18, 28, 0.92), rgba(10, 14, 22, 0.86)),
+			radial-gradient(circle at 86% 12%, rgba(122, 162, 255, 0.12), transparent 35%);
+		border-color: rgba(216, 139, 90, 0.2);
+		box-shadow: 0 20px 34px rgba(0, 0, 0, 0.42);
+	}
+
+	.restaurant-card {
+		contain: paint;
+	}
+
+	.restaurant-card img {
+		will-change: transform;
+	}
+
+	@media (min-width: 1024px) {
+		.selection-surface {
+			box-shadow: 0 12px 24px rgba(10, 12, 20, 0.08);
+		}
+
+		.dark .selection-surface {
+			box-shadow: 0 16px 28px rgba(0, 0, 0, 0.34);
+		}
+	}
+}
