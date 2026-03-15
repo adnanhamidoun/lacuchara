@@ -104,3 +104,71 @@ class PredictionEngine:
             import traceback
             traceback.print_exc()
             raise
+
+    def predict_unified_menu(self, model_name: str, data: dict) -> list:
+        """
+        Load unified menu model (AzcaMenuModel.pkl), build 15 features, and return TOP 3 with scores.
+
+        Args:
+            model_name: Name of .pkl file in artifacts (without extension) - typically "AzcaMenuModel"
+            data: Raw input dict with exactly 15 features (course_type, prev_dish_id, etc.)
+
+        Returns:
+            List of tuples [(dish_name, probability), ...] sorted by probability (descending). Top 3 minimum.
+        
+        Raises:
+            Exception if model doesn't have predict_proba or returns invalid format
+        """
+        try:
+            print(f"\n🔍 INICIO predict_unified_menu() con modelo: {model_name}")
+            
+            # Load model from cache
+            print(f"📦 Cargando modelo: {model_name}")
+            model = self.model_provider.get_model(model_name)
+            print(f"✅ Modelo cargado: {type(model).__name__}")
+
+            # Build feature dataframe with 15 features
+            print(f"🔨 Construyendo 15 features...")
+            df_features = self.pipeline.build_unified_menu_features(data)
+            print(f"✅ DataFrame con shape {df_features.shape} construido")
+
+            # Get top 3 predictions with probabilities
+            print(f"🔮 Realizando predicción de top 3 con modelo unificado: {type(model).__name__}")
+            
+            # Use predict_proba to get probabilities for all classes
+            if not hasattr(model, 'predict_proba'):
+                raise AttributeError(f"Modelo {model_name} no tiene predict_proba. Solo acepta modelos de clasificación.")
+            
+            print(f"📊 Llamando a predict_proba()...")
+            probabilities = model.predict_proba(df_features)  # Shape: (1, n_classes) - puede ser DataFrame o array
+            classes = model.classes_  # Class labels (dish names)
+            print(f"✅ predict_proba() retornó resultado de tipo {type(probabilities).__name__} con shape {probabilities.shape if hasattr(probabilities, 'shape') else 'N/A'}")
+            print(f"📝 Classes ({len(classes)} total): {classes[:5]}... (primeras 5)")
+            
+            # Convert DataFrame to numpy array if necessary
+            import pandas as pd
+            if isinstance(probabilities, pd.DataFrame):
+                print(f"🔄 Convirtiendo probabilities de DataFrame a numpy array")
+                probabilities = probabilities.values
+            
+            # Get top 3 indices (descending order of probability)
+            probs_row = probabilities[0]  # First (only) row
+            print(f"📊 Probabilidades (primeras 10): {probs_row[:10]}")
+            top_3_indices = (-probs_row).argsort()[:3]
+            print(f"✅ Top 3 indices: {top_3_indices}")
+            
+            # Build result: [(dish_name, score), ...]
+            top_3_dishes = [
+                (classes[idx], float(probs_row[idx]))
+                for idx in top_3_indices
+            ]
+            
+            print(f"✅ Top 3 predicciones exitosas: {top_3_dishes}")
+            print(f"✅ FIN predict_unified_menu()\n")
+            return top_3_dishes
+            
+        except Exception as e:
+            print(f"❌ Error en predicción de menú unificado: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise

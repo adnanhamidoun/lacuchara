@@ -2,7 +2,7 @@
 API REST con FastAPI para predicciones de demanda de servicios.
 
 Este módulo expone los endpoints de predicción, integrando:
-- PredictionEngine: Motor de IA para predicciones
+- Carga de modelo pickle en lifespan (una sola vez)
 - SQLAlchemy + Azure SQL: Persistencia de auditoría
 
 Endpoints:
@@ -13,32 +13,21 @@ Endpoints:
 
 import json
 import logging
+import pickle
+from contextlib import asynccontextmanager
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
 import holidays
 import requests
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, distinct
 from pydantic import BaseModel, Field
 
-from ..db import get_db, init_db, PredictionLog, Restaurant, FactServices, MenusAzca, SessionLocal
-
-# Importar PredictionEngine - pero con fallback si falta
-try:
-    from ..core import PredictionEngine
-    PREDICTION_ENGINE_AVAILABLE = True
-except ImportError:
-    PREDICTION_ENGINE_AVAILABLE = False
-    # Mock para testing sin dependencias pesadas
-    class PredictionEngine:
-        def __init__(self, *args, **kwargs):
-            pass
-        def predict(self, model_name: str, data: dict) -> int:
-            """Mock que retorna una predicción dummy para testing"""
-            return 150
+from ..db import get_db, init_db, PredictionLog, Restaurant, FactServices, MenusAzca, DimDishes, FactMenuItems, FactMenus, RestaurantContext, FactPredictionLog, SessionLocal
+from ..core import PredictionEngine
 
 # ============================================================================
 # LOGGING
@@ -496,20 +485,271 @@ class RestaurantsListResponse(BaseModel):
 
 
 # ============================================================================
-# INICIALIZACIÓN DE LA APP
+# CACHÉ EN MEMORIA - Clima y Calendario
 # ============================================================================
 
+class CacheManager:
+    """
+    Gestor de caché en memoria para datos de clima, calendario y conteos de dishes.
+    
+    Evita llamadas repetidas a Open-Meteo API y queries costosas a BD.
+    
+    Beneficio: 
+    - Clima/Calendario: Reducir 200-500ms por predicción × 3 = hasta 1.5s ahorrados
+    - Dish Counts: Eliminar 3 JOINs + COUNT(DISTINCT) por predicción
+    
+    Atributos:
+        ttl (timedelta): Tiempo de vida para clima/calendario (default: 20 min)
+        dish_count_ttl (timedelta): Tiempo de vida para conteos de dishes (default: 60 min)
+        weather_cache (dict): {date_obj: (data_dict, timestamp)}
+        calendar_cache (dict): {date_obj: (data_dict, timestamp)}
+        dish_count_cache (dict): {(restaurant_id, course_type): (count, timestamp)}
+    """
+    
+    def __init__(self, ttl_minutes: int = 20, dish_count_ttl_minutes: int = 60):
+        """
+        Args:
+            ttl_minutes: Minutos que clima/calendario permanecen en caché (default: 20 min)
+            dish_count_ttl_minutes: Minutos que conteos de dishes permanecen en caché (default: 60 min)
+        """
+        self.ttl = timedelta(minutes=ttl_minutes)
+        self.dish_count_ttl = timedelta(minutes=dish_count_ttl_minutes)
+        self.weather_cache = {}
+        self.calendar_cache = {}
+        self.dish_count_cache = {}
+        logger.info(f"🔄 CacheManager iniciado con TTL clima/calendario={ttl_minutes}min, dishes={dish_count_ttl_minutes}min")
+    
+    def _is_expired(self, cached_timestamp: datetime, ttl: timedelta) -> bool:
+        """Verifica si una entrada de caché ha expirado."""
+        return datetime.now() - cached_timestamp > ttl
+    
+    def get_weather(self, service_date: date) -> dict | None:
+        """
+        Obtiene datos de clima del caché si existen y no han expirado.
+        
+        Args:
+            service_date: Fecha para consultar
+            
+        Returns:
+            dict con datos de clima, o None si no está en caché o ha expirado
+        """
+        if service_date in self.weather_cache:
+            data, timestamp = self.weather_cache[service_date]
+            if not self._is_expired(timestamp, self.ttl):
+                logger.info(f"✅ Climat caché para {service_date} (edad: {(datetime.now() - timestamp).total_seconds():.0f}s)")
+                return data
+            else:
+                # Eliminar entrada expirada
+                del self.weather_cache[service_date]
+                logger.info(f"🗑️  Caché clima expirado para {service_date}")
+        
+        return None
+    
+    def set_weather(self, service_date: date, data: dict) -> None:
+        """Guarda datos de clima en caché."""
+        self.weather_cache[service_date] = (data, datetime.now())
+        logger.info(f"💾 Guardado clima en caché para {service_date}")
+    
+    def get_calendar(self, service_date: date) -> dict | None:
+        """
+        Obtiene datos de calendario del caché si existen y no han expirado.
+        
+        Args:
+            service_date: Fecha para consultar
+            
+        Returns:
+            dict con datos de calendario, o None si no está en caché o ha expirado
+        """
+        if service_date in self.calendar_cache:
+            data, timestamp = self.calendar_cache[service_date]
+            if not self._is_expired(timestamp, self.ttl):
+                logger.info(f"✅ Calendario caché para {service_date} (edad: {(datetime.now() - timestamp).total_seconds():.0f}s)")
+                return data
+            else:
+                # Eliminar entrada expirada
+                del self.calendar_cache[service_date]
+                logger.info(f"🗑️  Caché calendario expirado para {service_date}")
+        
+        return None
+    
+    def set_calendar(self, service_date: date, data: dict) -> None:
+        """Guarda datos de calendario en caché."""
+        self.calendar_cache[service_date] = (data, datetime.now())
+        logger.info(f"💾 Guardado calendario en caché para {service_date}")
+    
+    def get_dish_count(self, restaurant_id: int, course_type: str) -> int | None:
+        """
+        Obtiene el conteo de dishes del caché si existe y no ha expirado.
+        
+        Args:
+            restaurant_id: ID del restaurante
+            course_type: Tipo de plato ('first_course', 'second_course', 'dessert')
+            
+        Returns:
+            int con el conteo, o None si no está en caché o ha expirado
+        """
+        cache_key = (restaurant_id, course_type)
+        if cache_key in self.dish_count_cache:
+            count, timestamp = self.dish_count_cache[cache_key]
+            if not self._is_expired(timestamp, self.dish_count_ttl):
+                logger.info(f"✅ Conteo {course_type} caché para restaurante {restaurant_id} (edad: {(datetime.now() - timestamp).total_seconds():.0f}s)")
+                return count
+            else:
+                # Eliminar entrada expirada
+                del self.dish_count_cache[cache_key]
+                logger.info(f"🗑️  Caché conteo expirado para restaurante {restaurant_id}, {course_type}")
+        
+        return None
+    
+    def set_dish_count(self, restaurant_id: int, course_type: str, count: int) -> None:
+        """Guarda conteo de dishes en caché."""
+        cache_key = (restaurant_id, course_type)
+        self.dish_count_cache[cache_key] = (count, datetime.now())
+        logger.info(f"💾 Guardado conteo {course_type} en caché para restaurante {restaurant_id}: {count} platos")
+    
+    def clear_expired(self) -> None:
+        """Limpia todas las entradas expiradas del caché."""
+        expired_weather = [
+            date_obj for date_obj, (_, ts) in self.weather_cache.items()
+            if self._is_expired(ts, self.ttl)
+        ]
+        for date_obj in expired_weather:
+            del self.weather_cache[date_obj]
+        
+        expired_calendar = [
+            date_obj for date_obj, (_, ts) in self.calendar_cache.items()
+            if self._is_expired(ts, self.ttl)
+        ]
+        for date_obj in expired_calendar:
+            del self.calendar_cache[date_obj]
+        
+        expired_counts = [
+            key for key, (_, ts) in self.dish_count_cache.items()
+            if self._is_expired(ts, self.dish_count_ttl)
+        ]
+        for key in expired_counts:
+            del self.dish_count_cache[key]
+        
+        if expired_weather or expired_calendar or expired_counts:
+            logger.info(f"🧹 Limpieza caché: {len(expired_weather)} clima, {len(expired_calendar)} calendario, {len(expired_counts)} conteos eliminados")
+    
+    def stats(self) -> dict:
+        """Retorna estadísticas del caché."""
+        return {
+            "weather_items": len(self.weather_cache),
+            "calendar_items": len(self.calendar_cache),
+            "dish_count_items": len(self.dish_count_cache),
+            "ttl_minutes": int(self.ttl.total_seconds() / 60),
+            "dish_count_ttl_minutes": int(self.dish_count_ttl.total_seconds() / 60),
+        }
+
+
+# ============================================================================
+# LIFESPAN - Cargar modelo una sola vez al iniciar la aplicación
+# ============================================================================
+
+# Variable global para el motor de predicción
+prediction_engine = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Context manager para gestionar el ciclo de vida de la aplicación FastAPI.
+    
+    STARTUP:
+    - Inicializa la base de datos
+    - Carga el modelo pickle en memoria (una sola vez)
+    - Inicializa el caché en memoria (clima y calendario)
+    - Inicializa el motor de predicción
+    - Lo almacena en app.state para acceso global
+    
+    SHUTDOWN:
+    - Limpia recursos si es necesario
+    """
+    global prediction_engine
+    
+    # ===== STARTUP =====
+    logger.info("🚀 Iniciando aplicación AZCA Prediction API...")
+    
+    # 1. Inicializar base de datos
+    try:
+        init_db()
+        logger.info("✅ Base de datos inicializada")
+    except Exception as db_error:
+        logger.error(f"❌ Error inicializando BD: {str(db_error)}", exc_info=True)
+        raise
+    
+    # 2. Intentar conectar a BD y verificar restaurantes
+    try:
+        db = SessionLocal()
+        restaurant_count = db.query(Restaurant).count()
+        db.close()
+        logger.info(f"✅ Conectado a BD: {restaurant_count} restaurantes disponibles")
+    except Exception as db_error:
+        logger.error(f"❌ Error conectando BD: {str(db_error)}", exc_info=True)
+        raise
+    
+    # 3. Inicializar el motor de predicción
+    try:
+        prediction_engine = PredictionEngine()
+        logger.info(f"✅ Motor de predicción inicializado")
+    except Exception as engine_error:
+        logger.warning(f"⚠️  Motor de predicción no disponible: {str(engine_error)[:100]}")
+        prediction_engine = None  # Permitirá fallback con mock en endpoints
+    
+    # 4. Cargar modelo pickle en memoria (OPTIMIZACIÓN CLAVE)
+    try:
+        artifacts_path = Path(__file__).parent.parent / "azca" / "artifacts"
+        model_path = artifacts_path / "AzcaMenuModel.pkl"
+        
+        logger.info(f"📦 Cargando modelo desde: {model_path}")
+        
+        with open(model_path, "rb") as f:
+            model = pickle.load(f)
+        
+        app.state.model = model
+        logger.info(f"✅ Modelo cargado en memoria (app.state.model)")
+        logger.info(f"   Tipo de modelo: {type(model).__name__}")
+        
+    except FileNotFoundError:
+        logger.error(f"❌ Modelo no encontrado en {model_path}")
+        raise
+    except Exception as model_error:
+        logger.error(f"❌ Error cargando modelo: {str(model_error)}", exc_info=True)
+        raise
+    
+    # 5. Inicializar caché en memoria (clima y calendario)
+    try:
+        app.state.cache = CacheManager(ttl_minutes=20)
+        logger.info(f"✅ Caché en memoria inicializado")
+    except Exception as cache_error:
+        logger.error(f"❌ Error inicializando caché: {str(cache_error)}", exc_info=True)
+        raise
+    
+    logger.info("🎯 Aplicación lista para servir predicciones")
+    
+    # Yield para que FastAPI continúe ejecutándose
+    yield
+    
+    # ===== SHUTDOWN =====
+    logger.info("🛑 Deteniendo aplicación...")
+    # Limpiar si es necesario
+    logger.info("✅ Aplicación detenida correctamente")
+
+
+# Crear la app con lifespan
 app = FastAPI(
     title="AZCA Prediction API",
     description=(
         "API REST para predicciones de demanda de servicios con IA.\n\n"
-        "Integra un motor de predicción XGBoost con persistencia en Azure SQL."
+        "Carga el modelo en memoria al iniciar para máximo rendimiento."
     ),
     version="1.0.0",
     contact={
         "name": "AZCA Project",
         "url": "https://github.com/your-org/azca",
     },
+    lifespan=lifespan,
 )
 
 # Configurar CORS para permitir requests desde el frontend
@@ -520,60 +760,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Variable global para el motor de predicción
-prediction_engine: PredictionEngine | None = None
-
-
-# ============================================================================
-# EVENTOS DE STARTUP Y SHUTDOWN
-# ============================================================================
-
-
-@app.on_event("startup")
-async def startup_event():
-    """
-    Evento de inicio de la API.
-
-    - Inicializa la base de datos (crea tablas si no existen)
-    - Carga el motor de predicción (PredictionEngine)
-    - Realiza validaciones básicas
-    """
-    global prediction_engine
-
-    try:
-        # Inicializar base de datos
-        init_db()
-        
-        # Intentar conectar y cargar restaurantes
-        try:
-            db = SessionLocal()
-            restaurant_count = db.query(Restaurant).count()
-            db.close()
-        except Exception as db_error:
-            logger.error(f"❌ Error conectando BD: {str(db_error)}", exc_info=True)
-
-        # Instanciar motor de predicción
-        try:
-            artifacts_path = Path(__file__).parent.parent / "azca" / "artifacts"
-            prediction_engine = PredictionEngine(artifacts_path=artifacts_path)
-        except Exception as engine_error:
-            logger.warning(f"⚠️ Motor de predicción no disponible (usando mock): {str(engine_error)}")
-            prediction_engine = PredictionEngine()
-
-    except Exception as e:
-        logger.error(f"❌ Error durante startup: {str(e)}", exc_info=True)
-        raise
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """
-    Evento de cierre de la API.
-
-    Realiza limpieza de recursos si es necesario.
-    """
-    pass
 
 
 # ============================================================================
@@ -598,6 +784,43 @@ async def health_check():
         status="healthy",
         message="API y base de datos funcionando correctamente",
     )
+
+
+@app.get(
+    "/cache-stats",
+    summary="Cache Statistics",
+    tags=["Monitoring"],
+)
+async def cache_stats(http_request: Request):
+    """
+    Retorna estadísticas del caché de clima y calendario.
+    
+    Útil para monitoreo: ver cuántos datos están almacenados en memoria
+    y cuánto tiempo llevan ahí.
+    
+    Returns:
+        dict con estadísticas de caché
+    """
+    try:
+        if hasattr(http_request.app.state, 'cache'):
+            cache = http_request.app.state.cache
+            stats = cache.stats()
+            return {
+                "status": "ok",
+                "cache_stats": stats,
+                "message": f"Caché activo: {stats['weather_items']} clima, {stats['calendar_items']} calendario items"
+            }
+        else:
+            return {
+                "status": "not_available",
+                "message": "Caché no inicializado"
+            }
+    except Exception as e:
+        logger.error(f"Error obteniendo stats del caché: {str(e)}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 
 @app.get(
@@ -680,15 +903,21 @@ async def get_restaurant_detail(restaurant_id: int, db: Session = Depends(get_db
 # FUNCIONES AUXILIARES PARA CÁLCULO AUTOMÁTICO
 # ============================================================================
 
-def get_weather_data(service_date: date) -> dict:
+def get_weather_data(service_date: date, cache: CacheManager = None) -> dict:
     """
     Recupera datos meteorológicos de Open-Meteo para Azca (Madrid).
+    
+    CACHÉ INTEGRADO:
+    - Primero verifica si los datos están en caché (TTL: 20 minutos)
+    - Si no están o han expirado, llama a Open-Meteo API
+    - Guarda los datos en caché para reutilizarlos
     
     Open-Meteo es una API meteorológica gratuita sin necesidad de API key.
     Coordenadas de Azca Madrid (Bernabéu): 40.4532° N, -3.6885° W
     
     Args:
         service_date: Fecha para la cual se obtiene el clima (date object)
+        cache: CacheManager para almacenar/recuperar datos (opcional)
         
     Returns:
         dict: {
@@ -697,6 +926,12 @@ def get_weather_data(service_date: date) -> dict:
             'is_rain_service_peak': bool (si llueve en horas pico 12-20)
         }
     """
+    # 0. Verificar caché primero
+    if cache:
+        cached_data = cache.get_weather(service_date)
+        if cached_data:
+            return cached_data
+    
     # Coordenadas de Azca (Madrid, al lado del Bernabéu)
     latitude = 40.4532
     longitude = -3.6885
@@ -714,6 +949,7 @@ def get_weather_data(service_date: date) -> dict:
     }
     
     try:
+        logger.info(f"🌐 Llamando Open-Meteo API para {service_date}...")
         response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()
         data = response.json()
@@ -741,11 +977,17 @@ def get_weather_data(service_date: date) -> dict:
             )
             is_rain_peak = peak_hours_rain > 0
         
-        return {
+        weather_result = {
             'max_temp_c': float(max_temp),
             'precipitation_mm': float(precipitation),
             'is_rain_service_peak': is_rain_peak,
         }
+        
+        # Guardar en caché
+        if cache:
+            cache.set_weather(service_date, weather_result)
+        
+        return weather_result
         
     except requests.exceptions.RequestException as e:
         logger.warning(f"⚠️  Open-Meteo no disponible: {str(e)[:50]}, usando valores por defecto")
@@ -806,13 +1048,19 @@ def get_services_data(db: Session, restaurant_id: int, service_date: date, capac
     }
 
 
-def calculate_calendar_features(service_date: date) -> dict:
+def calculate_calendar_features(service_date: date, cache: CacheManager = None) -> dict:
     """
     Calcula automáticamente los parámetros de calendario basados en la fecha.
     Usa la librería 'holidays' para festivos españoles en Madrid (Azca location).
     
+    CACHÉ INTEGRADO:
+    - Primero verifica si los datos están en caché (TTL: 20 minutos)
+    - Si no están o han expirado, calcula los datos
+    - Guarda los datos en caché para reutilizarlos
+    
     Args:
         service_date: Fecha del servicio (date object)
+        cache: CacheManager para almacenar/recuperar datos (opcional)
         
     Returns:
         dict: {
@@ -822,6 +1070,12 @@ def calculate_calendar_features(service_date: date) -> dict:
             'is_payday_week': bool (semana de pago)
         }
     """
+    # 0. Verificar caché primero
+    if cache:
+        cached_data = cache.get_calendar(service_date)
+        if cached_data:
+            return cached_data
+    
     # Inicializar calendario de festivos españoles (subdivisión Madrid)
     es_holidays = holidays.Spain(subdiv='MD')
     
@@ -836,7 +1090,6 @@ def calculate_calendar_features(service_date: date) -> dict:
     # 3. is_bridge_day: es un día entre festivo y fin de semana
     # (ejm: viernes después de festivo, o lunes antes de festivo)
     is_bridge_day = False
-    from datetime import timedelta
     
     if weekday == 4:  # Viernes
         prev_day = service_date - timedelta(days=1)
@@ -852,82 +1105,378 @@ def calculate_calendar_features(service_date: date) -> dict:
     day_of_month = service_date.day
     is_payday_week = 25 <= day_of_month <= 31
     
-    return {
+    calendar_result = {
         'is_business_day': is_business_day,
         'is_holiday': is_holiday,
         'is_bridge_day': is_bridge_day,
         'is_payday_week': is_payday_week,
     }
+    
+    # Guardar en caché
+    if cache:
+        cache.set_calendar(service_date, calendar_result)
+    
+    return calendar_result
 
 
 # ============================================================================
 # FUNCIONES HELPER PARA CONTAR PLATOS ÚNICOS POR RESTAURANTE
 # ============================================================================
 
-def get_total_starters(db: Session, restaurant_id: int) -> int:
+def get_total_starters(db: Session, restaurant_id: int, cache: CacheManager = None) -> int:
     """
-    Cuenta el total de PLATOS ÚNICOS de entrada (first_course) que tiene un restaurante en Menus_Azca.
+    Cuenta el total de PLATOS ÚNICOS de entrada (first_course) que ha servido un restaurante.
+    
+    OPTIMIZACIÓN CON CACHÉ:
+    1. Primero verifica si el conteo está en caché (TTL: 60 minutos)
+    2. Si no, cuenta unique dish_ids que ha servido ese restaurante (3 JOINs)
+    3. Si es 0, cuenta todos los starters disponibles en el catálogo
+    4. Si sigue siendo 0, retorna 1 (fallback evita división por 0)
     
     Args:
         db: Sesión SQLAlchemy
         restaurant_id: ID del restaurante
+        cache: CacheManager para almacenar/recuperar conteos (opcional)
     
     Returns:
-        Total de platos de entrada únicos (int). Si no hay datos, retorna 1 para evitar división por 0.
+        Total de platos de entrada únicos (int). Mínimo 1 para evitar división por 0.
     """
-    try:
-        total = db.query(func.count(distinct(MenusAzca.first_course))).filter(
-            MenusAzca.restaurant_id == restaurant_id,
-            MenusAzca.first_course.isnot(None)
+    # 0. Verificar caché primero
+    if cache:
+        cached_count = cache.get_dish_count(restaurant_id, 'first_course')
+        if cached_count is not None:
+            return cached_count
+    
+    # 1. Contar starters ÚNICOS que ha servido ESTE restaurante
+    restaurant_starters = db.query(func.count(distinct(DimDishes.dish_id))).join(
+        FactMenuItems, DimDishes.dish_id == FactMenuItems.dish_id
+    ).join(
+        FactMenus, FactMenuItems.menu_id == FactMenus.menu_id
+    ).filter(
+        FactMenus.restaurant_id == restaurant_id,
+        DimDishes.course_type == 'first_course'
+    ).scalar()
+    
+    result = None
+    if restaurant_starters and restaurant_starters > 0:
+        result = restaurant_starters
+    else:
+        # 2. Fallback: contar todos los starters en el catálogo
+        all_starters = db.query(func.count(DimDishes.dish_id)).filter(
+            DimDishes.course_type == 'first_course'
         ).scalar()
-        return max(total or 1, 1)  # Mínimo 1 para evitar división por 0
-    except Exception as e:
-        logger.warning(f"Error contando starters únicos para restaurante {restaurant_id}: {str(e)}")
-        return 1
+        
+        if all_starters and all_starters > 0:
+            result = all_starters
+        else:
+            # 3. Último fallback
+            result = 1
+    
+    # Guardar en caché
+    if cache and result:
+        cache.set_dish_count(restaurant_id, 'first_course', result)
+    
+    return result
 
 
-def get_total_mains(db: Session, restaurant_id: int) -> int:
+def get_total_mains(db: Session, restaurant_id: int, cache: CacheManager = None) -> int:
     """
-    Cuenta el total de PLATOS ÚNICOS principales (second_course) que tiene un restaurante en Menus_Azca.
+    Cuenta el total de PLATOS ÚNICOS principales (second_course) que ha servido un restaurante.
+    
+    OPTIMIZACIÓN CON CACHÉ:
+    1. Primero verifica si el conteo está en caché (TTL: 60 minutos)
+    2. Si no, cuenta unique dish_ids que ha servido ese restaurante (3 JOINs)
+    3. Si es 0, cuenta todos los mains disponibles en el catálogo
+    4. Si sigue siendo 0, retorna 1 (fallback evita división por 0)
     
     Args:
         db: Sesión SQLAlchemy
         restaurant_id: ID del restaurante
+        cache: CacheManager para almacenar/recuperar conteos (opcional)
     
     Returns:
-        Total de platos principales únicos (int). Si no hay datos, retorna 1 para evitar división por 0.
+        Total de platos principales únicos (int). Mínimo 1 para evitar división por 0.
     """
-    try:
-        total = db.query(func.count(distinct(MenusAzca.second_course))).filter(
-            MenusAzca.restaurant_id == restaurant_id,
-            MenusAzca.second_course.isnot(None)
+    # 0. Verificar caché primero
+    if cache:
+        cached_count = cache.get_dish_count(restaurant_id, 'second_course')
+        if cached_count is not None:
+            return cached_count
+    
+    # 1. Contar mains ÚNICOS que ha servido ESTE restaurante
+    restaurant_mains = db.query(func.count(distinct(DimDishes.dish_id))).join(
+        FactMenuItems, DimDishes.dish_id == FactMenuItems.dish_id
+    ).join(
+        FactMenus, FactMenuItems.menu_id == FactMenus.menu_id
+    ).filter(
+        FactMenus.restaurant_id == restaurant_id,
+        DimDishes.course_type == 'second_course'
+    ).scalar()
+    
+    result = None
+    if restaurant_mains and restaurant_mains > 0:
+        result = restaurant_mains
+    else:
+        # 2. Fallback: contar todos los mains en el catálogo
+        all_mains = db.query(func.count(DimDishes.dish_id)).filter(
+            DimDishes.course_type == 'second_course'
         ).scalar()
-        return max(total or 1, 1)  # Mínimo 1 para evitar división por 0
-    except Exception as e:
-        logger.warning(f"Error contando mains únicos para restaurante {restaurant_id}: {str(e)}")
-        return 1
+        
+        if all_mains and all_mains > 0:
+            result = all_mains
+        else:
+            # 3. Último fallback
+            result = 1
+    
+    # Guardar en caché
+    if cache and result:
+        cache.set_dish_count(restaurant_id, 'second_course', result)
+    
+    return result
 
 
-def get_total_desserts(db: Session, restaurant_id: int) -> int:
+def get_total_desserts(db: Session, restaurant_id: int, cache: CacheManager = None) -> int:
     """
-    Cuenta el total de POSTRES ÚNICOS (dessert) que tiene un restaurante en Menus_Azca.
+    Cuenta el total de POSTRES ÚNICOS (dessert) que ha servido un restaurante.
+    
+    OPTIMIZACIÓN CON CACHÉ:
+    1. Primero verifica si el conteo está en caché (TTL: 60 minutos)
+    2. Si no, cuenta unique dish_ids que ha servido ese restaurante (3 JOINs)
+    3. Si es 0, cuenta todos los desserts disponibles en el catálogo
+    4. Si sigue siendo 0, retorna 1 (fallback evita división por 0)
     
     Args:
         db: Sesión SQLAlchemy
         restaurant_id: ID del restaurante
+        cache: CacheManager para almacenar/recuperar conteos (opcional)
     
     Returns:
-        Total de postres únicos (int). Si no hay datos, retorna 1 para evitar división por 0.
+        Total de postres únicos (int). Mínimo 1 para evitar división por 0.
+    """
+    # 0. Verificar caché primero
+    if cache:
+        cached_count = cache.get_dish_count(restaurant_id, 'dessert')
+        if cached_count is not None:
+            return cached_count
+    
+    # 1. Contar desserts ÚNICOS que ha servido ESTE restaurante
+    restaurant_desserts = db.query(func.count(distinct(DimDishes.dish_id))).join(
+        FactMenuItems, DimDishes.dish_id == FactMenuItems.dish_id
+    ).join(
+        FactMenus, FactMenuItems.menu_id == FactMenus.menu_id
+    ).filter(
+        FactMenus.restaurant_id == restaurant_id,
+        DimDishes.course_type == 'dessert'
+    ).scalar()
+    
+    result = None
+    if restaurant_desserts and restaurant_desserts > 0:
+        result = restaurant_desserts
+    else:
+        # 2. Fallback: contar todos los desserts en el catálogo
+        all_desserts = db.query(func.count(DimDishes.dish_id)).filter(
+            DimDishes.course_type == 'dessert'
+        ).scalar()
+        
+        if all_desserts and all_desserts > 0:
+            result = all_desserts
+        else:
+            # 3. Último fallback
+            result = 1
+    
+    # Guardar en caché
+    if cache and result:
+        cache.set_dish_count(restaurant_id, 'dessert', result)
+    
+    return result
+
+
+def get_prev_dish_id(db: Session, restaurant_id: int, course_type: str) -> float:
+    """
+    Obtiene el ID del plato más recientemente servido de un tipo (course_type) en un restaurante.
+    
+    OPTIMIZADO: Ahora accede a la vista v_current_restaurant_context en lugar de hacer
+    múltiples JOINs manualmente. Según course_type retorna last_starter_id, last_main_id o last_dessert_id.
+    
+    Args:
+        db: Sesión SQLAlchemy
+        restaurant_id: ID del restaurante
+        course_type: Tipo de plato ('first_course', 'second_course', 'dessert')
+    
+    Returns:
+        dish_id del plato más reciente (float). Si no hay datos, retorna 0.0.
     """
     try:
-        total = db.query(func.count(distinct(MenusAzca.dessert))).filter(
-            MenusAzca.restaurant_id == restaurant_id,
-            MenusAzca.dessert.isnot(None)
-        ).scalar()
-        return max(total or 1, 1)  # Mínimo 1 para evitar división por 0
+        # Acceder a la vista optimizada v_current_restaurant_context
+        context = db.query(RestaurantContext).filter(
+            RestaurantContext.restaurant_id == restaurant_id
+        ).first()
+        
+        if not context:
+            logger.warning(f"Restaurante {restaurant_id} no encontrado en v_current_restaurant_context")
+            return 0.0
+        
+        # Mapear course_type a el campo correspondiente de la vista
+        if course_type == 'first_course':
+            prev_dish_id = context.last_starter_id
+        elif course_type == 'second_course':
+            prev_dish_id = context.last_main_id
+        elif course_type == 'dessert':
+            prev_dish_id = context.last_dessert_id
+        else:
+            logger.warning(f"course_type inválido: {course_type}")
+            return 0.0
+        
+        if prev_dish_id:
+            logger.info(f"✅ prev_dish_id para {course_type}: {prev_dish_id} (desde vista)")
+            return float(prev_dish_id)
+        else:
+            logger.info(f"ℹ️  No hay historial de {course_type}, usando 0.0")
+            return 0.0
+            
     except Exception as e:
-        logger.warning(f"Error contando desserts únicos para restaurante {restaurant_id}: {str(e)}")
-        return 1
+        logger.error(f"Error obteniendo prev_dish_id desde vista: {str(e)}", exc_info=True)
+        return 0.0
+
+
+def get_dish_name_by_id(db: Session, dish_id: int) -> str:
+    """
+    Obtiene el nombre del plato (dish_name) desde dim_dishes usando dish_id.
+    
+    Args:
+        db: Sesión SQLAlchemy
+        dish_id: ID del plato
+    
+    Returns:
+        Nombre del plato (string). Lanza excepción si no existe.
+    """
+    dish = db.query(DimDishes.dish_name).filter(
+        DimDishes.dish_id == dish_id
+    ).first()
+    
+    if not dish:
+        raise ValueError(f"Plato con dish_id={dish_id} no encontrado en dim_dishes. ¿Tu modelo predice IDs que no existen?")
+    
+    return dish[0]
+
+
+def save_prediction_log(
+    db: Session,
+    restaurant_id: int,
+    prediction_domain: str,
+    input_context: dict,
+    output_results: list,
+    model_version: str,
+    latency_ms: int,
+) -> int:
+    """
+    Guarda una predicción completa en fact_prediction_logs para auditoría.
+    
+    Centraliza todas las predicciones (menus, servicios) en una sola tabla con formato JSON.
+    
+    Args:
+        db: Sesión SQLAlchemy
+        restaurant_id: ID del restaurante
+        prediction_domain: Tipo de predicción ('MENU_STARTER', 'MENU_MAIN', 'MENU_DESSERT', 'SERVICE_LEVEL')
+        input_context: Dict con los inputs (clima, calendario, etc.)
+        output_results: List de tuples [(dish_id, probability), ...] o scalar para servicios
+        model_version: Versión del modelo
+        latency_ms: Tiempo de ejecución en ms
+        
+    Returns:
+        prediction_id guardado en BD
+    """
+    try:
+        # Convertir input_context a JSON
+        input_json = json.dumps(input_context, default=str)
+        
+        # Convertir output_results a JSON
+        # Si es menú: [(dish_id, prob), ...] → [{"id": dish_id, "prob": prob}, ...]
+        # Si es servicio: scalar → {"level": valor}
+        if isinstance(output_results, list) and len(output_results) > 0 and isinstance(output_results[0], tuple):
+            # Es menú (lista de tuplas)
+            output_json = json.dumps(
+                [{"id": int(r[0]), "probability": float(r[1])} for r in output_results],
+                default=str
+            )
+        else:
+            # Es servicio (scalar o valor simple)
+            output_json = json.dumps({"level": output_results}, default=str)
+        
+        # Crear el log con execution_date explícito
+        prediction_log = FactPredictionLog(
+            execution_date=datetime.now(),  # 🔧 Asegurar que se setea la fecha
+            restaurant_id=restaurant_id,
+            prediction_domain=prediction_domain,
+            input_context_json=input_json,
+            output_results_json=output_json,
+            model_version=model_version,
+            latency_ms=latency_ms,
+        )
+        
+        db.add(prediction_log)
+        db.commit()
+        db.refresh(prediction_log)
+        
+        logger.info(f"✅ Predicción guardada en fact_prediction_logs (ID: {prediction_log.prediction_id}, domain: {prediction_domain}, latency: {latency_ms}ms)")
+        
+        return prediction_log.prediction_id
+        
+    except Exception as e:
+        logger.error(f"❌ ERROR guardando log de predicción: {str(e)}", exc_info=True)
+        try:
+            db.rollback()
+        except:
+            pass
+        return -1
+
+
+def predict_top3_dishes(model, features_dict: dict) -> list:
+    """
+    Obtiene el top 3 de platos predichos usando el modelo cargado en memoria.
+    
+    Args:
+        model: Modelo pickle cargado (sklearn Pipeline con predict_proba)
+        features_dict: Diccionario con los 15 features
+        
+    Returns:
+        Lista de tuples [(dish_id, probability), ...]  para el top 3
+    """
+    import pandas as pd
+    import numpy as np
+    
+    # Construir DataFrame con una sola fila (los 15 features)
+    df = pd.DataFrame([features_dict])
+    
+    logger.info(f"🔨 Construyendo predicción con modelo...")
+    logger.info(f"   Features shape: {df.shape}")
+    logger.info(f"   Columns: {list(df.columns)}")
+    
+    # Obtener probabilidades de todas las clases
+    proba = model.predict_proba(df)  # Shape: (1, num_clases)
+    
+    logger.info(f"✅ predict_proba() retornó probabilidades de shape {proba.shape}")
+    
+    # Obtener las clases del modelo
+    classes = model.classes_
+    logger.info(f"📝 Clases disponibles: {len(classes)} | Primeras 5: {classes[:5] if len(classes) > 5 else classes}")
+    
+    # Obtener probabilities de la primera fila
+    probabilities = proba[0]
+    
+    # Obtener indices de top 3 probabilidades
+    top3_indices = np.argsort(probabilities)[-3:][::-1]  # Orden descendente
+    logger.info(f"✅ Top 3 indices: {top3_indices}")
+    
+    # Retornar [(class_id, probability), ...]
+    top3_predictions = [
+        (classes[idx], probabilities[idx])
+        for idx in top3_indices
+    ]
+    
+    logger.info(f"✅ Top 3 predicciones: {top3_predictions}")
+    
+    return top3_predictions
 
 
 @app.post(
@@ -939,6 +1488,7 @@ def get_total_desserts(db: Session, restaurant_id: int) -> int:
 )
 async def create_prediction(
     request: PredictionRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
 ):
     """
@@ -978,8 +1528,14 @@ async def create_prediction(
         )
 
     try:
-        # Calcular automáticamente parámetros de calendario
-        calendar_features = calculate_calendar_features(request.service_date)
+        # ⏱️ Iniciar cronómetro de latencia
+        exec_start = datetime.now()
+        
+        # Acceder al caché desde app.state
+        cache = http_request.app.state.cache if hasattr(http_request.app.state, 'cache') else None
+        
+        # Calcular automáticamente parámetros de calendario (con caché)
+        calendar_features = calculate_calendar_features(request.service_date, cache)
         
         # Recuperar datos históricos de fact_services
         # (services_lag_7 y avg_4_weeks desde la BD, con fallback a 70% capacidad)
@@ -990,8 +1546,8 @@ async def create_prediction(
             capacity_limit=request.capacity_limit
         )
         
-        # Recuperar datos meteorológicos desde Open-Meteo
-        weather_data = get_weather_data(request.service_date)
+        # Recuperar datos meteorológicos desde Open-Meteo (con caché)
+        weather_data = get_weather_data(request.service_date, cache)
         
         # Preparar datos para el motor (combinando request + cálculos automáticos)
         input_data = {
@@ -1040,7 +1596,27 @@ async def create_prediction(
             logger.warning(f"Motor con error, usando predicción mock: {str(engine_error)[:100]}")
             prediction_result = 150  # Mock para testing
 
-        # Crear registro de auditoría
+        # ⏱️ Calcular latencia (ANTES de guardar en BD)
+        latency_ms = int((datetime.now() - exec_start).total_seconds() * 1000)
+        
+        # 📊 Guardar predicción en fact_prediction_logs (SERVICE_LEVEL) - PRIMERO
+        # Esto es más importante que guardar en PredictionLog
+        try:
+            save_result_id = save_prediction_log(
+                db=db,
+                restaurant_id=request.restaurant_id,
+                prediction_domain="SERVICE_LEVEL",
+                input_context=input_data,
+                output_results=prediction_result,  # scalar para servicios
+                model_version="v1_xgboost",
+                latency_ms=latency_ms,
+            )
+            logger.info(f"✅ Predicción centralizada guardada (ID: {save_result_id})")
+        except Exception as fact_error:
+            logger.error(f"❌ Error guardando en fact_prediction_logs: {str(fact_error)}", exc_info=True)
+            # No interrumpir el flujo si falla esto
+        
+        # Crear registro de auditoría (tabla antigua, opcional)
         prediction_log = PredictionLog(
             service_date=request.service_date,
             max_temp_c=request.max_temp_c,
@@ -1052,18 +1628,21 @@ async def create_prediction(
             full_input_json=json.dumps(input_data, default=str),
         )
 
-        # Guardar en base de datos
+        # Guardar en tabla antigua (opcional, no crítico)
         try:
             db.add(prediction_log)
             db.commit()
             db.refresh(prediction_log)
             logger.info(
-                f"✅ Predicción guardada (ID: {prediction_log.id}, "
+                f"✅ Predicción guardada en PredictionLog (ID: {prediction_log.id}, "
                 f"Resultado: {prediction_result})"
             )
         except Exception as db_error:
-            logger.warning(f"⚠️  No se guardó en BD (normal si no está configurada): {str(db_error)[:100]}")
-            db.rollback()
+            logger.warning(f"⚠️  No se guardó en PredictionLog: {str(db_error)[:100]}")
+            try:
+                db.rollback()
+            except:
+                pass
             # Crear un log simulado con ID ficticio para respuesta
             prediction_log.id = -1
             prediction_log.execution_timestamp = datetime.now()
@@ -1105,6 +1684,7 @@ async def create_prediction(
 )
 async def predict_starter(
     request: StarterPredictionRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
 ):
     """
@@ -1123,45 +1703,63 @@ async def predict_starter(
     Returns:
         StarterPredictionResponse: Top 3 starters con scores de probabilidad
     """
-    global prediction_engine
-
-    if prediction_engine is None:
-        logger.error("Motor de predicción no inicializado")
+    # Acceder al modelo desde app.state (cargado en lifespan)
+    if not hasattr(http_request.app.state, "model") or http_request.app.state.model is None:
+        logger.error("Modelo no cargado en app.state")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Motor de predicción no disponible. Reinicia la API.",
+            detail="Modelo de predicción no disponible. Reinicia la API.",
         )
 
     try:
-        # 1. Obtener detalles del restaurante
-        restaurant = db.query(Restaurant).filter(
+        # ⏱️ Iniciar cronómetro de latencia
+        exec_start = datetime.now()
+        
+        # 1. Obtener contexto del restaurante desde vista optimizada (una sola query)
+        rest_data = db.query(Restaurant).filter(
             Restaurant.restaurant_id == request.restaurant_id
         ).first()
         
-        if not restaurant:
+        context = db.query(RestaurantContext).filter(
+            RestaurantContext.restaurant_id == request.restaurant_id
+        ).first()
+        
+        if not rest_data or not context:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Restaurante con ID {request.restaurant_id} no encontrado"
             )
+        
+        # Combinación de datos: restaurante + contexto
+        restaurant = rest_data
+        prev_dish_id = float(context.last_starter_id) if context.last_starter_id else 0.0
 
-        # 2. Calcular automaticamente
-        weather_data = get_weather_data(request.service_date)
-        calendar_features = calculate_calendar_features(request.service_date)
+        # 2. Obtener datos meteorológicos y calendario (con caché desde app.state)
+        cache = http_request.app.state.cache if hasattr(http_request.app.state, 'cache') else None
+        weather_data = get_weather_data(request.service_date, cache)
+        calendar_features = calculate_calendar_features(request.service_date, cache)
         
         # Extraer day_of_week (0=Monday) y month (1-12)
         day_of_week = request.service_date.weekday()
         month = request.service_date.month
         
-        # 3. Preparar input para modelo de starters (8 features exactas en orden)
+        # 3. Preparar input para modelo unificado (15 features)
         starter_input = {
             "day_of_week": day_of_week,
             "month": month,
             "max_temp_c": weather_data['max_temp_c'],
-            "is_holiday": calendar_features['is_holiday'],
-            "is_business_day": calendar_features['is_business_day'],
+            "precipitation_mm": weather_data.get('precipitation_mm', 0.0),
+            "is_holiday": int(calendar_features['is_holiday']),
+            "is_payday_week": int(calendar_features.get('is_payday_week', False)),
+            "is_stadium_event": int(weather_data.get('is_stadium_event', False)),
+            "is_azca_event": int(weather_data.get('is_azca_event', False)),
             "restaurant_id": request.restaurant_id,
             "cuisine_type": restaurant.cuisine_type,
             "restaurant_segment": restaurant.restaurant_segment,
+            "terrace_setup_type": restaurant.terrace_setup_type or "standard",
+            "menu_price": restaurant.menu_price or 15.0,
+            "course_type": "first_course",  # Para starters
+            "prev_dish_id": prev_dish_id,
         }
         
         # Log de entrada (para debugging)
@@ -1170,26 +1768,27 @@ async def predict_starter(
         logger.info("="*80)
         logger.info(f"🎯 Input: restaurante_id={request.restaurant_id}, fecha={request.service_date}")
         logger.info(f"📊 Parámetros auto-calculados:")
-        logger.info(f"   Clima: temp={weather_data['max_temp_c']}°C")
-        logger.info(f"   Calendario: business_day={calendar_features['is_business_day']}, holiday={calendar_features['is_holiday']}")
-        logger.info(f"   Restaurante: {restaurant.name} ({restaurant.cuisine_type})")
+        logger.info(f"   Clima: temp={weather_data['max_temp_c']}°C, precipitation_mm={weather_data.get('precipitation_mm', 0.0)}")
+        logger.info(f"   Calendario: business_day={calendar_features['is_business_day']}, holiday={calendar_features['is_holiday']}, payday_week={calendar_features.get('is_payday_week', False)}")
+        logger.info(f"   Restaurante: {restaurant.name} ({restaurant.cuisine_type}), segment={restaurant.restaurant_segment}, terrace={restaurant.terrace_setup_type}, price={restaurant.menu_price}")
+        logger.info(f"   Prev Dish ID (starters): {prev_dish_id}")
+        logger.info(f"📦 Starter Input (15 features):")
+        for key, val in starter_input.items():
+            logger.info(f"      {key}: {val} ({type(val).__name__})")
         logger.info("="*80)
         
-        # 4. Llamar al modelo para starters
-        prediction = prediction_engine.predict_menu("azca_menu_starter_v2", starter_input)
-        
-        # Validar que el modelo retornó top 3
-        if not isinstance(prediction, (list, tuple)) or len(prediction) < 3:
-            logger.error(f"Modelo devolvió formato inválido: {type(prediction)} - {prediction}")
+        # 5. Llamar al modelo cargado en memoria para obtener top 3 predicciones
+        try:
+            top_dishes = predict_top3_dishes(http_request.app.state.model, starter_input)
+        except Exception as pred_error:
+            logger.error(f"❌ Error durante predict_top3_dishes: {str(pred_error)}", exc_info=True)
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Modelo retornó resultado inválido (esperaba lista de 3+ items): {prediction}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error al procesar predicción: {str(pred_error)}",
             )
         
-        top_dishes = prediction
-        
-        # 5. Obtener total de starters del restaurante para calcular counts estimados
-        total_starters = get_total_starters(db, request.restaurant_id)
+        # 5. Obtener total de starters del restaurante para calcular counts estimados (con caché)
+        total_starters = get_total_starters(db, request.restaurant_id, cache)
         logger.info(f"📊 Total de starters en el restaurante: {total_starters}")
         
         # Normalizar los scores del top 3 para que sumen 1, luego calcular counts
@@ -1201,22 +1800,37 @@ async def predict_starter(
             normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
         
         # 5. Formatear respuesta (top 3 con rank y estimated_count normalizado)
+        # IMPORTANTE: dish[0] es dish_id (int), necesitamos obtener el nombre real desde dim_dishes
         starter_dishes = [
             StarterDish(
                 rank=i+1,
-                name=dish[0],
+                name=get_dish_name_by_id(db, int(dish[0])),  # dish[0] es dish_id, obtenemos el nombre
                 score=normalized_scores[i],  # Score normalizado (0-1, suma a 1)
                 estimated_count=round(normalized_scores[i] * total_starters)  # porcentaje normalizado * total
             )
             for i, dish in enumerate(top_dishes[:3])
         ]
         
-        # 6. Retornar respuesta (NO guardar en BD)
+        # ⏱️ Calcular latencia
+        latency_ms = int((datetime.now() - exec_start).total_seconds() * 1000)
+        
+        # 📊 Guardar predicción en fact_prediction_logs
+        save_prediction_log(
+            db=db,
+            restaurant_id=request.restaurant_id,
+            prediction_domain="MENU_STARTER",
+            input_context=starter_input,
+            output_results=top_dishes[:3],
+            model_version="azca_menu_model",
+            latency_ms=latency_ms,
+        )
+        
+        # 6. Retornar respuesta
         return StarterPredictionResponse(
             top_3_dishes=starter_dishes,
             service_date=request.service_date,
             restaurant_id=request.restaurant_id,
-            model_version="azca_menu_starter_v2",
+            model_version="azca_menu_model",
             execution_timestamp=datetime.now(),
         )
 
@@ -1245,6 +1859,7 @@ async def predict_starter(
 )
 async def predict_main(
     request: MainPredictionRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
 ):
     """
@@ -1259,68 +1874,90 @@ async def predict_main(
     Returns:
         MainPredictionResponse: Top 3 platos principales con scores
     """
-    global prediction_engine
-
-    if prediction_engine is None:
-        logger.error("Motor de predicción no inicializado")
+    # Acceder al modelo desde app.state (cargado en lifespan)
+    if not hasattr(http_request.app.state, "model") or http_request.app.state.model is None:
+        logger.error("Modelo no cargado en app.state")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Motor de predicción no disponible. Reinicia la API.",
+            detail="Modelo de predicción no disponible. Reinicia la API.",
         )
 
     try:
-        # 1. Obtener detalles del restaurante
-        restaurant = db.query(Restaurant).filter(
+        # ⏱️ Iniciar cronómetro de latencia
+        exec_start = datetime.now()
+        
+        # 1. Obtener contexto del restaurante desde vista optimizada (una sola query)
+        rest_data = db.query(Restaurant).filter(
             Restaurant.restaurant_id == request.restaurant_id
         ).first()
         
-        if not restaurant:
+        context = db.query(RestaurantContext).filter(
+            RestaurantContext.restaurant_id == request.restaurant_id
+        ).first()
+        
+        if not rest_data or not context:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Restaurante con ID {request.restaurant_id} no encontrado"
             )
+        
+        # Combinación de datos: restaurante + contexto
+        restaurant = rest_data
+        prev_dish_id = float(context.last_main_id) if context.last_main_id else 0.0
 
-        # 2. Calcular automaticamente
-        weather_data = get_weather_data(request.service_date)
-        calendar_features = calculate_calendar_features(request.service_date)
+        # 2. Obtener datos meteorológicos y calendario (con caché desde app.state)
+        cache = http_request.app.state.cache if hasattr(http_request.app.state, 'cache') else None
+        weather_data = get_weather_data(request.service_date, cache)
+        calendar_features = calculate_calendar_features(request.service_date, cache)
         
         day_of_week = request.service_date.weekday()
         month = request.service_date.month
         
-        # 3. Preparar input para modelo de platos principales (8 features exactas en orden)
+        # 3. Preparar input para modelo unificado (15 features)
         main_input = {
             "day_of_week": day_of_week,
             "month": month,
             "max_temp_c": weather_data['max_temp_c'],
-            "is_holiday": calendar_features['is_holiday'],
-            "is_business_day": calendar_features['is_business_day'],
+            "precipitation_mm": weather_data.get('precipitation_mm', 0.0),
+            "is_holiday": int(calendar_features['is_holiday']),
+            "is_payday_week": int(calendar_features.get('is_payday_week', False)),
+            "is_stadium_event": int(weather_data.get('is_stadium_event', False)),
+            "is_azca_event": int(weather_data.get('is_azca_event', False)),
             "restaurant_id": request.restaurant_id,
             "cuisine_type": restaurant.cuisine_type,
             "restaurant_segment": restaurant.restaurant_segment,
+            "terrace_setup_type": restaurant.terrace_setup_type or "standard",
+            "menu_price": restaurant.menu_price or 15.0,
+            "course_type": "second_course",  # Para platos principales
+            "prev_dish_id": prev_dish_id,
         }
         
         logger.info("="*80)
         logger.info(f"📍 POST /predict/main - Solicitud recibida")
         logger.info("="*80)
         logger.info(f"🎯 Input: restaurante_id={request.restaurant_id}, fecha={request.service_date}")
-        logger.info(f"📊 Parámetros auto-calculados: temp={weather_data['max_temp_c']}°C, restaurante={restaurant.name}")
+        logger.info(f"📊 Parámetros auto-calculados:")
+        logger.info(f"   Clima: temp={weather_data['max_temp_c']}°C, precipitation_mm={weather_data.get('precipitation_mm', 0.0)}")
+        logger.info(f"   Calendario: business_day={calendar_features['is_business_day']}, holiday={calendar_features['is_holiday']}, payday_week={calendar_features.get('is_payday_week', False)}")
+        logger.info(f"   Restaurante: {restaurant.name} ({restaurant.cuisine_type}), segment={restaurant.restaurant_segment}, terrace={restaurant.terrace_setup_type}, price={restaurant.menu_price}")
+        logger.info(f"   Prev Dish ID (mains): {prev_dish_id}")
+        logger.info(f"📦 Main Input (15 features):")
+        for key, val in main_input.items():
+            logger.info(f"      {key}: {val} ({type(val).__name__})")
         logger.info("="*80)
         
-        # 4. Llamar al modelo para platos principales
-        prediction = prediction_engine.predict_menu("azca_menu_main_v2", main_input)
-        
-        # Validar que el modelo retornó top 3
-        if not isinstance(prediction, (list, tuple)) or len(prediction) < 3:
-            logger.error(f"Modelo devolvió formato inválido: {type(prediction)} - {prediction}")
+        # 5. Llamar al modelo cargado en memoria para obtener top 3 predicciones
+        try:
+            top_dishes = predict_top3_dishes(http_request.app.state.model, main_input)
+        except Exception as pred_error:
+            logger.error(f"❌ Error durante predict_top3_dishes: {str(pred_error)}", exc_info=True)
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Modelo retornó resultado inválido (esperaba lista de 3+ items): {prediction}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error al procesar predicción: {str(pred_error)}",
             )
         
-        top_dishes = prediction
-        
-        # 5. Obtener total de platos principales del restaurante para calcular counts estimados
-        total_mains = get_total_mains(db, request.restaurant_id)
+        # 5. Obtener total de platos principales del restaurante para calcular counts estimados (con caché)
+        total_mains = get_total_mains(db, request.restaurant_id, cache)
         logger.info(f"📊 Total de platos principales en el restaurante: {total_mains}")
         
         # Normalizar los scores del top 3 para que sumen 1, luego calcular counts
@@ -1332,22 +1969,37 @@ async def predict_main(
             normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
         
         # 5. Formatear respuesta
+        # IMPORTANTE: dish[0] es dish_id (int), necesitamos obtener el nombre real desde dim_dishes
         main_dishes = [
             MainDish(
                 rank=i+1,
-                name=dish[0],
+                name=get_dish_name_by_id(db, int(dish[0])),  # dish[0] es dish_id, obtenemos el nombre
                 score=normalized_scores[i],  # Score normalizado (0-1, suma a 1)
                 estimated_count=round(normalized_scores[i] * total_mains)  # porcentaje normalizado * total
             )
             for i, dish in enumerate(top_dishes[:3])
         ]
         
-        # 6. Retornar respuesta (NO guardar en BD)
+        # ⏱️ Calcular latencia
+        latency_ms = int((datetime.now() - exec_start).total_seconds() * 1000)
+        
+        # 📊 Guardar predicción en fact_prediction_logs
+        save_prediction_log(
+            db=db,
+            restaurant_id=request.restaurant_id,
+            prediction_domain="MENU_MAIN",
+            input_context=main_input,
+            output_results=top_dishes[:3],
+            model_version="azca_menu_model",
+            latency_ms=latency_ms,
+        )
+        
+        # 6. Retornar respuesta
         return MainPredictionResponse(
             top_3_dishes=main_dishes,
             service_date=request.service_date,
             restaurant_id=request.restaurant_id,
-            model_version="azca_menu_main_v2",
+            model_version="azca_menu_model",
             execution_timestamp=datetime.now(),
         )
 
@@ -1376,6 +2028,7 @@ async def predict_main(
 )
 async def predict_dessert(
     request: DessertPredictionRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
 ):
     """
@@ -1390,68 +2043,90 @@ async def predict_dessert(
     Returns:
         DessertPredictionResponse: Top 3 postres con scores
     """
-    global prediction_engine
-
-    if prediction_engine is None:
-        logger.error("Motor de predicción no inicializado")
+    # Acceder al modelo desde app.state (cargado en lifespan)
+    if not hasattr(http_request.app.state, "model") or http_request.app.state.model is None:
+        logger.error("Modelo no cargado en app.state")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Motor de predicción no disponible. Reinicia la API.",
+            detail="Modelo de predicción no disponible. Reinicia la API.",
         )
 
     try:
-        # 1. Obtener detalles del restaurante
-        restaurant = db.query(Restaurant).filter(
+        # ⏱️ Iniciar cronómetro de latencia
+        exec_start = datetime.now()
+        
+        # 1. Obtener contexto del restaurante desde vista optimizada (una sola query)
+        rest_data = db.query(Restaurant).filter(
             Restaurant.restaurant_id == request.restaurant_id
         ).first()
         
-        if not restaurant:
+        context = db.query(RestaurantContext).filter(
+            RestaurantContext.restaurant_id == request.restaurant_id
+        ).first()
+        
+        if not rest_data or not context:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Restaurante con ID {request.restaurant_id} no encontrado"
             )
+        
+        # Combinación de datos: restaurante + contexto
+        restaurant = rest_data
+        prev_dish_id = float(context.last_dessert_id) if context.last_dessert_id else 0.0
 
-        # 2. Calcular automaticamente
-        weather_data = get_weather_data(request.service_date)
-        calendar_features = calculate_calendar_features(request.service_date)
+        # 2. Obtener datos meteorológicos y calendario (con caché desde app.state)
+        cache = http_request.app.state.cache if hasattr(http_request.app.state, 'cache') else None
+        weather_data = get_weather_data(request.service_date, cache)
+        calendar_features = calculate_calendar_features(request.service_date, cache)
         
         day_of_week = request.service_date.weekday()
         month = request.service_date.month
         
-        # 3. Preparar input para modelo de postres (8 features exactas en orden)
+        # 3. Preparar input para modelo unificado (15 features)
         dessert_input = {
             "day_of_week": day_of_week,
             "month": month,
             "max_temp_c": weather_data['max_temp_c'],
-            "is_holiday": calendar_features['is_holiday'],
-            "is_business_day": calendar_features['is_business_day'],
+            "precipitation_mm": weather_data.get('precipitation_mm', 0.0),
+            "is_holiday": int(calendar_features['is_holiday']),
+            "is_payday_week": int(calendar_features.get('is_payday_week', False)),
+            "is_stadium_event": int(weather_data.get('is_stadium_event', False)),
+            "is_azca_event": int(weather_data.get('is_azca_event', False)),
             "restaurant_id": request.restaurant_id,
             "cuisine_type": restaurant.cuisine_type,
             "restaurant_segment": restaurant.restaurant_segment,
+            "terrace_setup_type": restaurant.terrace_setup_type or "standard",
+            "menu_price": restaurant.menu_price or 15.0,
+            "course_type": "dessert",  # Para postres
+            "prev_dish_id": prev_dish_id,
         }
         
         logger.info("="*80)
         logger.info(f"📍 POST /predict/dessert - Solicitud recibida")
         logger.info("="*80)
         logger.info(f"🎯 Input: restaurante_id={request.restaurant_id}, fecha={request.service_date}")
-        logger.info(f"📊 Parámetros auto-calculados: temp={weather_data['max_temp_c']}°C, restaurante={restaurant.name}")
+        logger.info(f"📊 Parámetros auto-calculados:")
+        logger.info(f"   Clima: temp={weather_data['max_temp_c']}°C, precipitation_mm={weather_data.get('precipitation_mm', 0.0)}")
+        logger.info(f"   Calendario: business_day={calendar_features['is_business_day']}, holiday={calendar_features['is_holiday']}, payday_week={calendar_features.get('is_payday_week', False)}")
+        logger.info(f"   Restaurante: {restaurant.name} ({restaurant.cuisine_type}), segment={restaurant.restaurant_segment}, terrace={restaurant.terrace_setup_type}, price={restaurant.menu_price}")
+        logger.info(f"   Prev Dish ID (desserts): {prev_dish_id}")
+        logger.info(f"📦 Dessert Input (15 features):")
+        for key, val in dessert_input.items():
+            logger.info(f"      {key}: {val} ({type(val).__name__})")
         logger.info("="*80)
         
-        # 4. Llamar al modelo para postres
-        prediction = prediction_engine.predict_menu("azca_menu_dessert_v2", dessert_input)
-        
-        # Validar que el modelo retornó top 3
-        if not isinstance(prediction, (list, tuple)) or len(prediction) < 3:
-            logger.error(f"Modelo devolvió formato inválido: {type(prediction)} - {prediction}")
+        # 5. Llamar al modelo cargado en memoria para obtener top 3 predicciones
+        try:
+            top_dishes = predict_top3_dishes(http_request.app.state.model, dessert_input)
+        except Exception as pred_error:
+            logger.error(f"❌ Error durante predict_top3_dishes: {str(pred_error)}", exc_info=True)
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Modelo retornó resultado inválido (esperaba lista de 3+ items): {prediction}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error al procesar predicción: {str(pred_error)}",
             )
         
-        top_dishes = prediction
-        
-        # 5. Obtener total de postres del restaurante para calcular counts estimados
-        total_desserts = get_total_desserts(db, request.restaurant_id)
+        # 5. Obtener total de postres del restaurante para calcular counts estimados (con caché)
+        total_desserts = get_total_desserts(db, request.restaurant_id, cache)
         logger.info(f"📊 Total de postres en el restaurante: {total_desserts}")
         
         # Normalizar los scores del top 3 para que sumen 1, luego calcular counts
@@ -1463,22 +2138,37 @@ async def predict_dessert(
             normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
         
         # 5. Formatear respuesta
+        # IMPORTANTE: dish[0] es dish_id (int), necesitamos obtener el nombre real desde dim_dishes
         dessert_dishes = [
             DessertDish(
                 rank=i+1,
-                name=dish[0],
+                name=get_dish_name_by_id(db, int(dish[0])),  # dish[0] es dish_id, obtenemos el nombre
                 score=normalized_scores[i],  # Score normalizado (0-1, suma a 1)
                 estimated_count=round(normalized_scores[i] * total_desserts)  # porcentaje normalizado * total
             )
             for i, dish in enumerate(top_dishes[:3])
         ]
         
-        # 6. Retornar respuesta (NO guardar en BD)
+        # ⏱️ Calcular latencia
+        latency_ms = int((datetime.now() - exec_start).total_seconds() * 1000)
+        
+        # 📊 Guardar predicción en fact_prediction_logs
+        save_prediction_log(
+            db=db,
+            restaurant_id=request.restaurant_id,
+            prediction_domain="MENU_DESSERT",
+            input_context=dessert_input,
+            output_results=top_dishes[:3],
+            model_version="azca_menu_model",
+            latency_ms=latency_ms,
+        )
+        
+        # 6. Retornar respuesta
         return DessertPredictionResponse(
             top_3_dishes=dessert_dishes,
             service_date=request.service_date,
             restaurant_id=request.restaurant_id,
-            model_version="azca_menu_dessert_v2",
+            model_version="azca_menu_model",
             execution_timestamp=datetime.now(),
         )
 
