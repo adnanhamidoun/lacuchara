@@ -1904,6 +1904,29 @@ def get_dish_name_by_id(db: Session, dish_id: int) -> str:
     return dish[0]
 
 
+def get_restaurant_historical_dish_ids(
+    db: Session,
+    restaurant_id: int,
+    course_type: str,
+) -> list[int]:
+    """
+    Obtiene los dish_id históricos de un restaurante para un tipo de curso.
+
+    Si no hay histórico para ese curso, retorna una lista vacía para permitir
+    que el caller decida si hace fallback al ranking global del modelo.
+    """
+    dish_ids = db.query(distinct(DimDishes.dish_id)).join(
+        FactMenuItems, DimDishes.dish_id == FactMenuItems.dish_id
+    ).join(
+        FactMenus, FactMenuItems.menu_id == FactMenus.menu_id
+    ).filter(
+        FactMenus.restaurant_id == restaurant_id,
+        DimDishes.course_type == course_type,
+    ).all()
+
+    return [int(dish_id) for (dish_id,) in dish_ids if dish_id is not None]
+
+
 def save_prediction_log(
     db: Session,
     restaurant_id: int,
@@ -1975,16 +1998,18 @@ def save_prediction_log(
         return -1
 
 
-def predict_top3_dishes(model, features_dict: dict) -> list:
+def predict_top3_dishes(model, features_dict: dict, allowed_dish_ids: list[int] | None = None, top_k: int = 3) -> list:
     """
-    Obtiene el top 3 de platos predichos usando el modelo cargado en memoria.
+    Obtiene el top de platos predichos usando el modelo cargado en memoria.
     
     Args:
         model: Modelo pickle cargado (sklearn Pipeline con predict_proba)
         features_dict: Diccionario con los 15 features
+        allowed_dish_ids: Lista opcional de dish_id permitidos
+        top_k: Número máximo de platos a devolver
         
     Returns:
-        Lista de tuples [(dish_id, probability), ...]  para el top 3
+        Lista de tuples [(dish_id, probability), ...]
     """
     import pandas as pd
     import numpy as np
@@ -2008,19 +2033,40 @@ def predict_top3_dishes(model, features_dict: dict) -> list:
     # Obtener probabilities de la primera fila
     probabilities = proba[0]
     
-    # Obtener indices de top 3 probabilidades
-    top3_indices = np.argsort(probabilities)[-3:][::-1]  # Orden descendente
-    logger.info(f"✅ Top 3 indices: {top3_indices}")
-    
-    # Retornar [(class_id, probability), ...]
-    top3_predictions = [
-        (classes[idx], probabilities[idx])
-        for idx in top3_indices
+    ranked_predictions = sorted(
+        ((int(class_id), float(probability)) for class_id, probability in zip(classes, probabilities)),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+
+    if allowed_dish_ids:
+        allowed_set = set(allowed_dish_ids)
+        filtered_predictions = [
+            prediction for prediction in ranked_predictions if prediction[0] in allowed_set
+        ]
+        logger.info(
+            f"🎯 Ranking filtrado por histórico del restaurante: {len(filtered_predictions)} candidatos válidos de {len(allowed_set)} dish_ids históricos"
+        )
+        if filtered_predictions:
+            result = filtered_predictions[:top_k]
+            logger.info(f"✅ Top {len(result)} predicciones filtradas: {result}")
+            return result
+
+        logger.warning(
+            "⚠️ No hubo intersección entre el ranking del modelo y el histórico del restaurante; usando top global"
+        )
+
+    top_indices = np.argsort(probabilities)[-top_k:][::-1]
+    logger.info(f"✅ Top indices globales: {top_indices}")
+
+    result = [
+        (int(classes[idx]), float(probabilities[idx]))
+        for idx in top_indices
     ]
-    
-    logger.info(f"✅ Top 3 predicciones: {top3_predictions}")
-    
-    return top3_predictions
+
+    logger.info(f"✅ Top {len(result)} predicciones globales: {result}")
+
+    return result
 
 
 # ============================================================================
@@ -2482,10 +2528,23 @@ async def predict_starter(
         for key, val in starter_input.items():
             logger.info(f"      {key}: {val} ({type(val).__name__})")
         logger.info("="*80)
+
+        allowed_dish_ids = get_restaurant_historical_dish_ids(
+            db,
+            request.restaurant_id,
+            "first_course",
+        )
+        logger.info(
+            f"🍽️ Histórico de starters para restaurante {request.restaurant_id}: {len(allowed_dish_ids)} candidatos"
+        )
         
         # 5. Llamar al modelo cargado en memoria para obtener top 3 predicciones
         try:
-            top_dishes = predict_top3_dishes(http_request.app.state.model, starter_input)
+            top_dishes = predict_top3_dishes(
+                http_request.app.state.model,
+                starter_input,
+                allowed_dish_ids=allowed_dish_ids,
+            )
         except Exception as pred_error:
             logger.error(f"❌ Error durante predict_top3_dishes: {str(pred_error)}", exc_info=True)
             raise HTTPException(
@@ -2503,7 +2562,8 @@ async def predict_starter(
         if sum_scores > 0:
             normalized_scores = [score / sum_scores for score in scores]
         else:
-            normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
+            prediction_count = max(len(scores), 1)
+            normalized_scores = [1 / prediction_count] * prediction_count
         
         # 5. Formatear respuesta (top 3 con rank y estimated_count normalizado)
         # IMPORTANTE: dish[0] es dish_id (int), necesitamos obtener el nombre real desde dim_dishes
@@ -2651,10 +2711,23 @@ async def predict_main(
         for key, val in main_input.items():
             logger.info(f"      {key}: {val} ({type(val).__name__})")
         logger.info("="*80)
+
+        allowed_dish_ids = get_restaurant_historical_dish_ids(
+            db,
+            request.restaurant_id,
+            "second_course",
+        )
+        logger.info(
+            f"🍽️ Histórico de principales para restaurante {request.restaurant_id}: {len(allowed_dish_ids)} candidatos"
+        )
         
         # 5. Llamar al modelo cargado en memoria para obtener top 3 predicciones
         try:
-            top_dishes = predict_top3_dishes(http_request.app.state.model, main_input)
+            top_dishes = predict_top3_dishes(
+                http_request.app.state.model,
+                main_input,
+                allowed_dish_ids=allowed_dish_ids,
+            )
         except Exception as pred_error:
             logger.error(f"❌ Error durante predict_top3_dishes: {str(pred_error)}", exc_info=True)
             raise HTTPException(
@@ -2672,7 +2745,8 @@ async def predict_main(
         if sum_scores > 0:
             normalized_scores = [score / sum_scores for score in scores]
         else:
-            normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
+            prediction_count = max(len(scores), 1)
+            normalized_scores = [1 / prediction_count] * prediction_count
         
         # 5. Formatear respuesta
         # IMPORTANTE: dish[0] es dish_id (int), necesitamos obtener el nombre real desde dim_dishes
@@ -2820,10 +2894,23 @@ async def predict_dessert(
         for key, val in dessert_input.items():
             logger.info(f"      {key}: {val} ({type(val).__name__})")
         logger.info("="*80)
+
+        allowed_dish_ids = get_restaurant_historical_dish_ids(
+            db,
+            request.restaurant_id,
+            "dessert",
+        )
+        logger.info(
+            f"🍽️ Histórico de postres para restaurante {request.restaurant_id}: {len(allowed_dish_ids)} candidatos"
+        )
         
         # 5. Llamar al modelo cargado en memoria para obtener top 3 predicciones
         try:
-            top_dishes = predict_top3_dishes(http_request.app.state.model, dessert_input)
+            top_dishes = predict_top3_dishes(
+                http_request.app.state.model,
+                dessert_input,
+                allowed_dish_ids=allowed_dish_ids,
+            )
         except Exception as pred_error:
             logger.error(f"❌ Error durante predict_top3_dishes: {str(pred_error)}", exc_info=True)
             raise HTTPException(
@@ -2841,7 +2928,8 @@ async def predict_dessert(
         if sum_scores > 0:
             normalized_scores = [score / sum_scores for score in scores]
         else:
-            normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
+            prediction_count = max(len(scores), 1)
+            normalized_scores = [1 / prediction_count] * prediction_count
         
         # 5. Formatear respuesta
         # IMPORTANTE: dish[0] es dish_id (int), necesitamos obtener el nombre real desde dim_dishes
