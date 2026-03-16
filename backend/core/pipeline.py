@@ -33,6 +33,84 @@ class InferencePipeline:
         "cuisine_type",
     ]
 
+    # Legacy (current API payload) schema used by older menu endpoints.
+    MENU_COLUMNS = [
+        "day_of_week",
+        "month",
+        "max_temp_c",
+        "is_holiday",
+        "is_business_day",
+        "restaurant_id",
+        "cuisine_type",
+        "restaurant_segment",
+        "category",
+    ]
+
+    # Numeric schema used by the unified historical menu training table.
+    NUMERIC_MENU_COLUMNS = [
+        "day_of_week",
+        "month",
+        "max_temp_c",
+        "precipitation_mm",
+        "is_holiday",
+        "is_payday_week",
+        "is_stadium_event",
+        "is_azca_event",
+        "restaurant_id",
+        "menu_price",
+        "cuisine_type_id",
+        "restaurant_segment_id",
+        "terrace_setup_type_id",
+        "course_type_id",
+        "prev_dish_id",
+        "dish_id",
+    ]
+
+    NUMERIC_MENU_COLUMNS_NO_DISH_ID = [
+        col for col in NUMERIC_MENU_COLUMNS
+        if col != "dish_id"
+    ]
+
+    CUISINE_TYPE_ID = {
+        "grill": 1,
+        "spanish": 2,
+        "mediterranean": 3,
+        "stew": 4,
+        "fried": 5,
+        "italian": 6,
+        "asian": 7,
+        "latin": 8,
+        "arabic": 9,
+        "avantgarde": 10,
+        "plantbased": 11,
+        "streetfood": 12,
+    }
+
+    RESTAURANT_SEGMENT_ID = {
+        "gourmet": 1,
+        "traditional": 2,
+        "business": 3,
+        "family": 4,
+        "casual": 2,
+        "fine_dining": 1,
+    }
+
+    TERRACE_SETUP_TYPE_ID = {
+        "yearround": 1,
+        "summer": 2,
+        "none": 3,
+        "standard": 3,
+        "outdoor": 2,
+    }
+
+    COURSE_TYPE_ID = {
+        "starter": 1,
+        "first_course": 1,
+        "main": 2,
+        "second_course": 2,
+        "dessert": 3,
+    }
+
     def __init__(self, fixed_fields: dict | None = None) -> None:
         """
         Initialize pipeline with optional fixed field overrides.
@@ -60,7 +138,7 @@ class InferencePipeline:
         if fixed_fields:
             self.fixed_fields.update(fixed_fields)
 
-    def build_features(self, data: dict) -> pd.DataFrame:
+    def build_features(self, data: dict, expected_columns: list[str] | None = None) -> pd.DataFrame:
         """
         Transform basic input (date, temp, rain, stadium event, payday) 
         into the exact 24-column DataFrame required by the Azure AutoML model.
@@ -99,9 +177,11 @@ class InferencePipeline:
         max_temp_c = float(data["max_temp_c"])
         precipitation_mm = float(data.get("precipitation_mm", 0))
 
-        # Build the feature row
+        # Build the dynamic feature row (request-derived values)
+        day_of_week = int(service_date_for_calc.weekday()) if hasattr(service_date_for_calc, "weekday") else 0
         row = {
             "service_date": service_date,  # Keep as datetime/Timestamp
+            "day_of_week": day_of_week,
             "max_temp_c": max_temp_c,
             "precipitation_mm": precipitation_mm,
             "is_rain_service_peak": bool(precipitation_mm > 10),
@@ -115,8 +195,14 @@ class InferencePipeline:
             "avg_4_weeks": float(data.get("avg_4_weeks", 100.0)),
         }
 
-        # Merge with fixed fields (can be overridden per restaurant)
+        # Start with fixed fields and override them with request values when present.
         row.update(self.fixed_fields)
+        for key in self.fixed_fields.keys():
+            if key in data and data[key] is not None:
+                row[key] = data[key]
+
+        if "service_date" in data and data["service_date"] is not None:
+            row["service_date"] = service_date
         
         # Ensure correct types for all fields
         row["restaurant_id"] = int(row["restaurant_id"])
@@ -129,9 +215,48 @@ class InferencePipeline:
         row["opens_weekends"] = bool(row["opens_weekends"])
         row["has_wifi"] = bool(row["has_wifi"])
 
-        # Create DataFrame and select columns in model order
-        df = pd.DataFrame([row])
-        df = df[self.MODEL_COLUMNS]
+        selected_columns = [str(col) for col in (expected_columns or self.MODEL_COLUMNS)]
+        for col in selected_columns:
+            if col not in row:
+                if col == "service_date":
+                    row[col] = service_date
+                elif col == "day_of_week":
+                    row[col] = day_of_week
+                elif col in {
+                    "is_rain_service_peak",
+                    "is_stadium_event",
+                    "is_azca_event",
+                    "is_holiday",
+                    "is_bridge_day",
+                    "is_payday_week",
+                    "is_business_day",
+                    "opens_weekends",
+                    "has_wifi",
+                }:
+                    row[col] = False
+                elif col in {
+                    "restaurant_id",
+                    "capacity_limit",
+                    "table_count",
+                    "min_service_duration",
+                    "dist_office_towers",
+                    "services_lag_7",
+                    "day_of_week",
+                }:
+                    row[col] = 0
+                elif col in {
+                    "max_temp_c",
+                    "precipitation_mm",
+                    "avg_4_weeks",
+                    "menu_price",
+                    "google_rating",
+                }:
+                    row[col] = 0.0
+                else:
+                    row[col] = ""
+
+        # Create DataFrame and select columns in requested model order
+        df = pd.DataFrame([[row[col] for col in selected_columns]], columns=selected_columns)
         
         print(f"📊 DataFrame construido:")
         print(f"   Tipos: {df.dtypes.to_dict()}")
@@ -139,7 +264,116 @@ class InferencePipeline:
         
         return df
 
-    def build_menu_features(self, data: dict) -> pd.DataFrame:
+    def _normalize_category(self, data: dict) -> str:
+        category = data.get("category")
+        if category is None:
+            category = data.get("course_type", "starter")
+
+        normalized = str(category).strip().lower()
+        alias_map = {
+            "first_course": "starter",
+            "second_course": "main",
+        }
+        return alias_map.get(normalized, normalized)
+
+    @staticmethod
+    def _as_bool(value: Any, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _default_value_for_column(column: str) -> Any:
+        bool_like = {
+            "is_holiday",
+            "is_business_day",
+            "is_payday_week",
+            "is_stadium_event",
+            "is_azca_event",
+        }
+        int_like = {
+            "day_of_week",
+            "month",
+            "restaurant_id",
+            "cuisine_type_id",
+            "restaurant_segment_id",
+            "terrace_setup_type_id",
+            "course_type_id",
+            "prev_dish_id",
+            "dish_id",
+        }
+        float_like = {
+            "max_temp_c",
+            "precipitation_mm",
+            "menu_price",
+        }
+
+        if column in bool_like:
+            return False
+        if column in int_like:
+            return 0
+        if column in float_like:
+            return 0.0
+        return ""
+
+    def _build_menu_feature_row(self, data: dict) -> dict[str, Any]:
+        category = self._normalize_category(data)
+
+        day_of_week = int(data.get("day_of_week", 0))
+        month = int(data.get("month", 1))
+        max_temp_c = float(data.get("max_temp_c", 20.0))
+        precipitation_mm = float(data.get("precipitation_mm", 0.0))
+
+        is_holiday = self._as_bool(data.get("is_holiday"), False)
+        is_business_day = self._as_bool(data.get("is_business_day"), day_of_week < 5)
+        is_payday_week = self._as_bool(data.get("is_payday_week"), False)
+        is_stadium_event = self._as_bool(data.get("is_stadium_event"), False)
+        is_azca_event = self._as_bool(data.get("is_azca_event"), False)
+
+        restaurant_id = int(data.get("restaurant_id", 1))
+        menu_price = float(data.get("menu_price", 15.0))
+
+        cuisine_type = str(data.get("cuisine_type") or "mediterranean").strip().lower()
+        restaurant_segment = str(data.get("restaurant_segment") or "traditional").strip().lower()
+        terrace_setup_type = str(data.get("terrace_setup_type") or "none").strip().lower()
+
+        course_type = {
+            "starter": "first_course",
+            "main": "second_course",
+            "dessert": "dessert",
+        }.get(category, "first_course")
+
+        row = {
+            "day_of_week": day_of_week,
+            "month": month,
+            "max_temp_c": max_temp_c,
+            "precipitation_mm": precipitation_mm,
+            "is_holiday": is_holiday,
+            "is_business_day": is_business_day,
+            "is_payday_week": is_payday_week,
+            "is_stadium_event": is_stadium_event,
+            "is_azca_event": is_azca_event,
+            "restaurant_id": restaurant_id,
+            "menu_price": menu_price,
+            "cuisine_type": cuisine_type,
+            "restaurant_segment": restaurant_segment,
+            "terrace_setup_type": terrace_setup_type,
+            "category": category,
+            "course_type": course_type,
+            "cuisine_type_id": self.CUISINE_TYPE_ID.get(cuisine_type, 0),
+            "restaurant_segment_id": self.RESTAURANT_SEGMENT_ID.get(restaurant_segment, 0),
+            "terrace_setup_type_id": self.TERRACE_SETUP_TYPE_ID.get(terrace_setup_type, 0),
+            "course_type_id": self.COURSE_TYPE_ID.get(category, 0),
+            "prev_dish_id": int(float(data.get("prev_dish_id", 0) or 0)),
+            "dish_id": int(float(data.get("dish_id", 0) or 0)),
+        }
+        return row
+
+    def build_menu_features(self, data: dict, expected_columns: list[str] | None = None) -> pd.DataFrame:
         """
         Build a minimal DataFrame for menu prediction models (starters, mains, desserts).
         
@@ -161,41 +395,18 @@ class InferencePipeline:
         Returns:
             pd.DataFrame with 9 columns in the EXACT order expected by menu models
         """
-        # Expected column order for menu models (from signature)
-        MENU_COLUMNS = [
-            "day_of_week",
-            "month",
-            "max_temp_c",
-            "is_holiday",
-            "is_business_day",
-            "restaurant_id",
-            "cuisine_type",
-            "restaurant_segment",
-            "category",
-        ]
+        row = self._build_menu_feature_row(data)
+
+        columns = expected_columns or self.MENU_COLUMNS
+        normalized_columns = [str(col) for col in columns]
+
+        for column in normalized_columns:
+            if column not in row:
+                row[column] = self._default_value_for_column(column)
+
+        df = pd.DataFrame([[row[col] for col in normalized_columns]], columns=normalized_columns)
         
-        # Create minimal row with only these 8 features
-        row = {col: data.get(col) for col in MENU_COLUMNS}
-        
-        # Validate all required fields are present
-        missing = [col for col in MENU_COLUMNS if row[col] is None]
-        if missing:
-            raise ValueError(f"Missing required menu features: {missing}")
-        
-        # Ensure correct types
-        row["day_of_week"] = int(row["day_of_week"])
-        row["month"] = int(row["month"])
-        row["max_temp_c"] = float(row["max_temp_c"])
-        row["is_holiday"] = bool(row["is_holiday"])
-        row["is_business_day"] = bool(row["is_business_day"])
-        row["restaurant_id"] = int(row["restaurant_id"])
-        # cuisine_type, restaurant_segment, category are already strings
-        
-        # Create DataFrame with only these 8 columns in EXACT order
-        df = pd.DataFrame([row])
-        df = df[MENU_COLUMNS]
-        
-        print(f"📊 Menu DataFrame construido:")
+        print("📊 Menu DataFrame construido:")
         print(f"   Columns: {list(df.columns)}")
         print(f"   Tipos: {df.dtypes.to_dict()}")
         print(f"   Shape: {df.shape}")

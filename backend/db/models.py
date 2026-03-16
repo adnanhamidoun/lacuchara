@@ -144,7 +144,6 @@ class DimDish(Base):
         return f"<DimDish(id={self.dish_id}, course_type='{self.course_type}', dish_name='{self.dish_name}')>"
 
 
-# Alias para compatibilidad con código que usa el nombre plural
 DimDishes = DimDish
 
 
@@ -311,9 +310,6 @@ class MenusAzca(Base):
     
     def __repr__(self):
         return f"<MenusAzca(rest_id={self.restaurant_id}, first='{self.first_course}', second='{self.second_course}', dessert='{self.dessert}')>"
-
-
-# DimDishes ya está definido como alias arriba
 
 
 class FactMenuItems(Base):

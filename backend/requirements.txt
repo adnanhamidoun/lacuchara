@@ -22,6 +22,8 @@ azureml-train-core==1.62.0
 azureml-dataprep==5.4.3
 azureml-mlflow==1.62.0
 mlflow-skinny==3.9.0
+onnx==1.16.1
+protobuf==6.33.5
 azure-ai-documentintelligence==1.0.2
 
 # ============= DATABASE & SQL =============

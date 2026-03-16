@@ -62,6 +62,13 @@ except ImportError:
             """Mock que retorna una predicción dummy para testing"""
             return 150
 
+# Importar scheduler de modelos (soft — requiere Azure ML)
+try:
+    from ..core.scheduler import start_model_refresh_scheduler, MANAGED_MODELS
+    MODEL_SCHEDULER_AVAILABLE = True
+except ImportError:
+    MODEL_SCHEDULER_AVAILABLE = False
+
 # ============================================================================
 # LOGGING
 # ============================================================================
@@ -804,6 +811,18 @@ async def startup_event():
         except Exception as engine_error:
             logger.warning(f"⚠️ Motor de predicción no disponible (usando mock): {str(engine_error)}")
             prediction_engine = PredictionEngine()
+
+        # Descargar modelos si no están presentes; arrancar refresco mensual
+        if MODEL_SCHEDULER_AVAILABLE and hasattr(prediction_engine, "model_provider"):
+            try:
+                provider = prediction_engine.model_provider
+                provider.ensure_models_in_artifacts(MANAGED_MODELS)
+                start_model_refresh_scheduler(provider, MANAGED_MODELS)
+                logger.info("✅ Model download check complete; monthly scheduler started.")
+            except Exception as sched_error:
+                logger.warning(
+                    f"⚠️ Model scheduler setup failed (continuing without it): {sched_error}"
+                )
 
     except Exception as e:
         logger.error(f"❌ Error durante startup: {str(e)}", exc_info=True)
@@ -1807,8 +1826,14 @@ async def create_prediction(
         try:
             prediction_result = prediction_engine.predict("azca-services-model", input_data)
         except Exception as engine_error:
-            logger.warning(f"Motor con error, usando predicción mock: {str(engine_error)[:100]}")
-            prediction_result = 150  # Mock para testing
+            logger.error("Error real en motor de servicios", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Error en motor de prediccion de servicios. "
+                    f"Detalle: {type(engine_error).__name__}: {str(engine_error)[:220]}"
+                ),
+            ) from engine_error
 
         # Crear registro de auditoría
         prediction_log = PredictionLog(
@@ -1975,7 +2000,7 @@ async def predict_starter(
         starter_dishes = [
             StarterDish(
                 rank=i+1,
-                name=dish[0],
+                name=str(resolve_dish_name(db, dish[0]) or dish[0]),
                 score=normalized_scores[i],  # Score normalizado (0-1, suma a 1)
                 estimated_count=round(normalized_scores[i] * total_starters)  # porcentaje normalizado * total
             )
@@ -2107,7 +2132,7 @@ async def predict_main(
         main_dishes = [
             MainDish(
                 rank=i+1,
-                name=dish[0],
+                name=str(resolve_dish_name(db, dish[0]) or dish[0]),
                 score=normalized_scores[i],  # Score normalizado (0-1, suma a 1)
                 estimated_count=round(normalized_scores[i] * total_mains)  # porcentaje normalizado * total
             )
@@ -2239,7 +2264,7 @@ async def predict_dessert(
         dessert_dishes = [
             DessertDish(
                 rank=i+1,
-                name=dish[0],
+                name=str(resolve_dish_name(db, dish[0]) or dish[0]),
                 score=normalized_scores[i],  # Score normalizado (0-1, suma a 1)
                 estimated_count=round(normalized_scores[i] * total_desserts)  # porcentaje normalizado * total
             )
