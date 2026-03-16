@@ -4,7 +4,13 @@ Script para hacer una predicción de prueba y verificar que se guarda
 """
 import requests
 import json
+import sys
+from pathlib import Path
 from datetime import date, timedelta
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # URL del servidor
 BASE_URL = "http://127.0.0.1:8000"

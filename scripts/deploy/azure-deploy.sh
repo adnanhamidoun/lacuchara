@@ -2,11 +2,15 @@
 
 # ============================================================================
 # AZCA Prediction API - Azure Deployment Script
-# Uso: ./azure-deploy.sh [acr-name] [image-name] [tag]
-# Ejemplo: ./azure-deploy.sh azcaregistry azcaapi latest
+# Uso: ./scripts/deploy/azure-deploy.sh [acr-name] [image-name] [tag]
+# Ejemplo: ./scripts/deploy/azure-deploy.sh azcaregistry azcaapi latest
 # ============================================================================
 
 set -e  # EXIT on any error
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+cd "$PROJECT_ROOT"
 
 # Colores para output
 RED='\033[0;31m'

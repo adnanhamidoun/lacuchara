@@ -1,4 +1,4 @@
-# Frontend API Integration - URLs Relativizadas ✅
+﻿# Frontend API Integration - URLs Relativizadas ✅
 
 ## Estado: LISTO PARA DOCKER
 
@@ -373,10 +373,13 @@ location / {
 
 🚀 **Listo para desplegar:**
 ```bash
-./azure-deploy.sh azcaregistry azcaapi latest
+./scripts/deploy/azure-deploy.sh azcaregistry azcaapi latest
 ```
 
 ---
 
 **Fecha:** Marzo 15, 2026
 **Estado:** ✅ COMPLETADO - LISTO PARA DOCKER
+
+
+

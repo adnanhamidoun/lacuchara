@@ -1,4 +1,4 @@
-# Servidor de Archivos Estáticos - Configuración FastAPI
+﻿# Servidor de Archivos Estáticos - Configuración FastAPI
 
 ## ✅ Configuración Completada
 
@@ -219,9 +219,12 @@ INFO:     📁 Servidor de archivos estáticos montado en C:\...\backend\api\sta
 2. ⏳ **Construir frontend React** - `npm run build`
 3. ⏳ **Copiar assets** - Mover build a `backend/api/static/`
 4. ⏳ **Probar localmente** - Acceder a http://localhost:8000
-5. ⏳ **Desplegar a Azure** - `./azure-deploy.sh`
+5. ⏳ **Desplegar a Azure** - `./scripts/deploy/azure-deploy.sh`
 
 ---
 
 **Fecha de Configuración:** Marzo 15, 2026
 **Estado:** ✅ Listo para usar
+
+
+

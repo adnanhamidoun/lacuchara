@@ -1,4 +1,4 @@
-# ✅ Docker Build Completado Exitosamente
+﻿# ✅ Docker Build Completado Exitosamente
 
 **Fecha:** Marzo 15, 2026  
 **Status:** 🟢 LISTO PARA PRODUCCIÓN  
@@ -168,7 +168,7 @@ docker tag azca-app:latest azcaregistry.azurecr.io/azca-app:latest
 docker push azcaregistry.azurecr.io/azca-app:latest
 
 # O automático
-./azure-deploy.sh azcaregistry azca-app latest
+./scripts/deploy/azure-deploy.sh azcaregistry azca-app latest
 ```
 
 ### Opción 3: GitHub Actions CI/CD
@@ -302,4 +302,7 @@ docker rm container-name
 **Estado:** 🟢 LISTO PARA PRODUCCIÓN  
 **Próximo paso:** Desplegar a Azure o GitHub Actions  
 **Documentación:** Ver `DEPLOYMENT-QUICKSTART.md` o `DOCKER-DEPLOY.md`
+
+
+
 

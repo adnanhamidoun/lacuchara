@@ -1,4 +1,4 @@
-# 🎯 AZCA Deployment - Quick Start (5 minutos)
+﻿# 🎯 AZCA Deployment - Quick Start (5 minutos)
 
 ## 📋 Archivos Creados
 
@@ -7,7 +7,7 @@
 | **Dockerfile** | Imagen Docker multistage (frontend + backend) |
 | **.dockerignore** | Excluir archivos innecesarios (~3GB menos) |
 | **docker-compose.yml** | Test local antes de desplegar |
-| **azure-deploy.sh** | Script automático: build → push → deploy |
+| **scripts/deploy/azure-deploy.sh** | Script automático: build → push → deploy |
 | **nginx.conf** | Reverse proxy (opcional para producción) |
 | **.github/workflows/deploy.yml** | CI/CD automático con GitHub Actions |
 | **DOCKER-DEPLOY.md** | Guía completa de despliegue |
@@ -44,10 +44,10 @@ echo "✅ Recursos creados"
 ### Paso 3: Build & Deploy (script automático ✅)
 ```bash
 # Hacer el archivo ejecutable (solo una vez en Linux/Mac)
-chmod +x azure-deploy.sh
+chmod +x scripts/deploy/azure-deploy.sh
 
 # Ejecutar
-./azure-deploy.sh azcaregistry azcaapi latest
+./scripts/deploy/azure-deploy.sh azcaregistry azcaapi latest
 
 # El script hace TODO:
 # ✅ Valida Docker & Azure CLI
@@ -89,7 +89,7 @@ az acr credential show --name azcaregistry
 
 ### Paso 2: Push a main
 ```bash
-git add Dockerfile .dockerignore azure-deploy.sh DOCKER-DEPLOY.md
+git add Dockerfile .dockerignore scripts/deploy/azure-deploy.sh DOCKER-DEPLOY.md
 git commit -m "feat: add Docker deployment configuration"
 git push origin main
 ```
@@ -194,4 +194,7 @@ Para detalles exhaustivos, ver: **[DOCKER-DEPLOY.md](DOCKER-DEPLOY.md)**
 
 ---
 
-**¡Listo para desplegar!** 🚀 Ejecuta `./azure-deploy.sh` para empezar.
+**¡Listo para desplegar!** 🚀 Ejecuta `./scripts/deploy/azure-deploy.sh` para empezar.
+
+
+

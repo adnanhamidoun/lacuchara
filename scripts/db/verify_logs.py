@@ -3,11 +3,13 @@
 """Verificar registros en fact_prediction_logs"""
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
 # Cargar variables de entorno desde .env
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 
 # Obtener credenciales desde variables de entorno
 db_server = os.getenv('DB_SERVER', 'azcasqlserver.database.windows.net')

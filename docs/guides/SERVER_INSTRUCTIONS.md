@@ -1,4 +1,4 @@
-# 🚀 CÓMO EJECUTAR EL SERVIDOR
+﻿# 🚀 CÓMO EJECUTAR EL SERVIDOR
 
 ## Forma Rápida: Ejecutar el Script Batch (RECOMENDADO)
 
@@ -12,9 +12,9 @@ cd c:\Users\Alumno_AI\Desktop\lacuchara
 ### Paso 2: Ejecutar el script batch
 
 ```bash
-# Doble-click en run_server.bat
+# Doble-click en scripts/run/run_server.bat
 # O desde terminal:
-.\run_server.bat
+.\\scripts\\run\\run_server.bat
 ```
 
 Verás:
@@ -181,7 +181,7 @@ pip install -r requirements.txt
 
 ### Servidor se cierra inmediatamente
 
-- Usa el script batch `run_server.bat` en lugar de terminal
+- Usa el script batch `scripts/run/run_server.bat` en lugar de terminal
 - O ejecuta desde una ventana CMD separada (no PowerShell)
 
 ---
@@ -217,9 +217,12 @@ Azure SQL Database
 - Subir fotos desde panel del restaurante
 - Imagenes guardadas en BD como Base64
 
-📝 **Próximo paso**: Ejecutar el server con `run_server.bat` y ver el dashboard en acción!
+📝 **Próximo paso**: Ejecutar el server con `scripts/run/run_server.bat` y ver el dashboard en acción!
 
 ---
 
 **Fecha**: 16 de Marzo de 2026  
 **Estado**: ✅ LISTO PARA USAR
+
+
+

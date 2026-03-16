@@ -1,4 +1,4 @@
-# 📊 LO QUE VERÁS EN EL DASHBOARD
+﻿# 📊 LO QUE VERÁS EN EL DASHBOARD
 
 ## Admin Dashboard - Vista General
 
@@ -258,4 +258,7 @@ Logo se actualiza en tiempo real (si servidor está corriendo)
 
 ---
 
-**Pruébalo ejecutando `run_server.bat` y abriendo http://127.0.0.1:8000** ✨
+**Pruébalo ejecutando `scripts/run/run_server.bat` y abriendo http://127.0.0.1:8000** ✨
+
+
+

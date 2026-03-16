@@ -1,4 +1,4 @@
-# 🚀 AZCA Prediction API - Guía de Despliegue a Azure
+﻿# 🚀 AZCA Prediction API - Guía de Despliegue a Azure
 
 ## Índice
 1. [Requisitos Previos](#requisitos-previos)
@@ -106,13 +106,13 @@ docker exec -it $(docker ps -q -f "ancestor=azcaapi:latest") /bin/bash
 ### Opción A: Script Automático (Recomendado ✅)
 ```bash
 # Asegurar que el script es ejecutable
-chmod +x azure-deploy.sh
+chmod +x scripts/deploy/azure-deploy.sh
 
 # Ejecutar (con valores por defecto)
-./azure-deploy.sh
+./scripts/deploy/azure-deploy.sh
 
 # O con parámetros custom
-./azure-deploy.sh azcaregistry azcaapi v1.0.0
+./scripts/deploy/azure-deploy.sh azcaregistry azcaapi v1.0.0
 
 # El script:
 # 1. ✅ Valida Docker
@@ -147,7 +147,7 @@ az acr repository show --name azcaregistry --image azcaapi:v1.0.0
 
 ## Despliegue a Azure App Service
 
-### Opción A: Desde Script azure-deploy.sh
+### Opción A: Desde Script scripts/deploy/azure-deploy.sh
 El script automáticamente propone el deploy. Responde `s` cuando pregunte.
 
 ### Opción B: Manual
@@ -319,7 +319,7 @@ az monitor metrics list \
 
 ```bash
 # Build & Deploy (TODO)
-./azure-deploy.sh azcaregistry azcaapi v1.0.0
+./scripts/deploy/azure-deploy.sh azcaregistry azcaapi v1.0.0
 
 # Ver estado
 az webapp show --name azca-api-app --resource-group azca-rg
@@ -365,4 +365,7 @@ Para problemas:
 2. Verificar credenciales BD
 3. Check firewall rules en BD
 4. Verificar imagen existe en ACR
+
+
+
 

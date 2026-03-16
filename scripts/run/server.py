@@ -5,9 +5,12 @@ Simple server starter - sin problemas en Windows
 import sys
 import os
 import asyncio
+from pathlib import Path
 
 # Agregar el path del proyecto
-sys.path.insert(0, os.path.dirname(__file__))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Importar FastAPI directamente y ejecutar
 from backend.api.main import app

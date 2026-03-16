@@ -5,11 +5,13 @@ Script para crear la tabla fact_prediction_logs en Azure SQL Server
 """
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
 # Cargar variables de entorno desde .env
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 
 # Obtener credenciales desde variables de entorno
 db_server = os.getenv('DB_SERVER', 'azcasqlserver.database.windows.net')

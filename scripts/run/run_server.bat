@@ -3,7 +3,8 @@ REM Script para ejecutar el servidor AZCA en Windows
 
 SETLOCAL ENABLEDELAYEDEXPANSION
 
-cd /d "%~dp0"
+set "PROJECT_ROOT=%~dp0..\.."
+cd /d "%PROJECT_ROOT%"
 
 echo.
 echo ========================================

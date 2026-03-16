@@ -7,7 +7,8 @@ echo   AZCA Prediction API - Startup Script
 echo ========================================
 echo.
 
-cd /d "%~dp0"
+set "PROJECT_ROOT=%~dp0..\.."
+cd /d "%PROJECT_ROOT%"
 
 REM Activar venv
 call .venv\Scripts\activate.bat

@@ -4,8 +4,9 @@
 import requests
 import base64
 import sys
-import os
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # URLs
 BASE_URL = "http://localhost:8000"
@@ -22,10 +23,10 @@ def test_image_upload():
     print(f"\n📸 Test: Subir imagen a restaurante {RESTAURANT_ID}")
     
     # Crear una imagen de prueba simple
-    image_path = "test_image.png"
+    image_path = PROJECT_ROOT / "tests" / "assets" / "test_image.png"
     
     # Si no existe, usar una URL de imagen de prueba pequeña
-    if not os.path.exists(image_path):
+    if not image_path.exists():
         print(f"  ⚠️  No encontrado {image_path}, descargando imagen de prueba...")
         try:
             response = requests.get("https://placehold.co/200x200.png")
@@ -37,7 +38,7 @@ def test_image_upload():
     
     try:
         with open(image_path, "rb") as f:
-            files = {"image_file": (image_path, f, "image/png")}
+            files = {"image_file": (image_path.name, f, "image/png")}
             headers = {"Authorization": f"Bearer {RESTAURANT_TOKEN}"}
             
             response = requests.patch(

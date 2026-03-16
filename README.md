@@ -151,7 +151,7 @@ curl http://127.0.0.1:8000/health
 ## 📁 Project Structure
 
 ```
-Azca/
+lacuchara/
 ├── backend/
 │   ├── api/
 │   │   └── main.py           # FastAPI app, endpoints, orchestration
@@ -164,7 +164,7 @@ Azca/
 │   │   └── manager.py        # Model management
 │   ├── azca/artifacts/
 │   │   └── MLmodel/          # XGBoost artifacts
-│   ├── requirements.txt       # Python dependencies (pinned versions)
+│   ├── requirements.txt      # Python dependencies (pinned versions)
 │   └── tests/
 │       ├── test_core.py
 │       ├── test_integration.py
@@ -179,16 +179,27 @@ Azca/
 │   ├── vite.config.js        # Vite proxy configuration
 │   └── tailwind.config.js    # Tailwind CSS config
 │
-├── docs/                      # Documentation
+├── docs/                     # Documentation
 │   ├── SETUP.md              # Installation guide
 │   ├── API.md                # REST endpoints
 │   ├── ARCHITECTURE.md       # System design
-│   └── DEPLOYMENT.md         # Production deployment
+│   ├── DEPLOYMENT.md         # Production deployment
+│   ├── guides/               # Operational notes and walkthroughs
+│   └── docker/               # Docker and deployment guides
+│
+├── scripts/
+│   ├── db/                   # DB setup and migration helpers
+│   ├── run/                  # Local server startup helpers
+│   ├── deploy/               # Deployment automation scripts
+│   └── utils/                # Utility scripts
+│
+├── tests/
+│   ├── scripts/              # Manual/integration scripts
+│   └── assets/               # Test assets (images, fixtures)
 │
 ├── .env                      # Environment variables (DO NOT commit)
-├── .gitignore               # Git ignore rules
-├── README.md                # This file
-└── requirements-dev.txt     # Development dependencies
+├── .gitignore                # Git ignore rules
+└── README.md                 # This file
 ```
 
 ---
@@ -277,7 +288,8 @@ az webapp up --name azca-api --resource-group azca-rg
 ### Run Tests
 ```powershell
 # Install dev dependencies
-pip install -r requirements-dev.txt
+pip install -r backend/requirements.txt
+pip install pytest pytest-cov
 
 # Run all tests
 pytest backend/tests/ -v

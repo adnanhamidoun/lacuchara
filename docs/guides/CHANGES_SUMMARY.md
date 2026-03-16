@@ -1,11 +1,11 @@
-# ✅ Resumen de Cambios Implementados - Sesión Final
+﻿# ✅ Resumen de Cambios Implementados - Sesión Final
 
 ## 1. Sistema de Imágenes (Base64 en BD)
 
 ### Backend
 - ✅ **Agregada columna `image_data` (VARBINARY)** a tabla `dim_restaurants`
-  - Script de migración: `run_migrations.py`
-  - Comando: `python run_migrations.py`
+  - Script de migración: `scripts/db/run_migrations.py`
+  - Comando: `python scripts/db/run_migrations.py`
 
 - ✅ **Endpoint PATCH `/restaurants/{id}/image`**
   - Acepta archivo (FormData)
@@ -64,13 +64,13 @@
   - Caché: Se inicializa bajo demanda
   - PredictionEngine: Fallback a mock si falla
 
-- 📝 **Documentación**: EXECUTION_GUIDE.md con 4 opciones para ejecutar
+- 📝 **Documentación**: docs/guides/EXECUTION_GUIDE.md con 4 opciones para ejecutar
 
 ### Scripts Creados
-- `run_migrations.py` - Agregar columna a BD
-- `start_server.py` - Script Python para iniciar
-- `start_server.bat` - Script Batch para Windows
-- `test_image_endpoints.py` - Test de endpoints de imagen
+- `scripts/db/run_migrations.py` - Agregar columna a BD
+- `scripts/run/start_server.py` - Script Python para iniciar
+- `scripts/run/start_server.bat` - Script Batch para Windows
+- `tests/scripts/test_image_endpoints.py` - Test de endpoints de imagen
 
 ## 4. Base de Datos
 
@@ -130,9 +130,9 @@
 - `backend/db/models.py` - Agregado import LargeBinary + columna image_data
 - `backend/api/main.py` - Endpoints de imagen, lazy-loading, mejorado lifespan
 - `backend/db/migrations/add_image_data_column.sql` - Script SQL
-- `run_migrations.py` - Ejecutar migración
-- `test_image_endpoints.py` - Tests
-- `start_server.py`, `start_server.bat` - Scripts de ejecución
+- `scripts/db/run_migrations.py` - Ejecutar migración
+- `tests/scripts/test_image_endpoints.py` - Tests
+- `scripts/run/start_server.py`, `scripts/run/start_server.bat` - Scripts de ejecución
 
 ### Frontend
 - `frontend/src/views/client/RestaurantsListView.tsx` - Carga imágenes
@@ -140,8 +140,8 @@
 - `frontend/src/views/admin/AdminDashboardView.tsx` - Panel mejorado + modal
 
 ### Documentación
-- `EXECUTION_GUIDE.md` - Guía completa de ejecución
-- `CHANGES_SUMMARY.md` - Este archivo
+- `docs/guides/EXECUTION_GUIDE.md` - Guía completa de ejecución
+- `docs/guides/CHANGES_SUMMARY.md` - Este archivo
 
 ## 8. Testing
 
@@ -196,3 +196,6 @@
 **Fecha**: 16 de Marzo de 2026  
 **Estado**: ✅ COMPLETADO  
 **Siguiente**: Deployment a producción (Docker recomendado)
+
+
+

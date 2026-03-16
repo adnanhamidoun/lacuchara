@@ -2,7 +2,14 @@
 """
 Test directo de save_prediction_log sin necesidad de servidor HTTP
 """
+import sys
+from pathlib import Path
 from datetime import date, timedelta
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from backend.db.database import SessionLocal
 from backend.api.main import save_prediction_log
 

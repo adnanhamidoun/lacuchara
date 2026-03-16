@@ -1,4 +1,4 @@
-✅ AZCA Deployment Setup Complete!
+﻿✅ AZCA Deployment Setup Complete!
 
 📦 Docker & Azure Deployment Files Created:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -18,7 +18,7 @@ Core Docker Files:
     └─ Health checks enabled
 
 Configuration & Automation:
-  ✓ azure-deploy.sh (7.6 KB)
+  ✓ scripts/deploy/azure-deploy.sh (7.6 KB)
     └─ Automated build → push → deploy pipeline
     └─ Validates Docker, Azure CLI, credentials
     └─ Interactive deployment
@@ -55,7 +55,7 @@ CI/CD Automation:
 
 Option 1: Automated Deployment (Recommended)
 ────────────────────────────────────────────
-$ ./azure-deploy.sh azcaregistry azcaapi latest
+$ ./scripts/deploy/azure-deploy.sh azcaregistry azcaapi latest
 
 This script automatically:
   ✅ Validates Docker & Azure CLI
@@ -159,7 +159,7 @@ $ curl http://localhost:8000/health
 
   1. Read DEPLOYMENT-QUICKSTART.md (5 min overview)
   2. Read DOCKER-DEPLOY.md (complete reference)
-  3. Run: ./azure-deploy.sh OR set up GitHub Actions
+  3. Run: ./scripts/deploy/azure-deploy.sh OR set up GitHub Actions
   4. Monitor: az webapp log tail & Azure Portal
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -167,6 +167,9 @@ $ curl http://localhost:8000/health
 🎉 You're ready to deploy AZCA to production!
 
 Questions? Check DOCKER-DEPLOY.md or run:
-  ./azure-deploy.sh --help
+  ./scripts/deploy/azure-deploy.sh --help
 
 Good luck! 🚀
+
+
+

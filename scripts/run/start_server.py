@@ -6,16 +6,17 @@ Ejecuta el servidor sin modo reload y con workers explícitos.
 
 import subprocess
 import sys
-import time
 import os
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def run_server():
     """Ejecutar el servidor de forma robusta"""
     print("🚀 Iniciando servidor AZCA...")
     print("=" * 60)
     
-    os.chdir(Path(__file__).parent)
+    os.chdir(PROJECT_ROOT)
     
     # Comando para ejecutar el servidor
     cmd = [
