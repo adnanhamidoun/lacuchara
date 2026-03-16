@@ -1,5 +1,13 @@
-import { useState } from 'react'
-import { useAdminDashboard } from '../../hooks/useAdminDashboard'
+import { Building2, Check, Clock, Trash2, Users, UtensilsCrossed, Camera } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import {
+  approveInscripcion,
+  clearApprovalHistory,
+  getAllInscripciones,
+  rejectInscripcion,
+} from '../../services/inscripcionesService'
+import { deleteRestaurant } from '../../services/restaurantsService'
+import { useAuth } from '../../components/auth/AuthContext.jsx'
 import type { Inscripcion } from '../../types/domain'
 import { getCuisineMeta } from '../../utils/cuisine'
 
@@ -20,7 +28,7 @@ function KpiCard({ label, value, color }: { label: string; value: number; color:
   return (
     <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
       <p className="text-sm font-medium text-[var(--text-muted)]">{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${color}`}>{value}</p>
+      <p className={`mt-2 text-4xl font-bold ${color}`}>{value}</p>
     </article>
   )
 }
@@ -65,9 +73,11 @@ function PendingTable({
               <td className="px-4 py-3 text-[var(--text-muted)]">{row.restaurant_segment ?? '-'}</td>
               <td className="px-4 py-3 text-[var(--text-muted)]">
                 {row.cuisine_type ? `${getCuisineMeta(row.cuisine_type).emoji} ${getCuisineMeta(row.cuisine_type).label}` : '-'}
+
               </td>
               <td className="px-4 py-3 text-[var(--text-muted)]">
                 {typeof row.google_rating === 'number' ? row.google_rating.toFixed(1) : '-'}
+
               </td>
               <td className="px-4 py-3">
                 {row.google_maps_link ? (
@@ -151,109 +161,424 @@ function ApprovalHistory({
   )
 }
 
-export default function AdminDashboardView() {
-  const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending')
-  const [historyActionMessage, setHistoryActionMessage] = useState('')
-  const [historyActionLoading, setHistoryActionLoading] = useState(false)
-  const {
-    loading,
-    error,
-    pendingRows,
-    approvalHistory,
-    kpis,
-    onApprove,
-    onReject,
-    onClearApprovalHistory,
-    setError,
-  } = useAdminDashboard()
+function RestaurantsList({
+  restaurants,
+  onDelete,
+  onEditImage,
+}: {
+  restaurants: any[]
+  onDelete: (id: number) => Promise<void>
+  onEditImage: (id: number, url: string) => void
+}) {
+  const [imageUrls, setImageUrls] = useState<Record<number, string>>({})
+  const { session } = useAuth()
 
-  const handleApprove = async (inscripcionId: number) => {
+  useEffect(() => {
+    restaurants.forEach((rest) => {
+      const loadImage = async () => {
+        try {
+          // Intenta obtener imagen existente
+          const response = await fetch(`/restaurants/${rest.restaurant_id}/image`)
+          if (response.ok) {
+            const data = await response.json()
+            setImageUrls((prev) => ({
+              ...prev,
+              [rest.restaurant_id]: data.data_uri,
+            }))
+          } else {
+            // Si no hay imagen, descarga automáticamente una
+            await downloadAutoImage(rest.restaurant_id)
+          }
+        } catch {
+          // Si falla, intenta descargar automáticamente
+          await downloadAutoImage(rest.restaurant_id)
+        }
+      }
+
+      const downloadAutoImage = async (restaurantId: number) => {
+        try {
+          const autoResponse = await fetch(`/restaurants/${restaurantId}/image/auto`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${(session as any)?.token || ''}`
+            }
+          })
+          if (autoResponse.ok) {
+            const data = await autoResponse.json()
+            setImageUrls((prev) => ({
+              ...prev,
+              [restaurantId]: data.data_uri,
+            }))
+          }
+        } catch {
+          // Use initials fallback
+        }
+      }
+
+      loadImage()
+    })
+  }, [restaurants, session])
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {restaurants.map((rest) => {
+        const imageUrl = imageUrls[rest.restaurant_id] || ''
+        const initials = rest.name
+          .split(' ')
+          .map((word: string) => word[0])
+          .join('')
+          .toUpperCase()
+          .slice(0, 2)
+
+        return (
+          <div key={rest.restaurant_id} className="flex gap-4 rounded-xl border border-[var(--border)] p-4 shadow-sm items-start relative group">
+            <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-[#E07B54] shadow-md bg-gradient-to-br from-[#E07B54] to-[#D88B5A] flex-shrink-0 relative flex items-center justify-center">
+              {imageUrl.startsWith('data:') ? (
+                <img src={imageUrl} alt={rest.name} className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-lg font-bold text-white">{initials}</span>
+              )}
+              <button
+                onClick={() => onEditImage(rest.restaurant_id, imageUrl)}
+                className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-full"
+                title="Cambiar imagen"
+              >
+                <Camera className="h-5 w-5 text-white" />
+              </button>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="truncate font-semibold text-[var(--text)]" title={rest.name}>
+                {rest.name}
+              </h3>
+              <div className="mt-1 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+                <UtensilsCrossed className="h-3 w-3" />
+                <span className="truncate">{rest.cuisine_type || 'Generico'}</span>
+              </div>
+              <div className="mt-1 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+                <Users className="h-3 w-3" />
+                <span>Capacidad: {rest.capacity_limit || 'N/A'}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => onDelete(rest.restaurant_id)}
+              className="ml-auto flex items-center justify-center h-8 w-8 rounded-full bg-rose-100 text-rose-600 hover:bg-rose-200 flex-shrink-0"
+              title="Eliminar Restaurante"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+export default function AdminDashboardView() {
+  const { session } = useAuth()
+  const [activeTab, setActiveTab] = useState<'pending' | 'activos' | 'history'>('activos')
+  const [pending, setPending] = useState<Inscripcion[]>([])
+  const [history, setHistory] = useState<Inscripcion[]>([])
+  const [activos, setActivos] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [historyActionLoading, setHistoryActionLoading] = useState(false)
+  const [historyActionMessage, setHistoryActionMessage] = useState('')
+  const [editingRestaurantId, setEditingRestaurantId] = useState<number | null>(null)
+  const [editingImage, setEditingImage] = useState<File | null>(null)
+  const [editingImageUrl, setEditingImageUrl] = useState<string>('')
+
+  const loadData = async () => {
     try {
-      await onApprove(inscripcionId)
+      setLoading(true)
+      const data = await getAllInscripciones()
+      const allInscripciones = Array.isArray(data) ? data : []
+      
+      setPending(allInscripciones.filter((i: Inscripcion) => i.estado_inscripcion?.toLowerCase() === 'pendiente'))
+      setHistory(allInscripciones.filter((i: Inscripcion) => i.estado_inscripcion?.toLowerCase() !== 'pendiente'))
+      
+      const restResponse = await fetch('http://localhost:8000/restaurants')
+      if (restResponse.ok) {
+        const rData = await restResponse.json()
+        setActivos(rData.restaurants || [])
+      }
+
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al cargar datos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const handleApprove = async (id: number) => {
+    try {
+      await approveInscripcion(id)
+      setPending((prev) => prev.filter((i) => i.inscripcion_id !== id))
+      setHistory((prev) => [...prev, { ...(pending.find((i) => i.inscripcion_id === id) as Inscripcion), estado_inscripcion: 'aprobada' }])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo aprobar la inscripción.')
     }
   }
 
-  const handleReject = async (inscripcionId: number) => {
+  const handleReject = async (id: number) => {
     try {
-      await onReject(inscripcionId)
+      await rejectInscripcion(id)
+      setPending((prev) => prev.filter((i) => i.inscripcion_id !== id))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo rechazar la inscripción.')
     }
   }
 
   const handleClearHistory = async () => {
-    if (!window.confirm('¿Seguro que quieres limpiar el historial de aprobaciones? Esta acción no se puede deshacer.')) {
-      return
-    }
+    if (!window.confirm('¿ELIMINAR el historial completamente?')) return
 
     setHistoryActionLoading(true)
     setHistoryActionMessage('')
     try {
-      const result = await onClearApprovalHistory()
+      const result = await clearApprovalHistory()
       setHistoryActionMessage(`${result.message} Registros eliminados: ${result.deleted_count}.`)
       setError('')
+
+      // Update history state
+      setHistory((prev) => prev.filter((h) => h.estado_inscripcion?.toLowerCase() === 'pendiente'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo limpiar el historial de aprobaciones.')
+      setHistoryActionMessage('No se pudo limpiar el historial.')
     } finally {
       setHistoryActionLoading(false)
     }
   }
 
+  const handleDeleteRestaurant = async (restaurantId: number) => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar permanentemente este restaurante?')) return
+
+    try {
+      if (!session) throw new Error('No autorizado')
+      await deleteRestaurant(restaurantId, (session as any).token)
+      // Remove it from current state
+      setActivos((prev) => prev.filter((r) => r.restaurant_id !== restaurantId))
+    } catch (err: any) {
+      alert(err.message || 'Error al eliminar el restaurante.')
+    }
+  }
+
+  const handleUpdateRestaurantImage = async (restaurantId: number) => {
+    if (!editingImage) {
+      alert('Selecciona una imagen primero')
+      return
+    }
+
+    if (!session) return
+
+    try {
+      const formData = new FormData()
+      formData.append('image_file', editingImage)
+
+      const response = await fetch(`/restaurants/${restaurantId}/image`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${(session as any).token}`
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Error al subir la imagen')
+      }
+
+      const data = await response.json()
+      // Actualizar la imagen en la lista
+      setActivos((prev) =>
+        prev.map((r) =>
+          r.restaurant_id === restaurantId
+            ? { ...r, image_data: data.image_base64 }
+            : r
+        )
+      )
+      // Cerrar modal
+      setEditingRestaurantId(null)
+      setEditingImage(null)
+      setEditingImageUrl('')
+    } catch (err: any) {
+      alert(err.message || 'Error al actualizar la imagen')
+    }
+  }
+
+  const { total, pendientes, rechazadas, aprobadas } = {
+    total: activos.length,
+    pendientes: pending.length,
+    rechazadas: history.filter((h) => h.estado_inscripcion?.toLowerCase() === 'rechazada').length,
+    aprobadas: history.filter((h) => h.estado_inscripcion?.toLowerCase() === 'aprobada').length,
+  }
+
+  const kpis = {
+    totalActivos: activos.length || 0,
+    pendientes: pending.length,
+    nuevasSemana: history.filter(
+      (h) =>
+        h.estado_inscripcion?.toLowerCase() === 'aprobada' &&
+        new Date(h.fecha_solicitud || '').getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000,
+    ).length,
+  }
+
   return (
-    <section className="space-y-5">
-      <div>
-        <h2 className="text-2xl font-bold text-[var(--text)]">Dashboard de Administrador</h2>
-        <p className="text-sm text-[var(--text-muted)]">Revisa solicitudes y controla el flujo de aprobaciones.</p>
+    <div className="mx-auto max-w-7xl px-4 py-8">
+      <div className="mb-8 flex items-center gap-4">
+        <div className="h-16 w-16 overflow-hidden rounded-2xl border-2 border-[#E07B54] shadow-lg flex-shrink-0">
+          <img src="https://placehold.co/100x100?text=Logo" alt="Logo" className="h-full w-full object-cover" />
+        </div>
+        <div>
+          <h1 className="text-3xl font-bold text-[var(--text)]">Dashboard Administrativo</h1>
+          <p className="mt-2 text-[var(--text-muted)]">Control central de restaurantes y menús</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <KpiCard label="Total restaurantes activos" value={kpis.totalActivos} color="text-[var(--text)]" />
-        <KpiCard label="Solicitudes pendientes" value={kpis.pendientes} color="text-[#E07B54]" />
-        <KpiCard label="Aprobadas esta semana" value={kpis.nuevasSemana} color="text-[#4CAF50]" />
+      <div className="mb-8 grid gap-4 sm:grid-cols-3">
+        <KpiCard
+          label="Restaurantes Activos"
+          value={kpis.totalActivos}
+          color="text-[#4CAF50]"
+        />
+        <KpiCard
+          label="Solicitudes Pendientes"
+          value={kpis.pendientes}
+          color="text-[#E07B54]"
+        />
+        <KpiCard
+          label="Aprobadas esta semana"
+          value={kpis.nuevasSemana}
+          color="text-[#2196F3]"
+        />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap gap-2 border-b border-[var(--border)] pb-4">
         <button
-          type="button"
           onClick={() => setActiveTab('pending')}
-          className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition-all ${
             activeTab === 'pending'
-              ? 'bg-[#E07B54] text-white'
-              : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--surface-soft)]'
+              ? 'bg-[#E07B54] text-white shadow-md'
+              : 'border border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'
           }`}
         >
-          Pendientes
+          Solicitudes Pendientes
         </button>
         <button
-          type="button"
           onClick={() => setActiveTab('history')}
-          className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition-all ${
             activeTab === 'history'
-              ? 'bg-[#E07B54] text-white'
-              : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--surface-soft)]'
+              ? 'bg-[#E07B54] text-white shadow-md'
+              : 'border border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'
           }`}
         >
-          Historial de aprobaciones
+          Historial de Operaciones
+        </button>
+        <button
+          onClick={() => setActiveTab('activos')}
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition-all ${
+            activeTab === 'activos'
+              ? 'bg-[#E07B54] text-white shadow-md'
+              : 'border border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'
+          }`}
+        >
+          Restaurantes Activos ({activos.length})
         </button>
       </div>
 
-      {loading ? <p className="text-sm text-[var(--text-muted)]">Cargando dashboard...</p> : null}
-      {error ? <p className="rounded-lg bg-[#E53935]/10 p-3 text-sm text-[#E53935]">{error}</p> : null}
-      {historyActionMessage ? (
-        <p className="rounded-lg bg-[#4CAF50]/15 p-3 text-sm text-[#2E7D32]">{historyActionMessage}</p>
-      ) : null}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
+        {loading ? (
+          <div className="py-12 text-center text-[var(--text-muted)]">Cargando datos...</div>
+        ) : error ? (
+          <div className="py-12 text-center text-[#E53935]">{error}</div>
+        ) : activeTab === 'activos' ? (
+          activos.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-[var(--text-muted)]">
+              <Building2 className="mb-4 h-12 w-12 opacity-20" />
+              <p>No hay restaurantes registrados activos.</p>
+            </div>
+          ) : (
+            <RestaurantsList
+              restaurants={activos}
+              onDelete={handleDeleteRestaurant}
+              onEditImage={(id, currentUrl) => {
+                setEditingRestaurantId(id)
+                setEditingImage(null)
+                setEditingImageUrl(currentUrl)
+              }}
+            />
+          )
+        ) : activeTab === 'pending' ? (
+          pending.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <PendingTable rows={pending} onApprove={handleApprove} onReject={handleReject} />
+          )
+        ) : activeTab === 'history' ? (
+          <ApprovalHistory rows={history} onClear={handleClearHistory} loading={historyActionLoading} />
+        ) : null}
+      </div>
 
-      {!loading && activeTab === 'pending' && pendingRows.length === 0 ? <EmptyState /> : null}
+      {/* Modal para editar imagen */}
+      {editingRestaurantId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg max-w-md w-full">
+            <h2 className="text-xl font-bold text-[var(--text)] mb-4">Cambiar imagen del restaurante</h2>
 
-      {!loading && activeTab === 'pending' && pendingRows.length > 0 ? (
-        <PendingTable rows={pendingRows} onApprove={handleApprove} onReject={handleReject} />
-      ) : null}
+            {editingImageUrl && (
+              <div className="mb-4">
+                <img
+                  src={editingImageUrl}
+                  alt="Preview"
+                  className="h-48 w-full rounded-lg object-cover border border-[var(--border)]"
+                />
+              </div>
+            )}
 
-      {!loading && activeTab === 'history' ? (
-        <ApprovalHistory rows={approvalHistory} onClear={handleClearHistory} loading={historyActionLoading} />
-      ) : null}
-    </section>
+            <div className="mb-4">
+              <label className="text-sm font-semibold text-[var(--text)] block mb-2">Seleccionar imagen</label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    setEditingImage(file)
+                    const reader = new FileReader()
+                    reader.onloadend = () => {
+                      setEditingImageUrl(reader.result as string)
+                    }
+                    reader.readAsDataURL(file)
+                  }
+                }}
+                className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#E07B54] file:text-white hover:file:brightness-95 cursor-pointer"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setEditingRestaurantId(null)
+                  setEditingImage(null)
+                  setEditingImageUrl('')
+                }}
+                className="flex-1 rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all hover:bg-[var(--surface-soft)]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleUpdateRestaurantImage(editingRestaurantId)}
+                disabled={!editingImage}
+                className="flex-1 rounded-lg bg-[#E07B54] px-4 py-2 text-sm font-semibold text-white transition-all hover:brightness-95 disabled:opacity-50"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

@@ -11,7 +11,7 @@ Classes:
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, Float, DateTime, Date, Boolean, String, Text, CheckConstraint
+from sqlalchemy import Column, Integer, Float, DateTime, Date, Boolean, String, Text, CheckConstraint, LargeBinary
 from sqlalchemy.sql import func
 from .database import Base
 
@@ -72,9 +72,30 @@ class Restaurant(Base):
     login_email = Column(String(255), nullable=True, unique=True)
     password_hash = Column(String(255), nullable=True)
     image_url = Column(String(500), nullable=True)
-    
+    image_data = Column(LargeBinary, nullable=True)
+
     def __repr__(self):
         return f"<Restaurant(id={self.restaurant_id}, name='{self.name}')>"
+
+
+class DailyMenu(Base):
+    """
+    Modelo ORM para la tabla dbo.daily_menus.
+    
+    Almacena los menús del día subidos por los restaurantes mediante OCR o de forma manual.
+    """
+    __tablename__ = "daily_menus"
+    
+    menu_id = Column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id = Column(Integer, nullable=False)
+    date = Column(Date, nullable=False, default=datetime.utcnow().date)
+    starter = Column(Text, nullable=True)
+    main = Column(Text, nullable=True)
+    dessert = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<DailyMenu(rest_id={self.restaurant_id}, date={self.date})>"
 
 
 class Inscripcion(Base):
@@ -428,7 +449,7 @@ class FactPredictionLog(Base):
     
     # Comparación vs realidad (NVARCHAR(MAX), nullable → Text, nullable)
     actual_outcome_json = Column(Text, nullable=True)
-    
+
     def __repr__(self):
         return (
             f"<FactPredictionLog(id={self.prediction_id}, "
@@ -436,3 +457,22 @@ class FactPredictionLog(Base):
             f"domain={self.prediction_domain}, "
             f"latency={self.latency_ms}ms)>"
         )
+
+class User(Base):
+    """
+    Modelo ORM para la tabla dim.Users.
+
+    Permite a los restaurantes iniciar sesión y gestionar sus credenciales.
+    """
+    __tablename__ = "Users"
+
+    user_id = Column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id = Column(Integer, nullable=False)
+    login_email = Column(String(255), nullable=False, unique=True)
+    password_hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+    role = Column(String(50), default='restaurant_owner')
+
+    def __repr__(self):
+        return f"<User(id={self.user_id}, restaurant_id={self.restaurant_id}, email='{self.login_email}')>"

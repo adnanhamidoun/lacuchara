@@ -99,6 +99,23 @@ function RestaurantCard({ restaurant, index, showOpenToday }: { restaurant: Rest
   const cuisineMeta = getCuisineMeta(restaurant.cuisine_type)
   const segment = restaurant.restaurant_segment ?? 'General'
   const rating = restaurant.google_rating
+  const [imageUrl, setImageUrl] = useState<string>('https://placehold.co/400x200?text=Restaurante')
+
+  // Cargar imagen desde el nuevo endpoint
+  useEffect(() => {
+    const loadImage = async () => {
+      try {
+        const response = await fetch(`/restaurants/${restaurant.restaurant_id}/image`)
+        if (response.ok) {
+          const data = await response.json()
+          setImageUrl(data.data_uri)
+        }
+      } catch {
+        // Usar placeholder si hay error
+      }
+    }
+    loadImage()
+  }, [restaurant.restaurant_id])
 
   return (
     <article
@@ -107,7 +124,7 @@ function RestaurantCard({ restaurant, index, showOpenToday }: { restaurant: Rest
     >
       <div className="relative overflow-hidden">
         <img
-          src={restaurant.image_url || 'https://placehold.co/400x200?text=Restaurante'}
+          src={imageUrl}
           alt={restaurant.name}
           loading="lazy"
           decoding="async"

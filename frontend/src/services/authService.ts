@@ -45,12 +45,11 @@ export async function login(email: string, password: string): Promise<AuthSessio
   const response = await fetch('/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: 'admin', email, password }),
+    body: JSON.stringify({ email, password }),
   })
-  return parseResponse<AuthSession>(response, 'No se pudo iniciar sesión.')
-}
 
-export async function getCurrentSession(token: string): Promise<AuthSession> {
+  return parseResponse<AuthSession>(response, 'Credenciales inválidas.')
+}export async function getCurrentSession(token: string): Promise<AuthSession> {
   const response = await fetch('/auth/me', {
     headers: { Authorization: `Bearer ${token}` },
   })

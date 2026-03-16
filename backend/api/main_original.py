@@ -15,7 +15,6 @@ import json
 import logging
 import os
 import pickle
-import base64
 from contextlib import asynccontextmanager
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -511,12 +510,10 @@ class HealthResponse(BaseModel):
 class RestaurantItem(BaseModel):
     """
     Modelo de respuesta para un restaurante individual (lista).
+    Solo incluye ID y nombre para la lista.
     """
     restaurant_id: int = Field(..., description="ID único del restaurante")
     name: str = Field(..., description="Nombre del restaurante")
-    capacity_limit: int | None = Field(None, description="Límite de capacidad")
-    cuisine_type: str | None = Field(None, description="Tipo de cocina")
-    image_url: str | None = Field(None, description="URL de imagen pública del restaurante")
 
     class Config:
         from_attributes = True
@@ -591,10 +588,8 @@ class InscripcionCreateRequest(BaseModel):
         "plantbased",
         "streetfood",
     ] | None = Field(None, description="Tipo de cocina")
-    image_url: str | None = Field(None, description="URL de la imagen del restaurante")
-    google_maps_link: str = Field(..., description="URL de Google Maps", min_length=1)
-    login_email: str | None = Field(None, description="Email de acceso para el dueño")
-    password: str | None = Field(None, description="Contraseña en texto plano para encriptar")
+    image_url: str | None = Field(None, description="URL inicial de imagen del restaurante")
+    google_maps_link: str = Field(..., description="Link de reseñas/Google Maps (obligatorio)", min_length=5)
 
 
 class InscripcionItem(BaseModel):
@@ -647,12 +642,13 @@ class ClearApprovalHistoryResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    role: Literal["admin"]
     email: str = Field(..., min_length=3)
     password: str = Field(..., min_length=3)
 
 
 class AuthUserResponse(BaseModel):
-    role: Literal["admin", "restaurant_owner"]
+    role: Literal["admin"]
     restaurant_id: int | None = None
     restaurant_name: str | None = None
     email: str
@@ -661,19 +657,6 @@ class AuthUserResponse(BaseModel):
 
 class RestaurantImageUpdateRequest(BaseModel):
     image_url: str = Field(..., min_length=5)
-
-class DailyMenuRequest(BaseModel):
-    starter: str | None = None
-    main: str | None = None
-    dessert: str | None = None
-
-class DailyMenuResponse(BaseModel):
-    menu_id: int
-    restaurant_id: int
-    date: date
-    starter: str | None
-    main: str | None
-    dessert: str | None
 
 
 def _extract_bearer_token(authorization: str | None) -> str | None:
@@ -920,29 +903,42 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Error conectando BD: {str(db_error)}", exc_info=True)
         raise
     
-    # 3. Inicializar el motor de predicción (lazy-loading para evitar crashes en Windows)
+    # 3. Inicializar el motor de predicción
     try:
-        app.state.prediction_engine = None  # Se cargará bajo demanda
-        logger.info(f"✅ Motor de predicción configurado (lazy-loading)")
+        prediction_engine = PredictionEngine()
+        logger.info(f"✅ Motor de predicción inicializado")
     except Exception as engine_error:
         logger.warning(f"⚠️  Motor de predicción no disponible: {str(engine_error)[:100]}")
-        app.state.prediction_engine = None
+        prediction_engine = None  # Permitirá fallback con mock en endpoints
     
-    # 4. Cargar modelo pickle en memoria (OPTIMIZACIÓN CLAVE - lazy-loading para Windows)
+    # 4. Cargar modelo pickle en memoria (OPTIMIZACIÓN CLAVE)
     try:
-        app.state.model = None  # Se cargará bajo demanda
-        logger.info(f"📦 Modelo configurado para lazy-loading")
+        artifacts_path = Path(__file__).parent.parent / "azca" / "artifacts"
+        model_path = artifacts_path / "AzcaMenuModel.pkl"
         
+        logger.info(f"📦 Cargando modelo desde: {model_path}")
+        
+        with open(model_path, "rb") as f:
+            model = pickle.load(f)
+        
+        app.state.model = model
+        logger.info(f"✅ Modelo cargado en memoria (app.state.model)")
+        logger.info(f"   Tipo de modelo: {type(model).__name__}")
+        
+    except FileNotFoundError:
+        logger.error(f"❌ Modelo no encontrado en {model_path}")
+        raise
     except Exception as model_error:
-        logger.error(f"❌ Error configurando modelo: {str(model_error)}", exc_info=True)
+        logger.error(f"❌ Error cargando modelo: {str(model_error)}", exc_info=True)
+        raise
     
-    # 5. Inicializar caché en memoria (clima y calendario) - Lazy loading en Windows
+    # 5. Inicializar caché en memoria (clima y calendario)
     try:
-        app.state.cache = None  # Se cargará bajo demanda si es necesario
-        logger.info(f"✅ Caché configurado (lazy-loading)")
+        app.state.cache = CacheManager(ttl_minutes=20)
+        logger.info(f"✅ Caché en memoria inicializado")
     except Exception as cache_error:
-        logger.warning(f"⚠️  Caché no disponible: {str(cache_error)}", exc_info=True)
-        app.state.cache = None
+        logger.error(f"❌ Error inicializando caché: {str(cache_error)}", exc_info=True)
+        raise
     
     logger.info("🎯 Aplicación lista para servir predicciones")
     
@@ -1062,10 +1058,7 @@ async def get_restaurants(db: Session = Depends(get_db)):
             restaurants=[
                 RestaurantItem(
                     restaurant_id=r.restaurant_id,
-                    name=r.name,
-                    capacity_limit=r.capacity_limit,
-                    cuisine_type=r.cuisine_type,
-                    image_url=r.image_url
+                    name=r.name
                 )
                 for r in restaurants
             ]
@@ -1144,9 +1137,7 @@ def _parse_min_service_duration(min_service: str | None) -> int | None:
 )
 async def create_inscripcion(request: InscripcionCreateRequest, db: Session = Depends(get_db)):
     """Crea una solicitud de alta en dbo.inscripciones."""
-    from ..core.auth import hash_password
     try:
-        hashed_pw = hash_password(request.password) if request.password else None
         inscripcion = Inscripcion(
             name=request.name.strip(),
             capacity_limit=request.capacity_limit,
@@ -1158,10 +1149,10 @@ async def create_inscripcion(request: InscripcionCreateRequest, db: Session = De
             restaurant_segment=request.restaurant_segment,
             menu_price=request.menu_price,
             dist_office_towers=request.dist_office_towers,
+            google_rating=request.google_rating,
+            cuisine_type=request.cuisine_type,
             image_url=request.image_url.strip() if request.image_url else None,
             google_maps_link=request.google_maps_link.strip(),
-            login_email=request.login_email.strip().lower() if request.login_email else None,
-            password_hash=hashed_pw,
             estado_inscripcion="pendiente",
             fecha_solicitud=datetime.now(),
         )
@@ -1285,6 +1276,8 @@ async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)
             "dist_office_towers": inscripcion.dist_office_towers,
             "google_rating": inscripcion.google_rating,
             "cuisine_type": inscripcion.cuisine_type,
+            "login_email": inscripcion.login_email,
+            "password_hash": inscripcion.password_hash,
             "image_url": inscripcion.image_url,
         }
 
@@ -1293,19 +1286,6 @@ async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)
 
         db.add(restaurant)
         db.flush()
-
-        # Crear usuario en la tabla Users con las credenciales
-        from ..db.models import User
-        if inscripcion.login_email and inscripcion.password_hash:
-            user = User(
-                restaurant_id=restaurant.restaurant_id,
-                login_email=inscripcion.login_email.strip().lower(),
-                password_hash=inscripcion.password_hash,
-                is_active=True,
-                role='restaurant_owner'
-            )
-            db.add(user)
-            db.flush()
 
         db.delete(inscripcion)
         db.commit()
@@ -1410,46 +1390,14 @@ async def clear_approval_history(db: Session = Depends(get_db)):
     tags=["Auth"],
 )
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
-    # Buscar usuario en la tabla Users (admin y restaurantes)
-    from ..db.models import User
-    user = db.query(User).filter(
-        User.login_email == request.email.strip().lower()
-    ).first()
-    
-    if user and user.is_active:
-        # Verificar la contraseña hasheada
-        from ..core.auth import verify_password
-        if verify_password(request.password, user.password_hash):
-            # Determinar el rol basado en restaurant_id
-            if user.restaurant_id == 0:
-                role = "admin"
-                restaurant_id = None
-                restaurant_name = None
-            else:
-                role = "restaurant_owner"
-                restaurant_id = user.restaurant_id
-                # Obtener nombre del restaurante
-                restaurant = db.query(Restaurant).filter(
-                    Restaurant.restaurant_id == user.restaurant_id
-                ).first()
-                restaurant_name = restaurant.name if restaurant else None
-            
-            token = create_access_token({
-                "role": role,
-                "email": request.email.strip().lower(),
-                "restaurant_id": restaurant_id,
-                "user_id": user.user_id
-            })
-            
-            return AuthUserResponse(
-                role=role,
-                email=request.email.strip().lower(),
-                restaurant_id=restaurant_id,
-                restaurant_name=restaurant_name,
-                token=token
-            )
-    
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales inválidas.")
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@cuisineaml.com").strip().lower()
+    admin_password = os.getenv("ADMIN_PASSWORD", "admin123456")
+
+    if request.email.strip().lower() != admin_email or request.password != admin_password:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales de administrador no válidas.")
+
+    token = create_access_token({"role": "admin", "email": admin_email})
+    return AuthUserResponse(role="admin", email=admin_email, token=token)
 
 
 @app.get(
@@ -1470,274 +1418,29 @@ async def auth_me(authorization: str | None = Header(default=None)):
 
 @app.patch(
     "/restaurants/{restaurant_id}/image",
+    response_model=RestaurantDetailItem,
     summary="Actualizar imagen del restaurante",
-    tags=["Restaurants"],
+    tags=["Data"],
 )
 async def update_restaurant_image(
     restaurant_id: int,
-    image_file: UploadFile = File(...),
+    request: RestaurantImageUpdateRequest,
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     payload = _require_auth(authorization)
-    
-    # Verificar que sea el propietario del restaurante o admin
-    if payload.get("role") == "restaurant_owner":
-        if payload.get("restaurant_id") != restaurant_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No es tu restaurante.")
-    elif payload.get("role") != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado.")
-
-    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
-    if not restaurant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado.")
-
-    # Validar tipo de archivo
-    if image_file.content_type not in ['image/jpeg', 'image/png', 'image/webp', 'image/jpg']:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, 
-                          detail="Solo se permiten imágenes JPEG, PNG o WebP.")
-
-    try:
-        # Leer archivo
-        image_data = await image_file.read()
-        
-        # Validar tamaño (máximo 5MB)
-        if len(image_data) > 5 * 1024 * 1024:
-            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, 
-                              detail="Imagen muy grande. Máximo 5MB.")
-        
-        # Guardar en BD como binario
-        restaurant.image_data = image_data
-        db.commit()
-        db.refresh(restaurant)
-        
-        # Convertir a base64 para la respuesta
-        image_base64 = base64.b64encode(image_data).decode()
-        
-        return {
-            "message": "Imagen actualizada correctamente",
-            "image_base64": image_base64,
-            "content_type": image_file.content_type
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error al actualizar imagen: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                          detail="Error al guardar la imagen.")
-
-
-@app.get(
-    "/restaurants/{restaurant_id}/image",
-    summary="Obtener imagen del restaurante",
-    tags=["Restaurants"],
-)
-async def get_restaurant_image(
-    restaurant_id: int,
-    db: Session = Depends(get_db),
-):
-    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
-    if not restaurant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado.")
-    
-    if not restaurant.image_data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante sin imagen.")
-    
-    try:
-        # Convertir binario a base64
-        image_base64 = base64.b64encode(restaurant.image_data).decode()
-        
-        return {
-            "image_base64": image_base64,
-            "data_uri": f"data:image/jpeg;base64,{image_base64}"
-        }
-    except Exception as e:
-        logger.error(f"Error al recuperar imagen: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                          detail="Error al recuperar la imagen.")
-
-
-@app.post(
-    "/restaurants/{restaurant_id}/image/auto",
-    summary="Descargar imagen automática por tipo de cocina",
-    tags=["Restaurants"],
-)
-async def auto_fetch_restaurant_image(
-    restaurant_id: int,
-    authorization: str | None = Header(default=None),
-    db: Session = Depends(get_db),
-):
-    """Descarga automáticamente una imagen basada en el tipo de cocina del restaurante."""
-    payload = _require_auth(authorization)
-    
-    # Verificar que sea el propietario del restaurante o admin
-    if payload.get("role") == "restaurant_owner":
-        if payload.get("restaurant_id") != restaurant_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No es tu restaurante.")
-    elif payload.get("role") != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado.")
-
-    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
-    if not restaurant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado.")
-
-    try:
-        # Mapeo de tipos de cocina a búsqueda en Unsplash
-        cuisine_type = restaurant.cuisine_type or "restaurant"
-        
-        # Términos de búsqueda mejorados
-        search_terms = {
-            "Italian": "italian food pasta",
-            "Spanish": "spanish food tapas",
-            "French": "french cuisine restaurant",
-            "Mexican": "mexican food tacos",
-            "Japanese": "japanese sushi restaurant",
-            "Chinese": "chinese food restaurant",
-            "Indian": "indian curry food",
-            "Thai": "thai food restaurant",
-            "Mediterranean": "mediterranean food",
-            "Grill": "grill barbecue meat",
-            "Vegetarian": "vegetarian food healthy",
-            "Seafood": "seafood restaurant fish",
-            "Fusion": "fusion cuisine modern",
-            "American": "american burger food",
-            "Asian": "asian food restaurant",
-        }
-        
-        search_query = search_terms.get(cuisine_type, cuisine_type)
-        
-        # Buscar en Unsplash API (sin API key, con límite)
-        unsplash_url = "https://api.unsplash.com/search/photos"
-        params = {
-            "query": search_query,
-            "per_page": 1,
-            "order_by": "relevant"
-        }
-        
-        response = requests.get(unsplash_url, params=params, timeout=5)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("results"):
-                image_url = data["results"][0]["urls"]["regular"]
-                
-                # Descargar la imagen
-                img_response = requests.get(image_url, timeout=5)
-                if img_response.status_code == 200:
-                    image_data = img_response.content
-                    
-                    # Validar tamaño
-                    if len(image_data) > 5 * 1024 * 1024:
-                        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                                          detail="Imagen muy grande.")
-                    
-                    # Guardar en BD
-                    restaurant.image_data = image_data
-                    db.commit()
-                    db.refresh(restaurant)
-                    
-                    # Convertir a base64
-                    image_base64 = base64.b64encode(image_data).decode()
-                    
-                    return {
-                        "message": f"Imagen de {cuisine_type} descargada automáticamente",
-                        "image_base64": image_base64,
-                        "data_uri": f"data:image/jpeg;base64,{image_base64}",
-                        "source": "Unsplash"
-                    }
-        
-        # Fallback: generar imagen de placeholder mejorado
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                          detail="No se pudo descargar imagen. Intenta de nuevo más tarde.")
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error al descargar imagen automática: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                          detail="Error al descargar imagen automática.")
-
-
-
-@app.delete(
-    "/restaurants/{restaurant_id}",
-    summary="Eliminar restaurante",
-    tags=["Restaurants"],
-)
-async def delete_restaurant(
-    restaurant_id: int,
-    authorization: str | None = Header(default=None),
-    db: Session = Depends(get_db)
-):
-    from ..db.models import User
-    payload = _require_auth(authorization)
-    
     if payload.get("role") != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo el admin puede eliminar restaurantes.")
-    
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado.")
+
     restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
     if not restaurant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado.")
-    
-    # También podemos borrar al usuario asociado, aunque si hay CASCADE igual se borra
-    db.query(User).filter(User.restaurant_id == restaurant_id).delete()
-    db.delete(restaurant)
+
+    restaurant.image_url = request.image_url.strip()
     db.commit()
-    return {"message": "Restaurante eliminado correctamente"}
+    db.refresh(restaurant)
+    return RestaurantDetailItem.from_orm(restaurant)
 
-@app.post(
-    "/restaurants/{restaurant_id}/menu",
-    response_model=DailyMenuResponse,
-    summary="Publicar Menú del Día",
-    tags=["Restaurants"],
-)
-async def post_daily_menu(
-    restaurant_id: int, 
-    payload: DailyMenuRequest,
-    db: Session = Depends(get_db)):
-    """Guarda el menú del día subido por el restaurante."""
-    from ..db.models import DailyMenu
-    try:
-        today = datetime.utcnow().date()
-        db.query(DailyMenu).filter(
-            DailyMenu.restaurant_id == restaurant_id, 
-            DailyMenu.date == today
-        ).delete()
-        
-        new_menu = DailyMenu(
-            restaurant_id=restaurant_id,
-            date=today,
-            starter=payload.starter,
-            main=payload.main,
-            dessert=payload.dessert
-        )
-        db.add(new_menu)
-        db.commit()
-        db.refresh(new_menu)
-        return new_menu
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error guardando menú: {e}")
-        raise HTTPException(status_code=500, detail="No se pudo publicar el menú.")
-
-
-@app.get(
-    "/restaurants/{restaurant_id}/menu/today",
-    response_model=DailyMenuResponse,
-    summary="Obtener el Menú del Día actual del restaurante",
-    tags=["Restaurants"],
-)
-async def get_daily_menu(restaurant_id: int, db: Session = Depends(get_db)):
-    from ..db.models import DailyMenu
-    today = datetime.utcnow().date()
-    menu = db.query(DailyMenu).filter(
-        DailyMenu.restaurant_id == restaurant_id, 
-        DailyMenu.date == today
-    ).order_by(DailyMenu.created_at.desc()).first()
-    
-    if not menu:
-        raise HTTPException(status_code=404, detail="Menú del día no disponible.")
-    return menu
 
 
 # ============================================================================
@@ -3304,44 +3007,19 @@ async def root():
     }
 
 
-import uuid
-import shutil
-
-@app.post(
-    "/upload-image",
-    summary="Subir una imagen al servidor",
-    tags=["Uploads"],
-)
-async def upload_image(file: UploadFile = File(...)):
-    """Guarda una imagen y devuelve la URL pública."""
-    try:
-        ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
-        filename = f"{uuid.uuid4().hex}.{ext}"
-
-        images_dir = Path(__file__).parent / "static" / "images"
-        images_dir.mkdir(parents=True, exist_ok=True)
-        file_path = images_dir / filename
-
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        return {"image_url": f"/static/images/{filename}", "message": "Imagen válida"}
-    except Exception as e:
-        logger.error(f"Error subiendo imagen: {e}")
-        raise HTTPException(status_code=500, detail="No se pudo subir la imagen.")
-
-
 # ============================================================================
 # EJECUCIÓN (Para desarrollo local)
 # ============================================================================
 
 if __name__ == "__main__":
     import uvicorn
+
+    # Ejecutar con: python -m azca.api.main
+    # o: uvicorn azca.api.main:app --reload
     uvicorn.run(
-        "api.main:app",
+        "azca.api.main:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
         log_level="info",
     )
-

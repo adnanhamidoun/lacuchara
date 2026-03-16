@@ -47,23 +47,14 @@
 		inset: 0;
 		pointer-events: none;
 		z-index: -1;
-		background-image:
-			linear-gradient(130deg, rgba(8, 10, 15, 0.82), rgba(8, 10, 15, 0.55)),
-			url('https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=2200&q=80');
-		background-size: cover;
-		background-position: center;
-		filter: blur(2px) saturate(1.06);
-		opacity: 0.12;
-		transform: scale(1.03);
+		background-image: none;
+		opacity: 0;
+		display: none;
 	}
 
 	.dark body::before {
-		opacity: 0.22;
-		filter: blur(3px) saturate(1.1);
-	}
-
-	* {
-		@apply antialiased;
+		opacity: 0;
+		display: none;
 	}
 }
 

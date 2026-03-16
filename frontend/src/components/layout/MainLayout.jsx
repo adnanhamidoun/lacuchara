@@ -1,9 +1,12 @@
-import { Link, NavLink } from 'react-router-dom'
-import { Sun, Moon, Crown } from 'lucide-react'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Sun, Moon, Crown, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 export default function MainLayout({ children }) {
   const [theme, setTheme] = useState('light')
+  const { session, logout } = useAuth()
+  const navigate = useNavigate()
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('aml-theme')
@@ -133,19 +136,51 @@ export default function MainLayout({ children }) {
                 {theme === 'light' ? 'Modo oscuro' : 'Modo claro'}
               </button>
 
-              <NavLink
-                to="/admin/login"
-                className="inline-flex items-center rounded-xl border border-[#3A3037]/70 bg-[var(--surface)]/75 px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]"
-              >
-                Administrador
-              </NavLink>
+              {session ? (
+                <>
+                  {session.role === 'admin' ? (
+                    <NavLink
+                      to="/admin/inscripciones"
+                      className="inline-flex items-center rounded-xl border border-[#3A3037]/70 bg-[var(--surface)]/75 px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]"
+                    >
+                      Dashboard Admin
+                    </NavLink>
+                  ) : (
+                    <NavLink
+                      to="/restaurante/panel"
+                      className="inline-flex items-center rounded-xl bg-gradient-to-r from-[#C9794D] to-[#E09A63] px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(201,121,77,0.35)] transition-all duration-200 hover:brightness-105"
+                    >
+                      Mi restaurante
+                    </NavLink>
+                  )}
+                  <button
+                    onClick={() => {
+                      logout();
+                      navigate('/');
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-rose-600/10 px-4 py-2 text-sm font-semibold text-rose-500 transition-all duration-200 hover:bg-rose-600/20"
+                    title="Cerrar sesión"
+                  >
+                    <LogOut size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <NavLink
+                    to="/login"
+                    className="inline-flex items-center rounded-xl border border-[#3A3037]/70 bg-[var(--surface)]/75 px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]"
+                  >
+                    Iniciar Sesión
+                  </NavLink>
 
-              <NavLink
-                to="/restaurante/alta"
-                className="inline-flex items-center rounded-xl bg-gradient-to-r from-[#C9794D] to-[#E09A63] px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(201,121,77,0.35)] transition-all duration-200 hover:brightness-105"
-              >
-                Únete como Restaurante
-              </NavLink>
+                  <NavLink
+                    to="/restaurante/alta"
+                    className="inline-flex items-center rounded-xl bg-gradient-to-r from-[#C9794D] to-[#E09A63] px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(201,121,77,0.35)] transition-all duration-200 hover:brightness-105"
+                  >
+                    Únete como Restaurante
+                  </NavLink>
+                </>
+              )}
             </div>
           </div>
         </div>
