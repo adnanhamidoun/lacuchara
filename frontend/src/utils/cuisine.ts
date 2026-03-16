@@ -1,16 +1,16 @@
-export const CUISINE_META: Record<string, { label: string; emoji: string }> = {
-  grill: { label: 'Parrilla y Brasa', emoji: '🔥' },
-  spanish: { label: 'Cocina Española', emoji: '🇪🇸' },
-  mediterranean: { label: 'Cocina Mediterránea', emoji: '🫒' },
-  stew: { label: 'Guisos y Estofados', emoji: '🥘' },
-  fried: { label: 'Fritura Andaluza', emoji: '🍤' },
-  italian: { label: 'Italiana', emoji: '🇮🇹' },
-  asian: { label: 'Asiática', emoji: '🍜' },
-  latin: { label: 'Latinoamericana', emoji: '🌎' },
-  arabic: { label: 'Turca/Árabe', emoji: '🧆' },
-  avantgarde: { label: 'Cocina de Vanguardia y Autor', emoji: '🧪' },
-  plantbased: { label: 'Plant-Based', emoji: '🌱' },
-  streetfood: { label: 'Street Food', emoji: '🚚' },
+export const CUISINE_META: Record<string, { label: string }> = {
+  grill: { label: 'Parrilla y Brasa' },
+  spanish: { label: 'Cocina Española' },
+  mediterranean: { label: 'Cocina Mediterránea' },
+  stew: { label: 'Guisos y Estofados' },
+  fried: { label: 'Fritura Andaluza' },
+  italian: { label: 'Italiana' },
+  asian: { label: 'Asiática' },
+  latin: { label: 'Latinoamericana' },
+  arabic: { label: 'Turca/Árabe' },
+  avantgarde: { label: 'Cocina de Vanguardia y Autor' },
+  plantbased: { label: 'Plant-Based' },
+  streetfood: { label: 'Street Food' },
 }
 
 const CUISINE_ALIASES: Record<string, string> = {
@@ -65,10 +65,10 @@ export function getCanonicalCuisineCode(code: string | null | undefined) {
 
 export function getCuisineMeta(code: string | null | undefined) {
   if (!code) {
-    return { label: 'Sin especificar', emoji: '🍽️' }
+    return { label: 'Sin especificar' }
   }
 
   const canonicalCode = getCanonicalCuisineCode(code)
 
-  return CUISINE_META[canonicalCode] ?? { label: code, emoji: '🍽️' }
+  return CUISINE_META[canonicalCode] ?? { label: code }
 }

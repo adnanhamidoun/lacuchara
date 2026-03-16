@@ -23,6 +23,11 @@ export interface RestaurantsListResponse {
   restaurants: RestaurantItem[]
 }
 
+export interface RestaurantsDetailListResponse {
+  count: number
+  restaurants: RestaurantDetail[]
+}
+
 export interface Inscripcion {
   inscripcion_id: number
   name: string

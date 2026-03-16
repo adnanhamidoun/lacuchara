@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Search, Wifi, Sparkles, Building2, Briefcase, Users, Facebook, Instagram, Linkedin, ArrowRight, Crown, Star } from 'lucide-react'
 import { isInPriceRange, type PriceRange, useRestaurants } from '../../hooks/useRestaurants'
@@ -37,6 +37,16 @@ const SEGMENTS = [
     icon: Users,
   },
 ] as const
+
+const INITIAL_VISIBLE_RESTAURANTS = 16
+const VISIBLE_RESTAURANTS_STEP = 16
+
+type IndexedRestaurant = {
+  restaurant: RestaurantDetail
+  searchableText: string
+  segmentCode: string
+  cuisineCode: string | null
+}
 
 function normalizeText(value: string | null | undefined): string {
   return (value ?? '')
@@ -94,7 +104,7 @@ function RatingDisplay({ rating }: { rating: number | null }) {
   )
 }
 
-function RestaurantCard({ restaurant, index, showOpenToday }: { restaurant: RestaurantDetail; index: number; showOpenToday: boolean }) {
+const RestaurantCard = memo(function RestaurantCard({ restaurant, index, showOpenToday }: { restaurant: RestaurantDetail; index: number; showOpenToday: boolean }) {
   const price = restaurant.menu_price ?? 18
   const cuisineMeta = getCuisineMeta(restaurant.cuisine_type)
   const segment = restaurant.restaurant_segment ?? 'General'
@@ -102,7 +112,7 @@ function RestaurantCard({ restaurant, index, showOpenToday }: { restaurant: Rest
 
   return (
     <article
-      className={`restaurant-card group overflow-hidden rounded-3xl border border-[var(--border)]/75 bg-[var(--surface)]/92 shadow-[0_10px_24px_rgba(10,12,20,0.16)] transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-[2px] hover:border-[#D88B5A]/55 hover:shadow-[0_14px_28px_rgba(10,12,20,0.22)] ${index < 8 ? 'animate-card-in' : ''}`}
+      className={`restaurant-card group transform-gpu overflow-hidden rounded-3xl border border-[var(--border)]/50 bg-[var(--surface)]/92 shadow-[0_10px_24px_rgba(10,12,20,0.16),-6px_-6px_12px_rgba(216,139,90,0),6px_-6px_12px_rgba(216,139,90,0),-6px_6px_12px_rgba(216,139,90,0),6px_6px_12px_rgba(216,139,90,0),0_14px_28px_rgba(10,12,20,0.22)] transition-[transform,box-shadow,border-color] duration-150 ease-out hover:-translate-y-[2px] hover:border-[#D88B5A]/100 hover:shadow-[0_10px_24px_rgba(10,12,20,0.16),-6px_-6px_12px_rgba(216,139,90,0.6),6px_-6px_12px_rgba(216,139,90,0.6),-6px_6px_12px_rgba(216,139,90,0.6),6px_6px_12px_rgba(216,139,90,0.6),0_14px_28px_rgba(10,12,20,0.22)] ${index < 8 ? 'animate-card-in' : ''}`}
       style={{ animationDelay: `${Math.min(index * 55, 420)}ms` }}
     >
       <div className="relative overflow-hidden">
@@ -129,11 +139,11 @@ function RestaurantCard({ restaurant, index, showOpenToday }: { restaurant: Rest
       </div>
 
       <div className="space-y-3 p-5">
-        <h3 className="font-display text-xl font-bold text-[var(--text)]">{restaurant.name}</h3>
+        <h3 className="text-xl font-bold text-[var(--text)]">{restaurant.name}</h3>
 
         <div className="flex flex-wrap gap-2">
-          <span className="rounded-full border border-[#3A3037]/70 bg-[var(--surface-soft)]/70 px-2.5 py-1 text-xs font-medium text-[var(--text)]">
-            {`${cuisineMeta.emoji} ${cuisineMeta.label}`}
+          <span className="rounded-full bg-[var(--surface-soft)]/70 px-2.5 py-1 text-xs font-medium text-[var(--text)]">
+            {cuisineMeta.label}
           </span>
           <span className="rounded-full bg-[#D88B5A]/15 px-2.5 py-1 text-xs font-medium text-[#D88B5A]">
             {segment}
@@ -147,14 +157,16 @@ function RestaurantCard({ restaurant, index, showOpenToday }: { restaurant: Rest
 
         <Link
           to={`/cliente/restaurantes/${restaurant.restaurant_id}/menu`}
-          className="inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#C9794D] to-[#E09A63] px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_14px_rgba(201,121,77,0.25)] transition-all duration-200 hover:brightness-105"
+          className="inline-flex w-full items-center justify-center rounded-lg border-0 bg-gradient-to-r from-[#C9794D] to-[#E09A63] px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_14px_rgba(201,121,77,0.25)] transition-all duration-200 hover:brightness-105"
         >
           Ver menú
         </Link>
       </div>
     </article>
   )
-}
+})
+
+RestaurantCard.displayName = 'RestaurantCard'
 
 export default function RestaurantsListView() {
   const { restaurants, cuisines, loading, error } = useRestaurants()
@@ -164,7 +176,13 @@ export default function RestaurantsListView() {
   const [priceRange, setPriceRange] = useState<PriceRange>('all')
   const [wifiOnly, setWifiOnly] = useState(false)
   const [weekendsOnly, setWeekendsOnly] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_RESTAURANTS)
   const [animatedCount, setAnimatedCount] = useState(0)
+  const deferredSearch = useDeferredValue(search)
+  const selectedCuisineCode = useMemo(
+    () => (selectedCuisine === 'all' ? null : getCanonicalCuisineCode(selectedCuisine)),
+    [selectedCuisine],
+  )
 
   const isWeekendToday = useMemo(() => {
     const day = new Date().getDay()
@@ -178,24 +196,48 @@ export default function RestaurantsListView() {
     }
   }
 
-  const filteredRestaurants = useMemo(() => {
-    const normalizedSearch = normalizeText(search)
-
-    return restaurants.filter((item) => {
-      const cuisineMeta = getCuisineMeta(item.cuisine_type)
-      const searchableText = normalizeText(`${item.name} ${item.restaurant_segment ?? ''} ${cuisineMeta.label}`)
-      const matchName = searchableText.includes(normalizedSearch)
-      const matchCuisine =
-        selectedCuisine === 'all' || getCanonicalCuisineCode(item.cuisine_type) === getCanonicalCuisineCode(selectedCuisine)
-      const matchSegment =
-        selectedSegment === 'all' || normalizeSegment(item.restaurant_segment) === selectedSegment
-      const matchPrice = isInPriceRange(item.menu_price, priceRange)
-      const matchWifi = !wifiOnly || Boolean(item.has_wifi)
-      const matchWeekend = !weekendsOnly || Boolean(item.opens_weekends)
-
-      return matchName && matchCuisine && matchSegment && matchPrice && matchWifi && matchWeekend
+  const indexedRestaurants = useMemo<IndexedRestaurant[]>(() => {
+    return restaurants.map((restaurant) => {
+      const cuisineMeta = getCuisineMeta(restaurant.cuisine_type)
+      return {
+        restaurant,
+        searchableText: normalizeText(`${restaurant.name} ${restaurant.restaurant_segment ?? ''} ${cuisineMeta.label}`),
+        segmentCode: normalizeSegment(restaurant.restaurant_segment),
+        cuisineCode: getCanonicalCuisineCode(restaurant.cuisine_type),
+      }
     })
-  }, [restaurants, search, selectedCuisine, selectedSegment, priceRange, wifiOnly, weekendsOnly])
+  }, [restaurants])
+
+  const filteredRestaurants = useMemo(() => {
+    const normalizedSearch = normalizeText(deferredSearch)
+
+    return indexedRestaurants
+      .filter(({ restaurant, searchableText, segmentCode, cuisineCode }) => {
+        const matchName = searchableText.includes(normalizedSearch)
+        const matchCuisine = selectedCuisineCode === null || cuisineCode === selectedCuisineCode
+        const matchSegment = selectedSegment === 'all' || segmentCode === selectedSegment
+        const matchPrice = isInPriceRange(restaurant.menu_price, priceRange)
+        const matchWifi = !wifiOnly || Boolean(restaurant.has_wifi)
+        const matchWeekend = !weekendsOnly || Boolean(restaurant.opens_weekends)
+
+        return matchName && matchCuisine && matchSegment && matchPrice && matchWifi && matchWeekend
+      })
+      .map(({ restaurant }) => restaurant)
+  }, [indexedRestaurants, deferredSearch, selectedCuisineCode, selectedSegment, priceRange, wifiOnly, weekendsOnly])
+
+  const visibleRestaurants = useMemo(
+    () => filteredRestaurants.slice(0, visibleCount),
+    [filteredRestaurants, visibleCount],
+  )
+
+  const hasMoreRestaurants = visibleCount < filteredRestaurants.length
+
+  useEffect(() => {
+    setVisibleCount((current) => {
+      const nextBase = Math.min(INITIAL_VISIBLE_RESTAURANTS, filteredRestaurants.length)
+      return current === nextBase ? current : nextBase
+    })
+  }, [filteredRestaurants.length])
 
   useEffect(() => {
     const target = filteredRestaurants.length
@@ -233,7 +275,7 @@ export default function RestaurantsListView() {
           }}
         >
           <div className="mx-auto max-w-4xl space-y-6 text-white">
-            <h2 className="font-display text-4xl font-bold leading-tight md:text-6xl">
+            <h2 className="text-4xl font-bold leading-tight md:text-6xl">
               Descubre la Excelencia Gastronómica
             </h2>
             <p className="max-w-2xl text-base text-white/85 md:text-lg">
@@ -266,7 +308,7 @@ export default function RestaurantsListView() {
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <h3 className="font-serif text-2xl font-bold text-[var(--text)]">Segmentos Destacados</h3>
+          <h3 className="text-2xl font-bold text-[var(--text)]">Segmentos Destacados</h3>
           <p className="text-sm text-[var(--text-muted)]">Selecciona un segmento para filtrar la selección de abajo.</p>
         </div>
 
@@ -297,7 +339,7 @@ export default function RestaurantsListView() {
       </div>
 
       <div id="sobre-nosotros" className="luxury-panel rounded-2xl border border-[#3A3037]/70 bg-[var(--surface)]/70 p-6 shadow-[0_12px_28px_rgba(0,0,0,0.28)]">
-        <h3 className="font-serif text-2xl font-bold text-[var(--text)]">Sobre Nosotros</h3>
+        <h3 className="text-2xl font-bold text-[var(--text)]">Sobre Nosotros</h3>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--text-muted)]">
           En CUISINE AML conectamos comensales con propuestas gastronómicas de alto nivel. Nuestra plataforma combina diseño elegante,
           curaduría de restaurantes y filtros inteligentes para descubrir experiencias memorables en segundos.
@@ -314,7 +356,7 @@ export default function RestaurantsListView() {
         }}
       >
         <div className="space-y-1">
-          <h3 className="font-display text-2xl font-bold text-[var(--text)] md:text-3xl">Nuestra Selección</h3>
+          <h3 className="text-2xl font-bold text-[var(--text)] md:text-3xl">Nuestra Selección</h3>
           <p className="text-sm text-[var(--text-muted)]">Filtra por estilo, precio y servicios para encontrar tu mesa ideal.</p>
         </div>
 
@@ -332,7 +374,7 @@ export default function RestaurantsListView() {
               }`}
             >
               <span className="inline-flex items-center gap-1.5">
-                {cuisine === 'all' ? 'Todas las cocinas' : `${getCuisineMeta(cuisine).emoji} ${getCuisineMeta(cuisine).label}`}
+                {cuisine === 'all' ? 'Todas las cocinas' : getCuisineMeta(cuisine).label}
               </span>
             </button>
           ))}
@@ -403,15 +445,6 @@ export default function RestaurantsListView() {
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
           <div className="absolute right-0 top-0 h-80 w-80 translate-x-1/3 -translate-y-1/3 rounded-full bg-[#B86A44]/10 blur-[76px]" />
           <div className="absolute bottom-0 left-0 h-72 w-72 -translate-x-1/4 translate-y-1/4 rounded-full bg-[#4F8CFF]/8 blur-[68px] dark:bg-[#7AA2FF]/12" />
-
-          <div
-            className="absolute bottom-0 left-6 top-0 w-px opacity-20"
-            style={{ background: 'linear-gradient(to bottom, transparent, #E07B54 30%, #E07B54 70%, transparent)' }}
-          />
-          <div
-            className="absolute bottom-0 right-6 top-0 w-px opacity-20"
-            style={{ background: 'linear-gradient(to bottom, transparent, #E07B54 30%, #E07B54 70%, transparent)' }}
-          />
         </div>
 
         <div className="relative z-10 space-y-4">
@@ -421,24 +454,35 @@ export default function RestaurantsListView() {
                 <Crown size={16} className="text-[#E07B54]" />
                 Restaurantes disponibles
               </h3>
-              <p className="text-sm text-[var(--text-muted)]">{animatedCount} resultados</p>
+              <p className="text-sm text-[var(--text-muted)]">
+                Mostrando {visibleRestaurants.length} de {animatedCount} resultados
+              </p>
             </div>
             <div className="h-px w-full bg-gradient-to-r from-[#E07B54] to-transparent" />
           </div>
 
           <div className="relative">
-            <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
-              <div className="absolute left-0 top-0 h-4 w-4 border-l border-t border-[#E07B54]/30" />
-              <div className="absolute right-0 top-0 h-4 w-4 border-r border-t border-[#E07B54]/30" />
-              <div className="absolute bottom-0 left-0 h-4 w-4 border-b border-l border-[#E07B54]/30" />
-              <div className="absolute bottom-0 right-0 h-4 w-4 border-b border-r border-[#E07B54]/30" />
-            </div>
-
             <div className="relative z-10 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {filteredRestaurants.map((restaurant, index) => (
+              {visibleRestaurants.map((restaurant, index) => (
                 <RestaurantCard key={restaurant.restaurant_id} restaurant={restaurant} index={index} showOpenToday={isWeekendToday} />
               ))}
             </div>
+
+            {hasMoreRestaurants ? (
+              <div className="mt-5 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVisibleCount((current) =>
+                      Math.min(current + VISIBLE_RESTAURANTS_STEP, filteredRestaurants.length),
+                    )
+                  }
+                  className="inline-flex items-center justify-center rounded-xl border border-[#D88B5A]/50 bg-[var(--surface)] px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:border-[#D88B5A] hover:shadow-sm"
+                >
+                  Cargar más restaurantes
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -447,7 +491,7 @@ export default function RestaurantsListView() {
         <div className="mb-5 h-px w-full bg-gradient-to-r from-transparent via-[#E07B54] to-transparent" />
         <div className="grid gap-6 md:grid-cols-4">
           <div className="space-y-2">
-            <p className="font-serif text-xl font-bold text-[var(--text)]">CUISINE AML</p>
+            <p className="text-xl font-bold text-[var(--text)]">CUISINE AML</p>
             <p className="text-sm text-[var(--text-muted)]">Prestige Restaurant Management</p>
           </div>
 

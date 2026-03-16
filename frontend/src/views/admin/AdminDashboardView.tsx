@@ -64,7 +64,7 @@ function PendingTable({
               <td className="px-4 py-3 font-medium text-[var(--text)]">{row.name}</td>
               <td className="px-4 py-3 text-[var(--text-muted)]">{row.restaurant_segment ?? '-'}</td>
               <td className="px-4 py-3 text-[var(--text-muted)]">
-                {row.cuisine_type ? `${getCuisineMeta(row.cuisine_type).emoji} ${getCuisineMeta(row.cuisine_type).label}` : '-'}
+                {row.cuisine_type ? getCuisineMeta(row.cuisine_type).label : '-'}
               </td>
               <td className="px-4 py-3 text-[var(--text-muted)]">
                 {typeof row.google_rating === 'number' ? row.google_rating.toFixed(1) : '-'}

@@ -576,6 +576,13 @@ class RestaurantsListResponse(BaseModel):
     restaurants: list[RestaurantItem] = Field(..., description="Lista de restaurantes")
 
 
+class RestaurantsDetailListResponse(BaseModel):
+    """Modelo de respuesta para la lista de restaurantes con detalle completo."""
+
+    count: int = Field(..., description="Cantidad total de restaurantes")
+    restaurants: list[RestaurantDetailItem] = Field(..., description="Lista detallada de restaurantes")
+
+
 class InscripcionCreateRequest(BaseModel):
     """Modelo de alta para solicitudes en dbo.inscripciones."""
 
@@ -896,6 +903,26 @@ async def get_restaurants(db: Session = Depends(get_db)):
         # Devolver lista vacía en lugar de 500 para mantener la UI funcional.
         # Esto ayuda cuando la DB no está disponible o falta configuración.
         return RestaurantsListResponse(count=0, restaurants=[])
+
+
+@app.get(
+    "/restaurants/details",
+    response_model=RestaurantsDetailListResponse,
+    summary="Obtener Lista Detallada de Restaurantes",
+    tags=["Data"],
+)
+async def get_restaurants_details(db: Session = Depends(get_db)):
+    """Obtiene todos los restaurantes con detalle completo en una sola consulta."""
+    try:
+        restaurants = db.query(Restaurant).all()
+
+        detail_rows = [RestaurantDetailItem.from_orm(row) for row in restaurants]
+        detail_rows.sort(key=lambda row: row.name.casefold())
+
+        return RestaurantsDetailListResponse(count=len(detail_rows), restaurants=detail_rows)
+    except Exception as e:
+        logger.error(f"❌ Error en GET /restaurants/details: {str(e)}", exc_info=True)
+        return RestaurantsDetailListResponse(count=0, restaurants=[])
 
 
 @app.get(
