@@ -1,28 +1,51 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { RestaurantDetail } from '../../types/domain'
 
-type PredictionResult = {
-  prediction_result: number
-  service_date: string
-  model_version: string
-  execution_timestamp: string
-  log_id: number
-}
-
-type DishPrediction = {
+type PredictedDish = {
   rank: number
   name: string
   score: number
   estimated_count: number
 }
 
-type MenuPrediction = {
-  top_3_dishes: DishPrediction[]
-  service_date: string
+type CoursePredictionResponse = {
+  top_3_dishes: PredictedDish[]
+}
+
+type ServicePredictionResponse = {
+  prediction_result: number
+}
+
+type MenuPredictionState = {
+  starters: PredictedDish[]
+  mains: PredictedDish[]
+  desserts: PredictedDish[]
+}
+
+type TodayMenuResponse = {
+  menu_id: number
   restaurant_id: number
-  model_version: string
-  execution_timestamp: string
+  date: string
+  starter: string | null
+  main: string | null
+  dessert: string | null
+  includes_drink: boolean
+  menu_price?: number | null
+}
+
+const emptyPredictions: MenuPredictionState = {
+  starters: [],
+  mains: [],
+  desserts: [],
+}
+
+function parseMenuCourse(rawValue: string | null | undefined): string[] {
+  if (!rawValue) return []
+  return rawValue
+    .split(';')
+    .map((value) => value.trim())
+    .filter(Boolean)
 }
 
 export default function MenuView() {
@@ -30,32 +53,37 @@ export default function MenuView() {
   const [restaurant, setRestaurant] = useState<RestaurantDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [menuPredictions, setMenuPredictions] = useState<MenuPredictionState>(emptyPredictions)
+  const [menuLoading, setMenuLoading] = useState(false)
+  const [menuError, setMenuError] = useState('')
+  const [servicePrediction, setServicePrediction] = useState<number | null>(null)
+  const [serviceError, setServiceError] = useState('')
+  const [todayMenu, setTodayMenu] = useState<TodayMenuResponse | null>(null)
 
-  const [serviceDate, setServiceDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const tomorrow = useMemo(() => {
+    const date = new Date()
+    date.setDate(date.getDate() + 1)
+    return date.toISOString().slice(0, 10)
+  }, [])
+  const [selectedDate, setSelectedDate] = useState(today)
 
-  // --- Service count prediction ---
-  const [prediction, setPrediction] = useState<PredictionResult | null>(null)
-  const [predictionLoading, setPredictionLoading] = useState(false)
-  const [predictionError, setPredictionError] = useState('')
-
-  // --- Menu item predictions ---
-  const [starters, setStarters] = useState<DishPrediction[] | null>(null)
-  const [mainCourses, setMainCourses] = useState<DishPrediction[] | null>(null)
-  const [desserts, setDesserts] = useState<DishPrediction[] | null>(null)
-
-  const [startersLoading, setStartersLoading] = useState(false)
-  const [mainLoading, setMainLoading] = useState(false)
-  const [dessertsLoading, setDessertsLoading] = useState(false)
-
-  const [startersError, setStartersError] = useState('')
-  const [mainError, setMainError] = useState('')
-  const [dessertsError, setDessertsError] = useState('')
+  const restaurantIdNumber = useMemo(() => {
+    const parsed = Number(restaurantId)
+    return Number.isFinite(parsed) ? parsed : null
+  }, [restaurantId])
 
   useEffect(() => {
+    if (!restaurantIdNumber) {
+      setError('ID de restaurante inválido.')
+      setLoading(false)
+      return
+    }
+
     const loadRestaurant = async () => {
       try {
         setLoading(true)
-        const response = await fetch(`/restaurants/${restaurantId}`)
+        const response = await fetch(`/restaurants/${restaurantIdNumber}`)
         if (!response.ok) throw new Error('No se pudo cargar el restaurante seleccionado.')
 
         const data = (await response.json()) as RestaurantDetail
@@ -69,112 +97,131 @@ export default function MenuView() {
     }
 
     loadRestaurant()
-  }, [restaurantId])
+  }, [restaurantIdNumber])
 
   useEffect(() => {
-    const fetchServicesPrediction = async () => {
-      if (!restaurant) return
+    if (!restaurantIdNumber) return
 
-      setPredictionLoading(true)
-      setPredictionError('')
-
+    const loadTodayMenu = async () => {
       try {
-        const response = await fetch('/predict', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            service_date: serviceDate,
-            restaurant_id: Number(restaurantId),
-            max_temp_c: 20,
-            precipitation_mm: 0,
-            is_rain_service_peak: false,
-            is_stadium_event: false,
-            is_azca_event: false,
-            is_holiday: false,
-            is_bridge_day: false,
-            is_payday_week: false,
-            is_business_day: true,
-            services_lag_7: 0,
-            avg_4_weeks: 0,
-            capacity_limit: restaurant.capacity_limit ?? 0,
-            table_count: restaurant.table_count ?? 0,
-            min_service_duration: restaurant.min_service_duration ?? 0,
-            terrace_setup_type: restaurant.terrace_setup_type ?? 'yearround',
-            opens_weekends: restaurant.opens_weekends ?? false,
-            has_wifi: restaurant.has_wifi ?? false,
-            restaurant_segment: restaurant.restaurant_segment ?? 'family',
-            menu_price: restaurant.menu_price ?? 0,
-            dist_office_towers: restaurant.dist_office_towers ?? 0,
-            google_rating: restaurant.google_rating ?? 0,
-            cuisine_type: restaurant.cuisine_type ?? 'mediterranean',
-          }),
-        })
-
+        const response = await fetch(`/restaurants/${restaurantIdNumber}/menu/today`)
         if (!response.ok) {
-          const payload = await response.json().catch(() => null)
-          throw new Error(payload?.detail || `HTTP ${response.status}`)
+          setTodayMenu(null)
+          return
         }
-
-        const data = (await response.json()) as PredictionResult
-        setPrediction(data)
-      } catch (err) {
-        setPredictionError(err instanceof Error ? err.message : 'Error al obtener la predicción.')
-      } finally {
-        setPredictionLoading(false)
+        const data = (await response.json()) as TodayMenuResponse
+        setTodayMenu(data)
+        setSelectedDate((current) => (current <= today ? tomorrow : current))
+      } catch {
+        setTodayMenu(null)
       }
     }
 
-    fetchServicesPrediction()
-  }, [restaurant, restaurantId, serviceDate])
+    loadTodayMenu()
+  }, [restaurantIdNumber, today, tomorrow])
 
   useEffect(() => {
-    const fetchMenuPrediction = async (
-      url: string,
-      setResult: (value: DishPrediction[] | null) => void,
-      setLoading: (value: boolean) => void,
-      setError: (value: string) => void,
-    ) => {
-      if (!restaurant) return
+    if (!restaurantIdNumber || !restaurant) return
 
-      setLoading(true)
-      setError('')
-
+    const loadPredictedData = async () => {
       try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            restaurant_id: Number(restaurantId),
-            service_date: serviceDate,
-          }),
-        })
+        setMenuLoading(true)
+        setMenuError('')
+        setServiceError('')
 
-        if (!response.ok) {
-          const payload = await response.json().catch(() => null)
-          throw new Error(payload?.detail || `HTTP ${response.status}`)
+        const coursePayload = {
+          restaurant_id: restaurantIdNumber,
+          service_date: selectedDate,
         }
 
-        const data = (await response.json()) as MenuPrediction
-        setResult(data.top_3_dishes)
+        const servicePayload = {
+          service_date: selectedDate,
+          restaurant_id: restaurantIdNumber,
+          is_stadium_event: false,
+          is_azca_event: false,
+          capacity_limit: restaurant.capacity_limit ?? 60,
+          table_count: restaurant.table_count ?? 15,
+          min_service_duration: restaurant.min_service_duration ?? 45,
+          terrace_setup_type: restaurant.terrace_setup_type ?? 'outdoor',
+          opens_weekends: Boolean(restaurant.opens_weekends),
+          has_wifi: Boolean(restaurant.has_wifi),
+          restaurant_segment: restaurant.restaurant_segment ?? 'business',
+          menu_price: restaurant.menu_price ?? 20,
+          dist_office_towers: restaurant.dist_office_towers ?? 500,
+          google_rating: restaurant.google_rating ?? 4.2,
+          cuisine_type: restaurant.cuisine_type ?? 'mediterranean',
+        }
+
+        const [serviceRes, starterRes, mainRes, dessertRes] = await Promise.all([
+          fetch('/predict', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(servicePayload),
+          }),
+          fetch('/predict/starter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(coursePayload),
+          }),
+          fetch('/predict/main', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(coursePayload),
+          }),
+          fetch('/predict/dessert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(coursePayload),
+          }),
+        ])
+
+        if (!serviceRes.ok) {
+          throw new Error('No se pudo generar la predicción de servicios para este restaurante.')
+        }
+
+        if (!starterRes.ok || !mainRes.ok || !dessertRes.ok) {
+          throw new Error('No se pudieron generar las predicciones del menú para este restaurante.')
+        }
+
+        const [serviceData, starterData, mainData, dessertData] = (await Promise.all([
+          serviceRes.json(),
+          starterRes.json(),
+          mainRes.json(),
+          dessertRes.json(),
+        ])) as [ServicePredictionResponse, CoursePredictionResponse, CoursePredictionResponse, CoursePredictionResponse]
+
+        setServicePrediction(serviceData.prediction_result ?? null)
+
+        setMenuPredictions({
+          starters: starterData.top_3_dishes ?? [],
+          mains: mainData.top_3_dishes ?? [],
+          desserts: dessertData.top_3_dishes ?? [],
+        })
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al obtener la predicción.')
-        setResult(null)
+        setMenuPredictions(emptyPredictions)
+        setServicePrediction(null)
+        const message = err instanceof Error ? err.message : 'No se pudieron obtener las predicciones del restaurante.'
+        if (message.toLowerCase().includes('servicio')) {
+          setServiceError(message)
+        } else {
+          setMenuError(message)
+        }
       } finally {
-        setLoading(false)
+        setMenuLoading(false)
       }
     }
 
-    fetchMenuPrediction('/predict/starter', setStarters, setStartersLoading, setStartersError)
-    fetchMenuPrediction('/predict/main', setMainCourses, setMainLoading, setMainError)
-    fetchMenuPrediction('/predict/dessert', setDesserts, setDessertsLoading, setDessertsError)
-  }, [restaurant, restaurantId, serviceDate])
+    loadPredictedData()
+  }, [restaurantIdNumber, selectedDate, restaurant])
 
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-[var(--text)]">Menú Predicho por IA</h2>
-          <p className="text-sm text-[var(--text-muted)]">Predicción automática para entrante, principal y postre según el modelo y la fecha elegida.</p>
+          <p className="text-sm text-[var(--text-muted)]">
+            Si el restaurante publicó menú hoy, se muestra ese menú y la predicción aplica a días posteriores.
+          </p>
         </div>
 
         <Link
@@ -185,111 +232,117 @@ export default function MenuView() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-          <p className="text-sm text-[var(--text-muted)]">Restaurante seleccionado</p>
-          {loading ? (
-            <p className="text-sm text-[var(--text-muted)]">Cargando restaurante...</p>
-          ) : error ? (
-            <p className="text-sm text-[#E53935]">{error}</p>
-          ) : (
-            <>
-              <h3 className="text-lg font-bold text-[var(--text)]">{restaurant?.name}</h3>
-              <p className="text-sm text-[var(--text-muted)]">Precio medio menú: €{restaurant?.menu_price?.toFixed(2) ?? '—'}</p>
-            </>
-          )}
-        </div>
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-sm text-[var(--text-muted)]">Restaurante seleccionado</p>
+            {loading ? <p className="text-sm text-[var(--text-muted)]">Cargando restaurante...</p> : null}
+            {error ? <p className="text-sm text-[#E53935]">{error}</p> : null}
+            {!loading && !error ? (
+              <div className="mt-1 space-y-1">
+                <h3 className="text-lg font-bold text-[var(--text)]">{restaurant?.name}</h3>
+                <p className="text-xs text-[var(--text-muted)]">Fecha de predicción: {selectedDate}</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Precio medio menú: €{(restaurant?.menu_price ?? 20).toFixed(2)}
+                </p>
+              </div>
+            ) : null}
+          </div>
 
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-[var(--text-muted)]">Fecha de predicción</p>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-[var(--text-muted)]">Elegir fecha</span>
             <input
               type="date"
-              value={serviceDate}
-              onChange={(e) => setServiceDate(e.target.value)}
-              className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--text)]"
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+              min={todayMenu ? tomorrow : today}
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
             />
-          </div>
-          <div className="mt-4">
-            {predictionLoading ? (
-              <p className="text-sm text-[var(--text-muted)]">Calculando demanda de servicios...</p>
-            ) : predictionError ? (
-              <p className="text-sm text-[#E53935]">{predictionError}</p>
-            ) : prediction ? (
-              <>
-                <p className="text-sm text-[var(--text-muted)]">Servicios estimados</p>
-                <p className="text-3xl font-bold text-[var(--text)]">{prediction.prediction_result}</p>
-                <p className="text-xs text-[var(--text-muted)]">Modelo: {prediction.model_version}</p>
-              </>
-            ) : (
-              <p className="text-sm text-[var(--text-muted)]">Seleccione fecha para calcular la predicción.</p>
-            )}
-          </div>
+          </label>
         </div>
+      </div>
 
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-          <p className="text-sm text-[var(--text-muted)]">Datos de la predicción</p>
-          {prediction ? (
-            <div className="mt-3 space-y-2 text-sm text-[var(--text-muted)]">
-              <div className="flex justify-between">
-                <span>Fecha:</span>
-                <span>{prediction.service_date}</span>
+      {todayMenu ? (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h4 className="font-semibold text-[var(--text)]">Menú del día (hoy)</h4>
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1 text-xs text-[var(--text-muted)]">
+              {(todayMenu.includes_drink ? 'Incluye bebida' : 'No incluye bebida')}
+            </span>
+          </div>
+
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]/40 p-4">
+            {[
+              { title: 'Entrantes', items: parseMenuCourse(todayMenu.starter) },
+              { title: 'Principales', items: parseMenuCourse(todayMenu.main) },
+              { title: 'Postres', items: parseMenuCourse(todayMenu.dessert) },
+            ].map((section) => (
+              <div key={section.title} className="mb-4 last:mb-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{section.title}</p>
+                {section.items.length > 0 ? (
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--text)]">
+                    {section.items.map((item, index) => (
+                      <li key={`${section.title}-${index}`}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-[var(--text-muted)]">Sin información.</p>
+                )}
               </div>
-              <div className="flex justify-between">
-                <span>ID log:</span>
-                <span>{prediction.log_id}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Timestamp:</span>
-                <span>{new Date(prediction.execution_timestamp).toLocaleString()}</span>
-              </div>
+            ))}
+            <div className="mt-4 border-t border-[var(--border)] pt-3 text-sm font-semibold text-[var(--text)]">
+              Precio del menú: €{(todayMenu.menu_price ?? restaurant?.menu_price ?? 20).toFixed(2)}
             </div>
-          ) : (
-            <p className="text-sm text-[var(--text-muted)]">No hay datos aún.</p>
-          )}
+          </div>
         </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+        <h4 className="font-semibold text-[var(--text)]">Predicción de servicios</h4>
+        {menuLoading ? <p className="mt-2 text-sm text-[var(--text-muted)]">Calculando demanda de servicios...</p> : null}
+        {!menuLoading && serviceError ? <p className="mt-2 text-sm text-[#E53935]">{serviceError}</p> : null}
+        {!menuLoading && !serviceError && servicePrediction !== null ? (
+          <p className="mt-2 text-sm text-[var(--text)]">
+            Servicios estimados para el día seleccionado: <span className="font-bold">{servicePrediction}</span>
+          </p>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {[
-          {
-            title: 'Entrantes',
-            dishes: starters,
-            loading: startersLoading,
-            error: startersError,
-          },
-          {
-            title: 'Principales',
-            dishes: mainCourses,
-            loading: mainLoading,
-            error: mainError,
-          },
-          {
-            title: 'Postres',
-            dishes: desserts,
-            loading: dessertsLoading,
-            error: dessertsError,
-          },
-        ].map(({ title, dishes, loading, error }) => (
-          <div key={title} className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-4">
-            <h4 className="font-semibold text-[var(--text)]">{title}</h4>
+          { title: 'Entrantes', items: menuPredictions.starters },
+          { title: 'Principales', items: menuPredictions.mains },
+          { title: 'Postres', items: menuPredictions.desserts },
+        ].map((section) => (
+          <div key={section.title} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+            <h4 className="font-semibold text-[var(--text)]">{section.title}</h4>
 
-            {loading ? (
-              <p className="mt-2 text-sm text-[var(--text-muted)]">Generando predicción...</p>
-            ) : error ? (
-              <p className="mt-2 text-sm text-[#E53935]">{error}</p>
-            ) : dishes && dishes.length > 0 ? (
-              <ul className="mt-3 space-y-2 text-sm text-[var(--text-muted)]">
-                {dishes.map((dish) => (
-                  <li key={dish.rank} className="flex items-center justify-between">
-                    <span className="font-medium text-[var(--text)]">{dish.rank}. {dish.name}</span>
-                    <span className="text-xs text-[var(--text-muted)]">{(dish.score * 100).toFixed(0)}%</span>
+            {menuLoading ? <p className="mt-2 text-sm text-[var(--text-muted)]">Generando predicción...</p> : null}
+
+            {!menuLoading && menuError ? <p className="mt-2 text-sm text-[#E53935]">{menuError}</p> : null}
+
+            {!menuLoading && !menuError && section.items.length === 0 ? (
+              <p className="mt-2 text-sm text-[var(--text-muted)]">Sin predicciones para mostrar.</p>
+            ) : null}
+
+            {!menuLoading && !menuError && section.items.length > 0 ? (
+              <ul className="mt-3 space-y-2">
+                {section.items.map((dish) => (
+                  <li key={`${section.title}-${dish.rank}-${dish.name}`} className="rounded-xl border border-[var(--border)]/70 bg-[var(--surface-soft)]/50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold text-[var(--text)]">#{dish.rank} {dish.name}</p>
+                      <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
+                        {(dish.score * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      Precio menú: €{(restaurant?.menu_price ?? 20).toFixed(2)}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">Demanda estimada: {dish.estimated_count}</p>
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="mt-2 text-sm text-[var(--text-muted)]">No hay datos de predicción disponibles.</p>
-            )}
+            ) : null}
           </div>
         ))}
       </div>

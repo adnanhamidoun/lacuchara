@@ -62,6 +62,8 @@ interface FormState {
   google_maps_link: string
   opens_weekends: boolean
   has_wifi: boolean
+  login_email?: string
+  password?: string
 }
 
 type Errors = Partial<Record<keyof FormState, string>>
@@ -81,6 +83,8 @@ const INITIAL_FORM: FormState = {
   google_maps_link: '',
   opens_weekends: false,
   has_wifi: false,
+  login_email: '',
+  password: '',
 }
 
 const STEPS = [
@@ -121,6 +125,9 @@ export default function RestaurantOnboardingView() {
 
     if (targetStep === 1) {
       if (!form.name.trim()) nextErrors.name = 'El nombre es obligatorio.'
+      if (!form.login_email || !form.login_email.trim()) nextErrors.login_email = 'El email es obligatorio para el acceso.'
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.login_email)) nextErrors.login_email = 'El email no es válido.'
+      if (!form.password || form.password.length < 6) nextErrors.password = 'La contraseña debe tener al menos 6 caracteres.'
       if (!form.capacity_limit || Number(form.capacity_limit) <= 0) {
         nextErrors.capacity_limit = 'La capacidad debe ser mayor que 0.'
       }
@@ -187,6 +194,8 @@ export default function RestaurantOnboardingView() {
         google_maps_link: form.google_maps_link.trim(),
         opens_weekends: form.opens_weekends,
         has_wifi: form.has_wifi,
+        login_email: form.login_email?.trim() || undefined,
+        password: form.password || undefined,
       }
 
       await createInscripcion(payload)
@@ -245,6 +254,28 @@ export default function RestaurantOnboardingView() {
                 className={fieldClass(Boolean(errors.name))}
               />
               {errors.name ? <p className="text-xs text-[#E53935]">{errors.name}</p> : null}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-semibold text-[var(--text)]">Email de Vendedor</label>
+              <input
+                type="email"
+                value={form.login_email || ''}
+                onChange={(event) => setField('login_email', event.target.value)}
+                className={fieldClass(Boolean(errors.login_email))}
+              />
+              {errors.login_email ? <p className="text-xs text-[#E53935]">{errors.login_email}</p> : null}
+            </div>
+
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-sm font-semibold text-[var(--text)]">Contraseña</label>
+              <input
+                type="password"
+                value={form.password || ''}
+                onChange={(event) => setField('password', event.target.value)}
+                className={fieldClass(Boolean(errors.password))}
+              />
+              {errors.password ? <p className="text-xs text-[#E53935]">{errors.password}</p> : null}
             </div>
 
             <div className="space-y-1">
@@ -394,14 +425,34 @@ export default function RestaurantOnboardingView() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-[var(--text)]">URL de imagen inicial</label>
+              <label className="text-sm font-semibold text-[var(--text)]">Imagen del restaurante (Opcional)</label>
               <input
-                type="url"
-                value={form.image_url}
-                onChange={(event) => setField('image_url', event.target.value)}
-                placeholder="https://images.example.com/restaurante.jpg"
-                className={fieldClass(false)}
+                type="file"
+                accept="image/*"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    try {
+                      // Subir la imagen y guardar la ruta
+                      const formData = new FormData();
+                      formData.append("file", file);
+                      // Asumiendo que /upload-image está en la misma API base
+                      const response = await fetch("http://localhost:8000/upload-image", {
+                        method: "POST",
+                        body: formData
+                      });
+                      if (response.ok) {
+                        const data = await response.json();
+                        setField("image_url", data.image_url); // ej. /static/images/algo.jpg
+                      }
+                    } catch (e) {
+                      console.error("Error subiendo imagen", e);
+                    }
+                  }
+                }}
+                className="w-full text-sm mt-1 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#1A1A2E]/5 file:text-[#1A1A2E] hover:file:bg-[#1A1A2E]/10 cursor-pointer text-[var(--text)]"
               />
+              {form.image_url && <p className="text-xs text-green-600 mt-1">✔ Imagen subida correctamente</p>}
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

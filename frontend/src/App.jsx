@@ -6,6 +6,7 @@ import LoginView from './views/auth/LoginView.tsx'
 import MenuView from './views/client/MenuView.tsx'
 import RestaurantsListView from './views/client/RestaurantsListView.tsx'
 import RestaurantOnboardingView from './views/restaurant/RestaurantOnboardingView.tsx'
+import RestaurantPanelView from './views/restaurant/RestaurantPanelView.tsx'
 
 function NotFoundView() {
   return (
@@ -31,8 +32,20 @@ export default function App() {
         />
 
         <Route path="/restaurante/alta" element={<RestaurantOnboardingView />} />
+        <Route
+          path="/restaurante/panel"
+          element={
+            <ProtectedRoute role="restaurant_owner">
+              <RestaurantPanelView />
+            </ProtectedRoute>
+          }
+        />
 
+        {/* Auth Compartido */}
+        <Route path="/login" element={<LoginView />} />
         <Route path="/admin/login" element={<LoginView />} />
+
+        {/* Admin Routes */}
         <Route
           path="/admin/inscripciones"
           element={

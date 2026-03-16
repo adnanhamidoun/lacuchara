@@ -69,12 +69,14 @@ export interface InscripcionCreatePayload {
   cuisine_type: string
   image_url?: string
   google_maps_link: string
+  login_email?: string
+  password?: string
 }
 
 export interface AuthSession {
-  role: 'admin'
-  restaurant_id?: number | null
-  restaurant_name?: string | null
-  email: string
-  token: string
-}
+    role: 'admin' | 'restaurant_owner'
+    restaurant_id?: number | null
+    restaurant_name?: string | null
+    email: string
+    token: string
+  }

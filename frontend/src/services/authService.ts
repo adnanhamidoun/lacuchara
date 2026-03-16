@@ -45,12 +45,11 @@ export async function login(email: string, password: string): Promise<AuthSessio
   const response = await fetch('/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: 'admin', email, password }),
+    body: JSON.stringify({ email, password }),
   })
-  return parseResponse<AuthSession>(response, 'No se pudo iniciar sesión.')
-}
 
-export async function getCurrentSession(token: string): Promise<AuthSession> {
+  return parseResponse<AuthSession>(response, 'Credenciales inválidas.')
+}export async function getCurrentSession(token: string): Promise<AuthSession> {
   const response = await fetch('/auth/me', {
     headers: { Authorization: `Bearer ${token}` },
   })
@@ -68,4 +67,28 @@ export async function updateRestaurantImage(
     body: JSON.stringify({ image_url: imageUrl }),
   })
   return parseResponse<RestaurantDetail>(response, 'No se pudo actualizar la imagen del restaurante.')
+}
+
+export async function uploadRestaurantImage(
+  restaurantId: number,
+  file: File,
+  token: string,
+): Promise<{ image_base64: string; content_type: string }> {
+  const formData = new FormData()
+  formData.append('image_file', file)
+  const response = await fetch(`/restaurants/${restaurantId}/image`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  return parseResponse(response, 'No se pudo subir la imagen.')
+}
+
+export async function getRestaurantImage(
+  restaurantId: number,
+): Promise<{ data_uri: string; image_url?: string }> {
+  const response = await fetch(`/restaurants/${restaurantId}/image`)
+  if (!response.ok) throw new Error('Sin imagen')
+  const data = await response.json()
+  return { data_uri: data.data_uri, image_url: data.data_uri }
 }

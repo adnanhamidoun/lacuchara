@@ -4,9 +4,9 @@ import { useAuth } from '../../components/auth/AuthContext.jsx'
 
 export default function LoginView() {
   const navigate = useNavigate()
-  const { login } = useAuth()
-  const [email, setEmail] = useState('admin@cuisineaml.com')
-  const [password, setPassword] = useState('admin123456')
+  const { login } = useAuth() as any
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -16,8 +16,13 @@ export default function LoginView() {
     setError('')
 
     try {
-      await login(email, password)
-      navigate('/admin/inscripciones', { replace: true })
+      const result = await login(email, password)
+      if (result.role === 'admin') {
+        navigate('/admin/inscripciones', { replace: true })
+      } else {
+        // Si es restaurante, llevalo al panel
+        navigate('/restaurante/panel', { replace: true })
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión.')
     } finally {

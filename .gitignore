@@ -132,24 +132,11 @@ Thumbs.db
 *.log
 *.pot
 
-# Package managers
-package-lock.json
-yarn.lock
-Pipfile.lock
-
-# ML/Data
-*.joblib
-*.h5
-*.pth
-*.onnx
-*.pb
-data/
-models/
-outputs/
-artifacts/MLmodel/  # Ignore model metadata but keep folder structure
-# Keep .gitkeep files to track empty directories
-!**/.gitkeep
-
+# Archivos de contraseñas u outputs de migración
+*credenciales*
+*contraseñas*
+credenciales_restaurantes.txt
+migrar_restaurantes.py
 # Development
 .mypy_cache/
 .dmypy.json
