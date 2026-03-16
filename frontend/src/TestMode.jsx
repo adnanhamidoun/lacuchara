@@ -146,12 +146,12 @@ function TestMode({ onBack }) {
                 />
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { name: 'is_holiday', label: '🏖️ Festivo' },
-                    { name: 'is_bridge_day', label: '🌉 Puente' },
-                    { name: 'is_rain_service_peak', label: '🌧️ Lluvia Pico' },
-                    { name: 'is_stadium_event', label: '⚽ Estadio' },
-                    { name: 'is_azca_event', label: '🎪 AZCA' },
-                    { name: 'is_payday_week', label: '💰 Cobro' }
+                    { name: 'is_holiday', label: 'Festivo' },
+                    { name: 'is_bridge_day', label: 'Puente' },
+                    { name: 'is_rain_service_peak', label: 'Lluvia Pico' },
+                    { name: 'is_stadium_event', label: 'Estadio' },
+                    { name: 'is_azca_event', label: 'Evento AZCA' },
+                    { name: 'is_payday_week', label: 'Cobro' }
                   ].map(field => (
                     <label key={field.name} className="flex items-center gap-2 cursor-pointer p-3 bg-slate-800/30 rounded-lg border border-purple-400/20 hover:border-purple-300/50 hover:bg-slate-800/50 transition-all">
                       <input
@@ -244,8 +244,8 @@ function TestMode({ onBack }) {
                 </select>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { name: 'opens_weekends', label: '📱 Fines Semana' },
-                    { name: 'has_wifi', label: '📡 Wi-Fi' }
+                    { name: 'opens_weekends', label: 'Fines Semana' },
+                    { name: 'has_wifi', label: 'Wi-Fi' }
                   ].map(field => (
                     <label key={field.name} className="flex items-center gap-2 cursor-pointer p-3 bg-slate-800/30 rounded-lg border border-orange-400/20 hover:border-orange-300/50 hover:bg-slate-800/50 transition-all">
                       <input

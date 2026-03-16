@@ -23,9 +23,9 @@ export default function App() {
   return (
     <MainLayout>
       <Routes>
-        <Route path="/" element={<Navigate to="/cliente/restaurantes" replace />} />
+        <Route path="/" element={<RestaurantsListView />} />
 
-        <Route path="/cliente/restaurantes" element={<RestaurantsListView />} />
+        <Route path="/cliente/restaurantes" element={<Navigate to="/" replace />} />
         <Route
           path="/cliente/restaurantes/:restaurantId/menu"
           element={<MenuView />}
