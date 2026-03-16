@@ -147,7 +147,7 @@ class InferencePipeline:
         No feature expansion or fixed fields - just pass the 8 features as-is.
         
         Args:
-            data: dict with exactly these 8 keys:
+            data: dict with exactly these 9 keys:
                 - day_of_week: int (0-6, Monday=0)
                 - month: int (1-12)
                 - max_temp_c: float
@@ -156,9 +156,10 @@ class InferencePipeline:
                 - restaurant_id: int
                 - cuisine_type: str
                 - restaurant_segment: str
+                - category: str ('starter', 'main', 'dessert')
         
         Returns:
-            pd.DataFrame with 8 columns in the EXACT order expected by menu models
+            pd.DataFrame with 9 columns in the EXACT order expected by menu models
         """
         # Expected column order for menu models (from signature)
         MENU_COLUMNS = [
@@ -170,6 +171,7 @@ class InferencePipeline:
             "restaurant_id",
             "cuisine_type",
             "restaurant_segment",
+            "category",
         ]
         
         # Create minimal row with only these 8 features
@@ -187,7 +189,7 @@ class InferencePipeline:
         row["is_holiday"] = bool(row["is_holiday"])
         row["is_business_day"] = bool(row["is_business_day"])
         row["restaurant_id"] = int(row["restaurant_id"])
-        # cuisine_type and restaurant_segment are already strings
+        # cuisine_type, restaurant_segment, category are already strings
         
         # Create DataFrame with only these 8 columns in EXACT order
         df = pd.DataFrame([row])

@@ -4,6 +4,13 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+try:
+    from azureml.core import Workspace, Model
+    from azureml.core.authentication import ServicePrincipalAuthentication
+    AZURE_ML_AVAILABLE = True
+except ImportError:
+    AZURE_ML_AVAILABLE = False
+
 
 class ModelProvider:
     # Backward-compatible aliases: existing call sites can keep old local ids.
@@ -42,6 +49,51 @@ class ModelProvider:
         self._azure_warning_printed = False
         self._registered_artifact_cache: dict[str, Path] = {}
         self._registered_version_cache: dict[str, str] = {}
+        
+        # Initialize Azure ML workspace with service principal auth
+        self.ws = None
+        if AZURE_ML_AVAILABLE:
+            try:
+                # Load config
+                config_path = Path(__file__).parent.parent.parent / ".azureml" / "config.json"
+                if not config_path.exists():
+                    print(f"⚠️ Azure ML config not found at {config_path}")
+                    return
+                
+                import json
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                
+                # Check for service principal env vars
+                import os
+                tenant_id = os.getenv('AZURE_TENANT_ID')
+                client_id = os.getenv('AZURE_CLIENT_ID')
+                client_secret = os.getenv('AZURE_CLIENT_SECRET')
+                
+                if not all([tenant_id, client_id, client_secret]):
+                    print("⚠️ Azure ML service principal not configured.")
+                    print("Set environment variables: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET")
+                    print("Falling back to local model loading.")
+                    return
+                
+                # Authenticate with service principal
+                auth = ServicePrincipalAuthentication(
+                    tenant_id=tenant_id,
+                    service_principal_id=client_id,
+                    service_principal_password=client_secret
+                )
+                
+                self.ws = Workspace(
+                    subscription_id=config['subscription_id'],
+                    resource_group=config['resource_group'],
+                    workspace_name=config['workspace_name'],
+                    auth=auth
+                )
+                print("✅ Azure ML workspace initialized with service principal")
+                
+            except Exception as e:
+                print(f"❌ Error initializing Azure ML workspace: {e}")
+                print("Falling back to local model loading.")
 
     @staticmethod
     def _default_artifacts_path() -> Path:
@@ -240,22 +292,29 @@ class ModelProvider:
             return self._cache[name]
 
         azure_error: Exception | None = None
-
-        if self.prefer_azure:
+        
+        # Try to load from Azure ML first if available
+        if self.ws and AZURE_ML_AVAILABLE:
             try:
-                model = self._load_model_from_azure(name)
-                self._cache[name] = model
-                print(f"Modelo cargado correctamente: {type(model).__name__}")
-                return model
-            except Exception as exc:
-                azure_error = exc
-                if not self._azure_warning_printed:
-                    print(
-                        "Azure ML no disponible, se intenta fallback local. "
-                        f"Detalle: {type(exc).__name__}: {exc}"
-                    )
-                    self._azure_warning_printed = True
+                model = Model(self.ws, name=name)
+                print(f"📦 Downloading model '{name}' (version {model.version}) from Azure ML workspace")
+                model_path = model.download(target_dir=str(self.artifacts_path), exist_ok=True)
+                print(f"✅ Model downloaded to {model_path}")
 
+                # Load the model from the downloaded file
+                with open(model_path, "rb") as f:
+                    loaded_model = pickle.load(f)
+
+                self._cache[name] = loaded_model
+                print(f"✅ Model loaded from Azure ML: {type(loaded_model).__name__}")
+                return loaded_model
+                
+            except Exception as e:
+                azure_error = e
+                print(f"❌ Error downloading model from Azure ML: {e}")
+                print("Falling back to local loading")
+        
+        # Fallback to local loading
         try:
             model = self._load_model_from_local_artifacts(name)
             self._cache[name] = model

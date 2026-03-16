@@ -100,6 +100,7 @@ Thumbs.db
 *.crt
 .aws/credentials
 .azure/
+.azureml/
 
 # ML Artifacts (if large)
 # Uncomment if storing model weights in repo
