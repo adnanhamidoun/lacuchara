@@ -14,7 +14,8 @@ from .models import (
     FactMenuItems, 
     FactMenus, 
     RestaurantContext, 
-    FactPredictionLog
+    FactPredictionLog,
+    Inscripcion
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "FactMenus",
     "RestaurantContext",
     "FactPredictionLog",
+    "Inscripcion",
 ]
