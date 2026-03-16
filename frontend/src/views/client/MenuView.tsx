@@ -175,12 +175,25 @@ export default function MenuView() {
           }),
         ])
 
+        // Log detailed errors for debugging
         if (!serviceRes.ok) {
-          throw new Error('No se pudo generar la predicción de servicios para este restaurante.')
+          const errorBody = await serviceRes.text()
+          console.error('❌ Error /predict:', {
+            status: serviceRes.status,
+            statusText: serviceRes.statusText,
+            body: errorBody
+          })
+          throw new Error(`No se pudo generar la predicción de servicios (${serviceRes.status}): ${errorBody}`)
         }
 
         if (!starterRes.ok || !mainRes.ok || !dessertRes.ok) {
-          throw new Error('No se pudieron generar las predicciones del menú para este restaurante.')
+          const errors = {
+            starter: !starterRes.ok ? await starterRes.text() : null,
+            main: !mainRes.ok ? await mainRes.text() : null,
+            dessert: !dessertRes.ok ? await dessertRes.text() : null,
+          }
+          console.error('❌ Error endpoints de menú:', errors)
+          throw new Error(`No se pudieron generar las predicciones del menú: ${JSON.stringify(errors)}`)
         }
 
         const [serviceData, starterData, mainData, dessertData] = (await Promise.all([
@@ -201,6 +214,7 @@ export default function MenuView() {
         setMenuPredictions(emptyPredictions)
         setServicePrediction(null)
         const message = err instanceof Error ? err.message : 'No se pudieron obtener las predicciones del restaurante.'
+        console.error('🔴 Error en loadPredictedData:', message)
         if (message.toLowerCase().includes('servicio')) {
           setServiceError(message)
         } else {
