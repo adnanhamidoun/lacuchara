@@ -73,7 +73,6 @@ class Restaurant(Base):
     password_hash = Column(String(255), nullable=True)
     image_url = Column(String(500), nullable=True)
     image_data = Column(LargeBinary, nullable=True)
-
     def __repr__(self):
         return f"<Restaurant(id={self.restaurant_id}, name='{self.name}')>"
 
@@ -363,6 +362,7 @@ class FactMenus(Base):
     menu_id = Column(Integer, primary_key=True)
     restaurant_id = Column(Integer, nullable=False, index=True)
     date_id = Column(Integer, nullable=False)  # YYYYMMDD format
+    includes_drink = Column(Boolean, nullable=False, default=False)
     
     def __repr__(self):
         return f"<FactMenus(menu_id={self.menu_id}, rest_id={self.restaurant_id}, date={self.date_id})>"

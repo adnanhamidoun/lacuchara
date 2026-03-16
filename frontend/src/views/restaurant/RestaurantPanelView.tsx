@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../components/auth/AuthContext.jsx'
+import { uploadRestaurantImage, getRestaurantImage } from '../../services/authService'
 import type { RestaurantDetail } from '../../types/domain'
 
 export default function RestaurantPanelView() {
@@ -16,33 +17,73 @@ export default function RestaurantPanelView() {
   // Variables Menú OCR
   const [menuFile, setMenuFile] = useState<File | null>(null)
   const [ocrLoading, setOcrLoading] = useState(false)
-  const [menuData, setMenuData] = useState({ starter: '', main: '', dessert: '' })
+  const [menuData, setMenuData] = useState({ starter: '', main: '', dessert: '', includes_drink: false })
   const [ocrMessage, setOcrMessage] = useState('')
   const [ocrError, setOcrError] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
+  const [loadingTodayMenu, setLoadingTodayMenu] = useState(false)
+  const [hasTodayMenu, setHasTodayMenu] = useState(false)
+
+  type TodayMenuResponse = {
+    starter: string | null
+    main: string | null
+    dessert: string | null
+    includes_drink: boolean
+  }
 
   useEffect(() => {
     const loadRestaurant = async () => {
       if (!session?.restaurant_id) return
       try {
         // Cargar imagen desde el nuevo endpoint
-        const response = await fetch(`/restaurants/${session.restaurant_id}/image`)
-        if (response.ok) {
-          const data = await response.json()
-          setPreviewUrl(data.data_uri)
-        } else {
-          // Si no hay imagen, usar placeholder
-          setPreviewUrl('https://placehold.co/400x240?text=Restaurante')
-        }
+        const data = await getRestaurantImage(session.restaurant_id)
+        setPreviewUrl(data.image_url || '')
       } catch (err) {
+        // Si falla, usar placeholder
         setPreviewUrl('https://placehold.co/400x240?text=Restaurante')
       }
     }
 
     loadRestaurant()
   }, [session?.restaurant_id])
+
+  useEffect(() => {
+    const loadTodayMenu = async () => {
+      if (activeTab !== 'ocr' || !session?.restaurant_id) return
+
+      setLoadingTodayMenu(true)
+      try {
+        const response = await fetch(`/restaurants/${session.restaurant_id}/menu/today`)
+        if (!response.ok) {
+          setHasTodayMenu(false)
+          if (response.status === 404) {
+            setOcrMessage('')
+            setOcrError('')
+          }
+          return
+        }
+
+        const data = (await response.json()) as TodayMenuResponse
+        setMenuData({
+          starter: data.starter ?? '',
+          main: data.main ?? '',
+          dessert: data.dessert ?? '',
+          includes_drink: Boolean(data.includes_drink),
+        })
+        setHasTodayMenu(true)
+        setOcrMessage('Menú de hoy cargado. Puedes editarlo y volver a publicarlo.')
+        setOcrError('')
+      } catch {
+        setHasTodayMenu(false)
+      } finally {
+        setLoadingTodayMenu(false)
+      }
+    }
+
+    loadTodayMenu()
+  }, [activeTab, session?.restaurant_id])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -56,26 +97,20 @@ export default function RestaurantPanelView() {
     setError('')
 
     try {
-      const formData = new FormData()
-      formData.append('image_file', selectedFile)
-
-      const response = await fetch(`/restaurants/${session.restaurant_id}/image`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${session.token}`
-        },
-        body: formData
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Error al subir la imagen.')
-      }
-
-      const data = await response.json()
-      setPreviewUrl(data.data_uri)
+      // Usar el nuevo endpoint de subida a Azure Blob Storage
+      const result = await uploadRestaurantImage(
+        session.restaurant_id,
+        selectedFile,
+        session.token
+      )
+      
+      // Obtener la URL actualizada de la imagen
+      const imageData = await getRestaurantImage(session.restaurant_id)
+      setPreviewUrl(imageData.image_url || '')
+      
       setMessage('Imagen actualizada correctamente.')
       setSelectedFile(null)
+      
       // Limpiar input
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
       if (fileInput) fileInput.value = ''
@@ -97,7 +132,7 @@ export default function RestaurantPanelView() {
 
     try {
       // Usar la ruta correcta con /api si corresponde, o en localhost
-      const response = await fetch('http://localhost:8000/extract-menu-sections', {
+      const response = await fetch('/ocr/menu-sections', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session?.token}`
@@ -108,11 +143,12 @@ export default function RestaurantPanelView() {
       if (!response.ok) throw new Error('Fallo al procesar OCR.')
       
       const data = await response.json()
-      // Adaptado al response_model=MenuOCRSectionsResponse de API FastAPI
+      const menu = data.extracted_menu
       setMenuData({
-        starter: data.extracted_menu?.starter?.join(', ') || '',
-        main: data.extracted_menu?.main?.join(', ') || '',
-        dessert: data.extracted_menu?.dessert?.join(', ') || ''
+        starter: menu?.starter_options?.length ? menu.starter_options.join('; ') : (menu?.starter || ''),
+        main: menu?.main_options?.length ? menu.main_options.join('; ') : (menu?.main || ''),
+        dessert: menu?.dessert_options?.length ? menu.dessert_options.join('; ') : (menu?.dessert || ''),
+        includes_drink: menuData.includes_drink,
       })
       setOcrMessage('¡Menú detectado con éxito! Revisa y guarda.')
     } catch (err) {
@@ -127,7 +163,7 @@ export default function RestaurantPanelView() {
     setSuccess('');
     setError('');
 
-    const restaurantId = session?.user?.restaurant_id;
+    const restaurantId = session?.restaurant_id;
 
     if (!restaurantId) {
       setError('Sesión no válida para guardar menú.');
@@ -136,14 +172,14 @@ export default function RestaurantPanelView() {
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/restaurants/${restaurantId}/menu`, {
+      const response = await fetch(`/restaurants/${restaurantId}/menu`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(menuData),
       });
 
       if (!response.ok) throw new Error('Error al publicar el menú');
-      
+
       setSuccess('¡Menú del día publicado con éxito!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -159,7 +195,6 @@ export default function RestaurantPanelView() {
 
     const reader = new FileReader()
     reader.onloadend = () => {
-      setImageUrl(reader.result as string)
       setPreviewUrl(reader.result as string)
     }
     reader.readAsDataURL(file)
@@ -238,6 +273,10 @@ export default function RestaurantPanelView() {
       <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
         <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
            <h3 className="font-semibold text-[var(--text)] mb-2">Paso 1: Sube la foto de tu menú físico</h3>
+            {loadingTodayMenu ? <p className="text-xs text-[var(--text-muted)]">Comprobando menú actual...</p> : null}
+            {!loadingTodayMenu && hasTodayMenu ? (
+             <p className="text-xs text-[var(--text-muted)]">Ya existe un menú de hoy. Si subes OCR, reemplazará los campos para editar.</p>
+            ) : null}
            <input
               type="file"
               accept="image/*,.pdf"
@@ -262,7 +301,7 @@ export default function RestaurantPanelView() {
                value={menuData.starter}
                onChange={(e) => setMenuData({...menuData, starter: e.target.value})}
                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[#E07B54]" 
-               rows={2} placeholder="Ej: Ensalada Mixta, Sopa..." 
+               rows={2} placeholder="Ej: Ensalada Mixta; Sopa..." 
              />
            </div>
            <div className="space-y-2">
@@ -271,7 +310,7 @@ export default function RestaurantPanelView() {
                value={menuData.main}
                onChange={(e) => setMenuData({...menuData, main: e.target.value})}
                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[#E07B54]" 
-               rows={2} placeholder="Ej: Entrecot al horno, Paella..."
+               rows={2} placeholder="Ej: Entrecot al horno; Paella..."
              />
            </div>
            <div className="space-y-2">
@@ -280,9 +319,19 @@ export default function RestaurantPanelView() {
                value={menuData.dessert}
                onChange={(e) => setMenuData({...menuData, dessert: e.target.value})}
                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[#E07B54]" 
-               rows={2} placeholder="Ej: Tarta de Queso, Flan..."
+               rows={2} placeholder="Ej: Tarta de Queso; Flan..."
              />
            </div>
+
+           <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]">
+             <input
+               type="checkbox"
+               checked={menuData.includes_drink}
+               onChange={(e) => setMenuData({ ...menuData, includes_drink: e.target.checked })}
+               className="h-4 w-4 rounded border-[var(--border)] accent-[#E07B54]"
+             />
+             Incluye bebida
+           </label>
 
           {ocrMessage && <p className="text-sm font-semibold text-[#2E7D32] bg-[#4CAF50]/15 p-2 rounded-lg">{ocrMessage}</p>}
           {ocrError && <p className="text-sm font-semibold text-[#E53935] bg-[#E53935]/15 p-2 rounded-lg">{ocrError}</p>}
@@ -292,7 +341,7 @@ export default function RestaurantPanelView() {
               <button
                 onClick={() => {
                   setMenuFile(null)
-                  setMenuData({ starter: '', main: '', dessert: '' })
+                  setMenuData({ starter: '', main: '', dessert: '', includes_drink: false })
                 }}
                 className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >

@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 import holidays
 import requests
@@ -666,6 +667,7 @@ class DailyMenuRequest(BaseModel):
     starter: str | None = None
     main: str | None = None
     dessert: str | None = None
+    includes_drink: bool = False
 
 class DailyMenuResponse(BaseModel):
     menu_id: int
@@ -674,6 +676,8 @@ class DailyMenuResponse(BaseModel):
     starter: str | None
     main: str | None
     dessert: str | None
+    includes_drink: bool = False
+    menu_price: float | None = None
 
 
 def _extract_bearer_token(authorization: str | None) -> str | None:
@@ -862,6 +866,7 @@ def _ensure_auth_columns_exist() -> None:
         "IF COL_LENGTH('dbo.inscripciones', 'login_email') IS NULL ALTER TABLE dbo.inscripciones ADD login_email NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.inscripciones', 'password_hash') IS NULL ALTER TABLE dbo.inscripciones ADD password_hash NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.inscripciones', 'image_url') IS NULL ALTER TABLE dbo.inscripciones ADD image_url NVARCHAR(500) NULL;",
+        "IF COL_LENGTH('dbo.fact_menus', 'includes_drink') IS NULL ALTER TABLE dbo.fact_menus ADD includes_drink BIT NOT NULL DEFAULT (0);",
     ]
     with engine.begin() as connection:
         for statement in statements:
@@ -1685,64 +1690,374 @@ async def delete_restaurant(
     db.commit()
     return {"message": "Restaurante eliminado correctamente"}
 
+def _split_course_items(raw_value: str | None) -> list[str]:
+    if not raw_value:
+        return []
+    return [item.strip() for item in raw_value.split(';') if item and item.strip()]
+
+
+def _canonical_course(course_type: str | None) -> str:
+    normalized = (course_type or '').strip().lower()
+    if normalized in {'starter', 'first_course', 'primero', 'primeros', 'entrante', 'entrantes'}:
+        return 'starter'
+    if normalized in {'main', 'second_course', 'segundo', 'segundos', 'principal', 'principales'}:
+        return 'main'
+    if normalized in {'dessert', 'postre', 'postres'}:
+        return 'dessert'
+    return normalized
+
+
+def _ensure_calendar_date(db: Session, service_date: date) -> int:
+    existing = db.execute(
+        text(
+            """
+            SELECT TOP 1 date_id
+            FROM dim_calendar
+            WHERE service_date = :service_date
+            """
+        ),
+        {"service_date": service_date},
+    ).scalar()
+
+    if existing is not None:
+        return int(existing)
+
+    date_id = int(service_date.strftime('%Y%m%d'))
+    db.execute(
+        text(
+            """
+            INSERT INTO dim_calendar (
+                date_id, service_date, day_of_week, month,
+                max_temp_c, precipitation_mm,
+                is_holiday, is_bridge_day, is_business_day,
+                is_rain_service_peak, is_stadium_event, is_azca_event, is_payday_week
+            )
+            VALUES (
+                :date_id, :service_date, :day_of_week, :month,
+                NULL, NULL,
+                0, 0, :is_business_day,
+                0, 0, 0, :is_payday_week
+            )
+            """
+        ),
+        {
+            "date_id": date_id,
+            "service_date": service_date,
+            "day_of_week": service_date.weekday(),
+            "month": service_date.month,
+            "is_business_day": 1 if service_date.weekday() < 5 else 0,
+            "is_payday_week": 1 if service_date.day <= 7 else 0,
+        },
+    )
+    return date_id
+
+
+def _fact_menus_has_includes_drink(db: Session) -> bool:
+    exists = db.execute(
+        text(
+            """
+            SELECT TOP 1 1
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'fact_menus'
+              AND COLUMN_NAME = 'includes_drink'
+            """
+        )
+    ).first()
+    return exists is not None
+
+
+def _fact_menu_items_has_target_rating(db: Session) -> bool:
+    exists = db.execute(
+        text(
+            """
+            SELECT TOP 1 1
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'fact_menu_items'
+              AND COLUMN_NAME = 'target_rating'
+            """
+        )
+    ).first()
+    return exists is not None
+
+
+def _current_service_date() -> date:
+    return datetime.now(ZoneInfo("Europe/Madrid")).date()
+
+
+def _ensure_prediction_engine_loaded() -> bool:
+    global prediction_engine
+    if prediction_engine is not None:
+        return True
+    try:
+        prediction_engine = PredictionEngine()
+        logger.info("✅ Motor de predicción inicializado (lazy)")
+        return True
+    except Exception as engine_error:
+        logger.error(f"❌ No se pudo inicializar PredictionEngine (lazy): {str(engine_error)}", exc_info=True)
+        prediction_engine = None
+        return False
+
+
+def _ensure_unified_menu_model_loaded(app: FastAPI) -> bool:
+    if hasattr(app.state, "model") and app.state.model is not None:
+        return True
+    try:
+        model_path = Path(__file__).parent.parent / "azca" / "artifacts" / "AzcaMenuModel.pkl"
+        with open(model_path, "rb") as f:
+            app.state.model = pickle.load(f)
+        logger.info(f"✅ Modelo unificado cargado (lazy): {model_path}")
+        return True
+    except Exception as model_error:
+        logger.error(f"❌ Error cargando AzcaMenuModel.pkl (lazy): {str(model_error)}", exc_info=True)
+        return False
+
+
 @app.post(
     "/restaurants/{restaurant_id}/menu",
     response_model=DailyMenuResponse,
-    summary="Publicar Menú del Día",
+    summary="Publicar Men? del D?a",
     tags=["Restaurants"],
 )
 async def post_daily_menu(
-    restaurant_id: int, 
+    restaurant_id: int,
     payload: DailyMenuRequest,
-    db: Session = Depends(get_db)):
-    """Guarda el menú del día subido por el restaurante."""
-    from ..db.models import DailyMenu
+    db: Session = Depends(get_db),
+):
+    """Guarda el men? del d?a en fact_menus + fact_menu_items + dim_dishes."""
     try:
-        today = datetime.utcnow().date()
-        db.query(DailyMenu).filter(
-            DailyMenu.restaurant_id == restaurant_id, 
-            DailyMenu.date == today
-        ).delete()
-        
-        new_menu = DailyMenu(
+        today = _current_service_date()
+        date_id = _ensure_calendar_date(db, today)
+
+        restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+        if not restaurant:
+            raise HTTPException(status_code=404, detail="Restaurante no encontrado.")
+
+        existing = db.execute(
+            text(
+                """
+                SELECT TOP 1 menu_id
+                FROM fact_menus
+                WHERE restaurant_id = :restaurant_id
+                  AND date_id = :date_id
+                ORDER BY menu_id DESC
+                """
+            ),
+            {"restaurant_id": restaurant_id, "date_id": date_id},
+        ).mappings().first()
+
+        if existing:
+            existing_menu_id = int(existing["menu_id"])
+            db.execute(text("DELETE FROM fact_menu_items WHERE menu_id = :menu_id"), {"menu_id": existing_menu_id})
+            db.execute(text("DELETE FROM fact_menus WHERE menu_id = :menu_id"), {"menu_id": existing_menu_id})
+
+        has_includes_drink = _fact_menus_has_includes_drink(db)
+
+        if has_includes_drink:
+            menu_id = int(
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO fact_menus (date_id, restaurant_id, includes_drink)
+                        OUTPUT inserted.menu_id
+                        VALUES (:date_id, :restaurant_id, :includes_drink)
+                        """
+                    ),
+                    {
+                        "date_id": date_id,
+                        "restaurant_id": restaurant_id,
+                        "includes_drink": 1 if payload.includes_drink else 0,
+                    },
+                ).scalar_one()
+            )
+        else:
+            menu_id = int(
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO fact_menus (date_id, restaurant_id)
+                        OUTPUT inserted.menu_id
+                        VALUES (:date_id, :restaurant_id)
+                        """
+                    ),
+                    {
+                        "date_id": date_id,
+                        "restaurant_id": restaurant_id,
+                    },
+                ).scalar_one()
+            )
+
+        has_target_rating = _fact_menu_items_has_target_rating(db)
+
+        course_groups = {
+            'starter': _split_course_items(payload.starter),
+            'main': _split_course_items(payload.main),
+            'dessert': _split_course_items(payload.dessert),
+        }
+
+        for course_type, dishes in course_groups.items():
+            for dish_name in dishes:
+                existing_dish = db.execute(
+                    text(
+                        """
+                        SELECT TOP 1 dish_id
+                        FROM dim_dishes
+                        WHERE LOWER(course_type) = :course_type
+                          AND LOWER(dish_name) = :dish_name
+                        """
+                    ),
+                    {
+                        "course_type": course_type,
+                        "dish_name": dish_name.lower(),
+                    },
+                ).scalar()
+
+                if existing_dish is not None:
+                    dish_id = int(existing_dish)
+                else:
+                    dish_id = int(
+                        db.execute(
+                            text(
+                                """
+                                INSERT INTO dim_dishes (course_type, dish_name)
+                                OUTPUT inserted.dish_id
+                                VALUES (:course_type, :dish_name)
+                                """
+                            ),
+                            {
+                                "course_type": course_type,
+                                "dish_name": dish_name,
+                            },
+                        ).scalar_one()
+                    )
+
+                if has_target_rating:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO fact_menu_items (menu_id, dish_id, target_rating)
+                            VALUES (:menu_id, :dish_id, NULL)
+                            """
+                        ),
+                        {
+                            "menu_id": menu_id,
+                            "dish_id": dish_id,
+                        },
+                    )
+                else:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO fact_menu_items (menu_id, dish_id)
+                            VALUES (:menu_id, :dish_id)
+                            """
+                        ),
+                        {
+                            "menu_id": menu_id,
+                            "dish_id": dish_id,
+                        },
+                    )
+
+        db.commit()
+
+        return DailyMenuResponse(
+            menu_id=menu_id,
             restaurant_id=restaurant_id,
             date=today,
-            starter=payload.starter,
-            main=payload.main,
-            dessert=payload.dessert
+            starter='; '.join(course_groups['starter']) if course_groups['starter'] else None,
+            main='; '.join(course_groups['main']) if course_groups['main'] else None,
+            dessert='; '.join(course_groups['dessert']) if course_groups['dessert'] else None,
+            includes_drink=bool(payload.includes_drink),
+            menu_price=restaurant.menu_price,
         )
-        db.add(new_menu)
-        db.commit()
-        db.refresh(new_menu)
-        return new_menu
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error guardando menú: {e}")
-        raise HTTPException(status_code=500, detail="No se pudo publicar el menú.")
+        logger.error(f"Error guardando men?: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="No se pudo publicar el men?.")
 
 
 @app.get(
     "/restaurants/{restaurant_id}/menu/today",
     response_model=DailyMenuResponse,
-    summary="Obtener el Menú del Día actual del restaurante",
+    summary="Obtener el Men? del D?a actual del restaurante",
     tags=["Restaurants"],
 )
 async def get_daily_menu(restaurant_id: int, db: Session = Depends(get_db)):
-    from ..db.models import DailyMenu
-    today = datetime.utcnow().date()
-    menu = db.query(DailyMenu).filter(
-        DailyMenu.restaurant_id == restaurant_id, 
-        DailyMenu.date == today
-    ).order_by(DailyMenu.created_at.desc()).first()
-    
-    if not menu:
-        raise HTTPException(status_code=404, detail="Menú del día no disponible.")
-    return menu
+    today = _current_service_date()
+    date_id = _ensure_calendar_date(db, today)
 
+    has_includes_drink = _fact_menus_has_includes_drink(db)
+    if has_includes_drink:
+        row = db.execute(
+            text(
+                """
+                SELECT TOP 1 menu_id, restaurant_id, date_id, includes_drink
+                FROM fact_menus
+                WHERE restaurant_id = :restaurant_id
+                  AND date_id = :date_id
+                ORDER BY menu_id DESC
+                """
+            ),
+            {"restaurant_id": restaurant_id, "date_id": date_id},
+        ).mappings().first()
+    else:
+        row = db.execute(
+            text(
+                """
+                SELECT TOP 1 menu_id, restaurant_id, date_id, CAST(0 AS BIT) AS includes_drink
+                FROM fact_menus
+                WHERE restaurant_id = :restaurant_id
+                  AND date_id = :date_id
+                ORDER BY menu_id DESC
+                """
+            ),
+            {"restaurant_id": restaurant_id, "date_id": date_id},
+        ).mappings().first()
 
-# ============================================================================
-# FUNCIONES AUXILIARES PARA CÁLCULO AUTOMÁTICO
-# ============================================================================
+    if not row:
+        raise HTTPException(status_code=404, detail="Men? del d?a no disponible.")
+
+    dishes_rows = db.execute(
+        text(
+            """
+            SELECT d.course_type, d.dish_name
+            FROM fact_menu_items fmi
+            JOIN dim_dishes d ON d.dish_id = fmi.dish_id
+            WHERE fmi.menu_id = :menu_id
+            ORDER BY d.dish_id ASC
+            """
+        ),
+        {"menu_id": int(row['menu_id'])},
+    ).mappings().all()
+
+    menu_price = db.execute(
+        text(
+            """
+            SELECT TOP 1 menu_price
+            FROM dim_restaurants
+            WHERE restaurant_id = :restaurant_id
+            """
+        ),
+        {"restaurant_id": restaurant_id},
+    ).scalar()
+
+    buckets: dict[str, list[str]] = {'starter': [], 'main': [], 'dessert': []}
+    for dish in dishes_rows:
+        key = _canonical_course(str(dish['course_type'] or ''))
+        if key in buckets:
+            buckets[key].append(str(dish['dish_name']).strip())
+
+    return DailyMenuResponse(
+        menu_id=int(row['menu_id']),
+        restaurant_id=int(row['restaurant_id']),
+        date=today,
+        starter='; '.join(buckets['starter']) if buckets['starter'] else None,
+        main='; '.join(buckets['main']) if buckets['main'] else None,
+        dessert='; '.join(buckets['dessert']) if buckets['dessert'] else None,
+        includes_drink=bool(row.get('includes_drink')),
+        menu_price=float(menu_price) if menu_price is not None else None,
+    )
 
 def get_weather_data(service_date: date, cache: CacheManager = None) -> dict:
     """
@@ -2569,7 +2884,7 @@ async def create_prediction(
     global prediction_engine
 
     # Validación: Motor cargado
-    if prediction_engine is None:
+    if not _ensure_prediction_engine_loaded():
         logger.error("Motor de predicción no inicializado")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -2753,7 +3068,7 @@ async def predict_starter(
         StarterPredictionResponse: Top 3 starters con scores de probabilidad
     """
     # Acceder al modelo desde app.state (cargado en lifespan)
-    if not hasattr(http_request.app.state, "model") or http_request.app.state.model is None:
+    if not _ensure_unified_menu_model_loaded(http_request.app):
         logger.error("Modelo no cargado en app.state")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -2938,7 +3253,7 @@ async def predict_main(
         MainPredictionResponse: Top 3 platos principales con scores
     """
     # Acceder al modelo desde app.state (cargado en lifespan)
-    if not hasattr(http_request.app.state, "model") or http_request.app.state.model is None:
+    if not _ensure_unified_menu_model_loaded(http_request.app):
         logger.error("Modelo no cargado en app.state")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -3121,7 +3436,7 @@ async def predict_dessert(
         DessertPredictionResponse: Top 3 postres con scores
     """
     # Acceder al modelo desde app.state (cargado en lifespan)
-    if not hasattr(http_request.app.state, "model") or http_request.app.state.model is None:
+    if not _ensure_unified_menu_model_loaded(http_request.app):
         logger.error("Modelo no cargado en app.state")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

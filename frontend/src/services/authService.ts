@@ -68,3 +68,27 @@ export async function updateRestaurantImage(
   })
   return parseResponse<RestaurantDetail>(response, 'No se pudo actualizar la imagen del restaurante.')
 }
+
+export async function uploadRestaurantImage(
+  restaurantId: number,
+  file: File,
+  token: string,
+): Promise<{ image_base64: string; content_type: string }> {
+  const formData = new FormData()
+  formData.append('image_file', file)
+  const response = await fetch(`/restaurants/${restaurantId}/image`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  return parseResponse(response, 'No se pudo subir la imagen.')
+}
+
+export async function getRestaurantImage(
+  restaurantId: number,
+): Promise<{ data_uri: string; image_url?: string }> {
+  const response = await fetch(`/restaurants/${restaurantId}/image`)
+  if (!response.ok) throw new Error('Sin imagen')
+  const data = await response.json()
+  return { data_uri: data.data_uri, image_url: data.data_uri }
+}

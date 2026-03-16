@@ -5,8 +5,8 @@ import { useAuth } from '../../components/auth/AuthContext.jsx'
 export default function LoginView() {
   const navigate = useNavigate()
   const { login } = useAuth() as any
-  const [email, setEmail] = useState('admin@cuisineaml.com')
-  const [password, setPassword] = useState('admin123456')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
