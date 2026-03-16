@@ -19,7 +19,7 @@ import pickle
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Literal
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import holidays
 import requests
@@ -1824,7 +1824,15 @@ def _fact_menu_items_has_target_rating(db: Session) -> bool:
 
 
 def _current_service_date() -> date:
-    return datetime.now(ZoneInfo("Europe/Madrid")).date()
+    try:
+        return datetime.now(ZoneInfo("Europe/Madrid")).date()
+    except ZoneInfoNotFoundError:
+        # Windows environments may miss IANA tz data if tzdata is not installed.
+        logger.warning(
+            "Europe/Madrid timezone not found; falling back to system local date. "
+            "Install tzdata in the Python environment to restore IANA timezone support."
+        )
+        return datetime.now().date()
 
 
 def _ensure_prediction_engine_loaded() -> bool:
