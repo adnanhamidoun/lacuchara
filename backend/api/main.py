@@ -11,11 +11,24 @@ Endpoints:
     GET /docs: Documentación automática (Swagger)
 """
 
+# ============================================================================
+# CARGAR .ENV AL INICIO
+# ============================================================================
+import sys
+from pathlib import Path
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent.parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    pass
+
 import json
 import logging
 import os
 import pickle
-import base64
+import unicodedata
 from contextlib import asynccontextmanager
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -26,6 +39,7 @@ import holidays
 import requests
 from fastapi import FastAPI, Depends, HTTPException, status, Request, UploadFile, File, Form, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, distinct, or_, text
 from pydantic import BaseModel, Field
@@ -46,6 +60,7 @@ from ..db import (
     RestaurantContext,
     FactPredictionLog,
     Inscripcion,
+    User,
     SEGMENT_OPTIONS,
     TERRACE_OPTIONS,
     CUISINE_OPTIONS,
@@ -55,7 +70,11 @@ from ..core.menu_intelligence import (
     MenuMLPredictor,
     MenuSectionExtractor,
 )
-from ..core.auth import create_access_token, decode_access_token
+from ..core.auth import create_access_token, decode_access_token, verify_password, hash_password
+from ..core.blob_storage import (
+    get_blob_manager,
+    get_default_image_url,
+)
 
 # Importar PredictionEngine - pero con fallback si falta
 try:
@@ -512,12 +531,10 @@ class HealthResponse(BaseModel):
 class RestaurantItem(BaseModel):
     """
     Modelo de respuesta para un restaurante individual (lista).
+    Solo incluye ID y nombre para la lista.
     """
     restaurant_id: int = Field(..., description="ID único del restaurante")
     name: str = Field(..., description="Nombre del restaurante")
-    capacity_limit: int | None = Field(None, description="Límite de capacidad")
-    cuisine_type: str | None = Field(None, description="Tipo de cocina")
-    image_url: str | None = Field(None, description="URL de imagen pública del restaurante")
 
     class Config:
         from_attributes = True
@@ -545,6 +562,43 @@ class RestaurantDetailItem(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class RestaurantUpdateRequest(BaseModel):
+    name: str | None = Field(None, description="Nombre del restaurante")
+    capacity_limit: int | None = Field(None, description="Límite de capacidad", ge=1)
+    table_count: int | None = Field(None, description="Cantidad de mesas", ge=1)
+    min_service_duration: int | None = Field(None, description="Duración mínima de servicio", ge=1)
+    terrace_setup_type: Literal[
+        "yearround",
+        "summer",
+        "none",
+    ] | None = Field(None, description="Tipo de terraza")
+    opens_weekends: bool | None = Field(None, description="Abre fines de semana")
+    has_wifi: bool | None = Field(None, description="Tiene WiFi")
+    restaurant_segment: Literal[
+        "gourmet",
+        "traditional",
+        "business",
+        "family",
+    ] | None = Field(None, description="Segmento del restaurante")
+    menu_price: float | None = Field(None, description="Precio del menú", ge=0)
+    dist_office_towers: int | None = Field(None, description="Distancia a oficinas", ge=0)
+    google_rating: float | None = Field(None, description="Valoración de Google", ge=0, le=5)
+    cuisine_type: Literal[
+        "grill",
+        "spanish",
+        "mediterranean",
+        "stew",
+        "fried",
+        "italian",
+        "asian",
+        "latin",
+        "arabic",
+        "avantgarde",
+        "plantbased",
+        "streetfood",
+    ] | None = Field(None, description="Tipo de cocina")
 
 
 class RestaurantsListResponse(BaseModel):
@@ -592,10 +646,8 @@ class InscripcionCreateRequest(BaseModel):
         "plantbased",
         "streetfood",
     ] | None = Field(None, description="Tipo de cocina")
-    image_url: str | None = Field(None, description="URL de la imagen del restaurante")
-    google_maps_link: str = Field(..., description="URL de Google Maps", min_length=1)
-    login_email: str | None = Field(None, description="Email de acceso para el dueño")
-    password: str | None = Field(None, description="Contraseña en texto plano para encriptar")
+    image_url: str | None = Field(None, description="URL inicial de imagen del restaurante")
+    google_maps_link: str = Field(..., description="Link de reseñas/Google Maps (obligatorio)", min_length=5)
 
 
 class InscripcionItem(BaseModel):
@@ -647,6 +699,24 @@ class ClearApprovalHistoryResponse(BaseModel):
     message: str
 
 
+class DailyMenuRequest(BaseModel):
+    starter: str | list[str] | None = None
+    main: str | list[str] | None = None
+    dessert: str | list[str] | None = None
+    includes_drink: bool = False
+
+
+class DailyMenuResponse(BaseModel):
+    menu_id: int
+    restaurant_id: int
+    date: date
+    starter: str | None = None
+    main: str | None = None
+    dessert: str | None = None
+    includes_drink: bool = False
+    menu_price: float | None = None
+
+
 class LoginRequest(BaseModel):
     email: str = Field(..., min_length=3)
     password: str = Field(..., min_length=3)
@@ -663,21 +733,32 @@ class AuthUserResponse(BaseModel):
 class RestaurantImageUpdateRequest(BaseModel):
     image_url: str = Field(..., min_length=5)
 
-class DailyMenuRequest(BaseModel):
-    starter: str | None = None
-    main: str | None = None
-    dessert: str | None = None
-    includes_drink: bool = False
 
-class DailyMenuResponse(BaseModel):
-    menu_id: int
+class UserCreateRequest(BaseModel):
+    restaurant_id: int = Field(..., description="0 para admin, >0 para restaurante")
+    email: str = Field(..., min_length=3)
+    password: str = Field(..., min_length=6)
+    role: Literal["admin", "restaurant_owner"] = "restaurant_owner"
+
+
+class UserUpdateRequest(BaseModel):
+    is_active: bool | None = None
+    role: Literal["admin", "restaurant_owner"] | None = None
+    email: str | None = None
+
+
+class UserResetPasswordRequest(BaseModel):
+    new_password: str = Field(..., min_length=6)
+
+
+class UserAdminResponse(BaseModel):
+    user_id: int
     restaurant_id: int
-    date: date
-    starter: str | None
-    main: str | None
-    dessert: str | None
-    includes_drink: bool = False
-    menu_price: float | None = None
+    email: str
+    is_active: bool
+    role: str
+    created_at: datetime | None = None
+    restaurant_name: str | None = None
 
 
 def _extract_bearer_token(authorization: str | None) -> str | None:
@@ -694,6 +775,14 @@ def _require_auth(authorization: str | None) -> dict:
     payload = decode_access_token(token) if token else None
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión no válida.")
+    return payload
+
+
+def _require_admin_auth(authorization: str | None) -> dict:
+    """Requiere que el usuario sea admin (restaurant_id=0)"""
+    payload = _require_auth(authorization)
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión no válida para administrador.")
     return payload
 
 
@@ -866,7 +955,12 @@ def _ensure_auth_columns_exist() -> None:
         "IF COL_LENGTH('dbo.inscripciones', 'login_email') IS NULL ALTER TABLE dbo.inscripciones ADD login_email NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.inscripciones', 'password_hash') IS NULL ALTER TABLE dbo.inscripciones ADD password_hash NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.inscripciones', 'image_url') IS NULL ALTER TABLE dbo.inscripciones ADD image_url NVARCHAR(500) NULL;",
-        "IF COL_LENGTH('dbo.fact_menus', 'includes_drink') IS NULL ALTER TABLE dbo.fact_menus ADD includes_drink BIT NOT NULL DEFAULT (0);",
+        """
+        IF COL_LENGTH('dbo.fact_menus', 'includes_drink') IS NULL
+        BEGIN
+            ALTER TABLE dbo.fact_menus ADD includes_drink BIT NOT NULL DEFAULT (0);
+        END
+        """,
     ]
     with engine.begin() as connection:
         for statement in statements:
@@ -925,29 +1019,42 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Error conectando BD: {str(db_error)}", exc_info=True)
         raise
     
-    # 3. Inicializar el motor de predicción (lazy-loading para evitar crashes en Windows)
+    # 3. Inicializar el motor de predicción
     try:
-        app.state.prediction_engine = None  # Se cargará bajo demanda
-        logger.info(f"✅ Motor de predicción configurado (lazy-loading)")
+        prediction_engine = PredictionEngine()
+        logger.info(f"✅ Motor de predicción inicializado")
     except Exception as engine_error:
         logger.warning(f"⚠️  Motor de predicción no disponible: {str(engine_error)[:100]}")
-        app.state.prediction_engine = None
+        prediction_engine = None  # Permitirá fallback con mock en endpoints
     
-    # 4. Cargar modelo pickle en memoria (OPTIMIZACIÓN CLAVE - lazy-loading para Windows)
+    # 4. Cargar modelo pickle en memoria (OPTIMIZACIÓN CLAVE)
     try:
-        app.state.model = None  # Se cargará bajo demanda
-        logger.info(f"📦 Modelo configurado para lazy-loading")
+        artifacts_path = Path(__file__).parent.parent / "azca" / "artifacts"
+        model_path = artifacts_path / "AzcaMenuModel.pkl"
         
+        logger.info(f"📦 Cargando modelo desde: {model_path}")
+        
+        with open(model_path, "rb") as f:
+            model = pickle.load(f)
+        
+        app.state.model = model
+        logger.info(f"✅ Modelo cargado en memoria (app.state.model)")
+        logger.info(f"   Tipo de modelo: {type(model).__name__}")
+        
+    except FileNotFoundError:
+        logger.error(f"❌ Modelo no encontrado en {model_path}")
+        raise
     except Exception as model_error:
-        logger.error(f"❌ Error configurando modelo: {str(model_error)}", exc_info=True)
+        logger.error(f"❌ Error cargando modelo: {str(model_error)}", exc_info=True)
+        raise
     
-    # 5. Inicializar caché en memoria (clima y calendario) - Lazy loading en Windows
+    # 5. Inicializar caché en memoria (clima y calendario)
     try:
-        app.state.cache = None  # Se cargará bajo demanda si es necesario
-        logger.info(f"✅ Caché configurado (lazy-loading)")
+        app.state.cache = CacheManager(ttl_minutes=20)
+        logger.info(f"✅ Caché en memoria inicializado")
     except Exception as cache_error:
-        logger.warning(f"⚠️  Caché no disponible: {str(cache_error)}", exc_info=True)
-        app.state.cache = None
+        logger.error(f"❌ Error inicializando caché: {str(cache_error)}", exc_info=True)
+        raise
     
     logger.info("🎯 Aplicación lista para servir predicciones")
     
@@ -983,6 +1090,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 # ============================================================================
@@ -1067,10 +1178,7 @@ async def get_restaurants(db: Session = Depends(get_db)):
             restaurants=[
                 RestaurantItem(
                     restaurant_id=r.restaurant_id,
-                    name=r.name,
-                    capacity_limit=r.capacity_limit,
-                    cuisine_type=r.cuisine_type,
-                    image_url=r.image_url
+                    name=r.name
                 )
                 for r in restaurants
             ]
@@ -1124,6 +1232,73 @@ async def get_restaurant_detail(restaurant_id: int, db: Session = Depends(get_db
         )
 
 
+@app.get(
+    "/restaurants/{restaurant_id}/image",
+    summary="Obtener URL de imagen del restaurante",
+    tags=["Data"],
+    response_model=dict,
+)
+async def get_restaurant_image(
+    restaurant_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene la URL de la imagen del restaurante.
+    
+    Si el restaurante no tiene imagen personalizada en Blob Storage,
+    retorna la imagen por defecto según su tipo de cocina.
+
+    Args:
+        restaurant_id: ID del restaurante
+
+    Returns:
+        {
+            "image_url": "https://...",
+            "is_default": false,
+            "restaurant_id": 1
+        }
+    """
+    try:
+        restaurant = db.query(Restaurant).filter(
+            Restaurant.restaurant_id == restaurant_id
+        ).first()
+
+        if not restaurant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Restaurante con ID {restaurant_id} no encontrado"
+            )
+
+        # Si tiene URL personalizada (del Blob Storage), usarla
+        if restaurant.image_url:
+            return {
+                "image_url": restaurant.image_url,
+                "is_default": False,
+                "restaurant_id": restaurant_id
+            }
+
+        # Si no, retornar imagen por defecto según tipo de cocina
+        default_image_url = get_default_image_url(restaurant.cuisine_type)
+        return {
+            "image_url": default_image_url,
+            "is_default": True,
+            "restaurant_id": restaurant_id,
+            "cuisine_type": restaurant.cuisine_type
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"❌ Error en GET /restaurants/{restaurant_id}/image: {str(e)}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener imagen del restaurante"
+        )
+
+
 def _parse_min_service_duration(min_service: str | None) -> int | None:
     """Convierte min_service (nvarchar) a entero de minutos si es posible."""
     if not min_service:
@@ -1149,9 +1324,7 @@ def _parse_min_service_duration(min_service: str | None) -> int | None:
 )
 async def create_inscripcion(request: InscripcionCreateRequest, db: Session = Depends(get_db)):
     """Crea una solicitud de alta en dbo.inscripciones."""
-    from ..core.auth import hash_password
     try:
-        hashed_pw = hash_password(request.password) if request.password else None
         inscripcion = Inscripcion(
             name=request.name.strip(),
             capacity_limit=request.capacity_limit,
@@ -1163,10 +1336,10 @@ async def create_inscripcion(request: InscripcionCreateRequest, db: Session = De
             restaurant_segment=request.restaurant_segment,
             menu_price=request.menu_price,
             dist_office_towers=request.dist_office_towers,
+            google_rating=request.google_rating,
+            cuisine_type=request.cuisine_type,
             image_url=request.image_url.strip() if request.image_url else None,
             google_maps_link=request.google_maps_link.strip(),
-            login_email=request.login_email.strip().lower() if request.login_email else None,
-            password_hash=hashed_pw,
             estado_inscripcion="pendiente",
             fecha_solicitud=datetime.now(),
         )
@@ -1217,6 +1390,131 @@ async def get_pending_inscripciones(db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al obtener inscripciones pendientes",
         )
+
+
+@app.get(
+    "/restaurants/{restaurant_id}",
+    response_model=RestaurantDetailItem,
+    summary="Obtener detalles de un restaurante",
+    tags=["Restaurantes"],
+)
+async def get_restaurant(
+    restaurant_id: int, 
+    db: Session = Depends(get_db), 
+    authorization: str | None = Header(default=None)
+):
+    """
+    Obtiene la información de un restaurante por su ID.
+    El admin puede ver cualquiera. 
+    Un owner solo puede ver su propio restaurante.
+    """
+    payload = _require_auth(authorization)
+    role = payload.get("role")
+    user_restaurant_id = payload.get("restaurant_id")
+    
+    # Validar permisos
+    if role == "restaurant_owner" and user_restaurant_id != restaurant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="No tienes permisos para ver los detalles de este restaurante"
+        )
+        
+    restaurant = db.query(Restaurant).filter(
+        Restaurant.restaurant_id == restaurant_id
+    ).first()
+    
+    if not restaurant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Restaurante no encontrado"
+        )
+        
+    return RestaurantDetailItem.from_orm(restaurant)
+
+
+@app.patch(
+    "/restaurants/{restaurant_id}",
+    response_model=RestaurantDetailItem,
+    summary="Actualizar datos del restaurante",
+    tags=["Restaurantes"],
+)
+async def update_restaurant(
+    restaurant_id: int,
+    request: RestaurantUpdateRequest,
+    db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None),
+):
+    """
+    Actualiza los campos editables de un restaurante.
+
+    - Admin puede editar cualquier restaurante.
+    - El dueño solo puede editar su propio restaurante.
+    - Los campos opcionales enviados como null o cadena vacía se limpian en BD.
+    """
+    payload = _require_auth(authorization)
+    role = payload.get("role")
+    user_restaurant_id = payload.get("restaurant_id")
+
+    if role == "restaurant_owner" and user_restaurant_id != restaurant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para editar este restaurante",
+        )
+    if role not in {"admin", "restaurant_owner"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Rol no autorizado",
+        )
+
+    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+    if not restaurant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Restaurante no encontrado",
+        )
+
+    provided_fields = getattr(request, "model_fields_set", None)
+    if provided_fields is None:
+        provided_fields = getattr(request, "__fields_set__", set())
+
+    if not provided_fields:
+        return RestaurantDetailItem.from_orm(restaurant)
+
+    editable_fields = {
+        "name",
+        "capacity_limit",
+        "table_count",
+        "min_service_duration",
+        "terrace_setup_type",
+        "opens_weekends",
+        "has_wifi",
+        "restaurant_segment",
+        "menu_price",
+        "dist_office_towers",
+        "google_rating",
+        "cuisine_type",
+    }
+
+    for field_name in provided_fields:
+        if field_name not in editable_fields:
+            continue
+
+        value = getattr(request, field_name)
+        if isinstance(value, str):
+            value = value.strip()
+            if field_name == "name" and not value:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="El nombre del restaurante no puede quedar vacío",
+                )
+            if field_name != "name" and not value:
+                value = None
+
+        setattr(restaurant, field_name, value)
+
+    db.commit()
+    db.refresh(restaurant)
+    return RestaurantDetailItem.from_orm(restaurant)
 
 
 @app.get(
@@ -1290,6 +1588,8 @@ async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)
             "dist_office_towers": inscripcion.dist_office_towers,
             "google_rating": inscripcion.google_rating,
             "cuisine_type": inscripcion.cuisine_type,
+            "login_email": inscripcion.login_email,
+            "password_hash": inscripcion.password_hash,
             "image_url": inscripcion.image_url,
         }
 
@@ -1299,18 +1599,21 @@ async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)
         db.add(restaurant)
         db.flush()
 
-        # Crear usuario en la tabla Users con las credenciales
-        from ..db.models import User
+        # Crear usuario en tabla Users si hay email y contraseña
         if inscripcion.login_email and inscripcion.password_hash:
-            user = User(
-                restaurant_id=restaurant.restaurant_id,
-                login_email=inscripcion.login_email.strip().lower(),
-                password_hash=inscripcion.password_hash,
-                is_active=True,
-                role='restaurant_owner'
-            )
-            db.add(user)
-            db.flush()
+            # Comprobar que no exista ya un usuario con ese email
+            existing_user = db.query(User).filter(
+                User.login_email == inscripcion.login_email.strip().lower()
+            ).first()
+            if not existing_user:
+                new_user = User(
+                    restaurant_id=next_restaurant_id,
+                    login_email=inscripcion.login_email.strip().lower(),
+                    password_hash=inscripcion.password_hash,
+                    is_active=True,
+                    role="restaurant_owner",
+                )
+                db.add(new_user)
 
         db.delete(inscripcion)
         db.commit()
@@ -1378,7 +1681,7 @@ async def reject_inscripcion(inscripcion_id: int, db: Session = Depends(get_db))
 @app.delete(
     "/inscripciones/history/approved",
     response_model=ClearApprovalHistoryResponse,
-    summary="Limpiar Historial de Aprobaciones",
+    summary="Limpiar historial de aprobadas",
     tags=["Data"],
 )
 async def clear_approval_history(db: Session = Depends(get_db)):
@@ -1415,46 +1718,59 @@ async def clear_approval_history(db: Session = Depends(get_db)):
     tags=["Auth"],
 )
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
-    # Buscar usuario en la tabla Users (admin y restaurantes)
-    from ..db.models import User
+    """
+    Login desde tabla Users.
+    
+    - Busca el usuario en la tabla Users por email
+    - Verifica la contraseña con hash PBKDF2
+    - Si es admin (restaurant_id=0), retorna role="admin"
+    - Si es restaurante normal (restaurant_id>0), retorna role="restaurant_owner"
+    - Valida que is_active=True
+    """
+    # Buscar usuario en tabla Users
     user = db.query(User).filter(
         User.login_email == request.email.strip().lower()
     ).first()
     
-    if user and user.is_active:
-        # Verificar la contraseña hasheada
-        from ..core.auth import verify_password
-        if verify_password(request.password, user.password_hash):
-            # Determinar el rol basado en restaurant_id
-            if user.restaurant_id == 0:
-                role = "admin"
-                restaurant_id = None
-                restaurant_name = None
-            else:
-                role = "restaurant_owner"
-                restaurant_id = user.restaurant_id
-                # Obtener nombre del restaurante
-                restaurant = db.query(Restaurant).filter(
-                    Restaurant.restaurant_id == user.restaurant_id
-                ).first()
-                restaurant_name = restaurant.name if restaurant else None
-            
-            token = create_access_token({
-                "role": role,
-                "email": request.email.strip().lower(),
-                "restaurant_id": restaurant_id,
-                "user_id": user.user_id
-            })
-            
-            return AuthUserResponse(
-                role=role,
-                email=request.email.strip().lower(),
-                restaurant_id=restaurant_id,
-                restaurant_name=restaurant_name,
-                token=token
-            )
+    if not user or not verify_password(request.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Email o contraseña no válidos."
+        )
     
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales inválidas.")
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Usuario desactivado."
+        )
+    
+    # Determinar el rol según restaurant_id
+    role = "admin" if user.restaurant_id == 0 else "restaurant_owner"
+    
+    # Obtener datos del restaurante si no es admin
+    restaurant_id = user.restaurant_id if user.restaurant_id != 0 else None
+    restaurant_name = None
+    if restaurant_id:
+        restaurant = db.query(Restaurant).filter(
+            Restaurant.restaurant_id == restaurant_id
+        ).first()
+        if restaurant:
+            restaurant_name = restaurant.name
+    
+    # Crear token con rol y restaurant_id
+    token = create_access_token({
+        "role": role, 
+        "email": user.login_email,
+        "restaurant_id": user.restaurant_id
+    })
+    
+    return AuthUserResponse(
+        role=role, 
+        email=user.login_email, 
+        restaurant_id=restaurant_id,
+        restaurant_name=restaurant_name,
+        token=token
+    )
 
 
 @app.get(
@@ -1463,297 +1779,299 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     summary="Obtener sesión actual",
     tags=["Auth"],
 )
-async def auth_me(authorization: str | None = Header(default=None)):
+async def auth_me(authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
     payload = _require_auth(authorization)
-
-    if payload.get("role") != "admin":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión no válida para administrador.")
-
     token = _extract_bearer_token(authorization) or ""
-    return AuthUserResponse(role="admin", email=payload.get("email", ""), token=token)
+    
+    email = payload.get("email", "")
+    role = payload.get("role", "")
+    restaurant_id = payload.get("restaurant_id")
+    restaurant_name = None
+    
+    # Si es restaurant_owner, obtener el nombre del restaurante
+    if role == "restaurant_owner" and restaurant_id and restaurant_id != 0:
+        restaurant = db.query(Restaurant).filter(
+            Restaurant.restaurant_id == restaurant_id
+        ).first()
+        if restaurant:
+            restaurant_name = restaurant.name
+    
+    return AuthUserResponse(
+        role=role,
+        email=email,
+        restaurant_id=restaurant_id if restaurant_id != 0 else None,
+        restaurant_name=restaurant_name,
+        token=token
+    )
 
 
-@app.patch(
-    "/restaurants/{restaurant_id}/image",
-    summary="Actualizar imagen del restaurante",
-    tags=["Restaurants"],
+# =============================
+# ENDPOINTS ADMIN: GESTIÓN DE USUARIOS
+# =============================
+
+@app.get(
+    "/admin/users",
+    response_model=list[UserAdminResponse],
+    summary="Listar todos los usuarios",
+    tags=["Admin - Users"],
 )
-async def update_restaurant_image(
-    restaurant_id: int,
-    image_file: UploadFile = File(...),
+async def admin_list_users(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    payload = _require_auth(authorization)
-    
-    # Verificar que sea el propietario del restaurante o admin
-    if payload.get("role") == "restaurant_owner":
-        if payload.get("restaurant_id") != restaurant_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No es tu restaurante.")
-    elif payload.get("role") != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado.")
+    """Devuelve todos los usuarios registrados. Solo accesible por admin."""
+    _require_admin_auth(authorization)
 
-    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
-    if not restaurant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado.")
+    users = db.query(User).order_by(User.user_id).all()
 
-    # Validar tipo de archivo
-    if image_file.content_type not in ['image/jpeg', 'image/png', 'image/webp', 'image/jpg']:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, 
-                          detail="Solo se permiten imágenes JPEG, PNG o WebP.")
+    # Cargar nombres de restaurantes en batch
+    rest_ids = {u.restaurant_id for u in users if u.restaurant_id and u.restaurant_id != 0}
+    restaurants = {}
+    if rest_ids:
+        for r in db.query(Restaurant).filter(Restaurant.restaurant_id.in_(rest_ids)).all():
+            restaurants[r.restaurant_id] = r.name
 
-    try:
-        # Leer archivo
-        image_data = await image_file.read()
-        
-        # Validar tamaño (máximo 5MB)
-        if len(image_data) > 5 * 1024 * 1024:
-            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, 
-                              detail="Imagen muy grande. Máximo 5MB.")
-        
-        # Guardar en BD como binario
-        restaurant.image_data = image_data
-        db.commit()
-        db.refresh(restaurant)
-        
-        # Convertir a base64 para la respuesta
-        image_base64 = base64.b64encode(image_data).decode()
-        
-        return {
-            "message": "Imagen actualizada correctamente",
-            "image_base64": image_base64,
-            "content_type": image_file.content_type
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error al actualizar imagen: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                          detail="Error al guardar la imagen.")
-
-
-@app.get(
-    "/restaurants/{restaurant_id}/image",
-    summary="Obtener imagen del restaurante",
-    tags=["Restaurants"],
-)
-async def get_restaurant_image(
-    restaurant_id: int,
-    db: Session = Depends(get_db),
-):
-    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
-    if not restaurant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado.")
-    
-    if not restaurant.image_data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante sin imagen.")
-    
-    try:
-        # Convertir binario a base64
-        image_base64 = base64.b64encode(restaurant.image_data).decode()
-        
-        return {
-            "image_base64": image_base64,
-            "data_uri": f"data:image/jpeg;base64,{image_base64}"
-        }
-    except Exception as e:
-        logger.error(f"Error al recuperar imagen: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                          detail="Error al recuperar la imagen.")
+    return [
+        UserAdminResponse(
+            user_id=u.user_id,
+            restaurant_id=u.restaurant_id,
+            email=u.login_email,
+            is_active=u.is_active,
+            role=u.role,
+            created_at=u.created_at,
+            restaurant_name=restaurants.get(u.restaurant_id),
+        )
+        for u in users
+    ]
 
 
 @app.post(
-    "/restaurants/{restaurant_id}/image/auto",
-    summary="Descargar imagen automática por tipo de cocina",
-    tags=["Restaurants"],
+    "/admin/users",
+    response_model=UserAdminResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear un usuario",
+    tags=["Admin - Users"],
 )
-async def auto_fetch_restaurant_image(
-    restaurant_id: int,
+async def admin_create_user(
+    body: UserCreateRequest,
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """Descarga automáticamente una imagen basada en el tipo de cocina del restaurante."""
-    payload = _require_auth(authorization)
-    
-    # Verificar que sea el propietario del restaurante o admin
-    if payload.get("role") == "restaurant_owner":
-        if payload.get("restaurant_id") != restaurant_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No es tu restaurante.")
-    elif payload.get("role") != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado.")
+    """Crea un usuario manualmente (p. ej. el admin o un restaurante ya existente). Solo admin."""
+    _require_admin_auth(authorization)
 
-    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
-    if not restaurant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado.")
+    email_normalized = body.email.strip().lower()
+    if db.query(User).filter(User.login_email == email_normalized).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un usuario con ese email.")
 
-    try:
-        # Mapeo de tipos de cocina a búsqueda en Unsplash
-        cuisine_type = restaurant.cuisine_type or "restaurant"
-        
-        # Términos de búsqueda mejorados
-        search_terms = {
-            "Italian": "italian food pasta",
-            "Spanish": "spanish food tapas",
-            "French": "french cuisine restaurant",
-            "Mexican": "mexican food tacos",
-            "Japanese": "japanese sushi restaurant",
-            "Chinese": "chinese food restaurant",
-            "Indian": "indian curry food",
-            "Thai": "thai food restaurant",
-            "Mediterranean": "mediterranean food",
-            "Grill": "grill barbecue meat",
-            "Vegetarian": "vegetarian food healthy",
-            "Seafood": "seafood restaurant fish",
-            "Fusion": "fusion cuisine modern",
-            "American": "american burger food",
-            "Asian": "asian food restaurant",
-        }
-        
-        search_query = search_terms.get(cuisine_type, cuisine_type)
-        
-        # Buscar en Unsplash API (sin API key, con límite)
-        unsplash_url = "https://api.unsplash.com/search/photos"
-        params = {
-            "query": search_query,
-            "per_page": 1,
-            "order_by": "relevant"
-        }
-        
-        response = requests.get(unsplash_url, params=params, timeout=5)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("results"):
-                image_url = data["results"][0]["urls"]["regular"]
-                
-                # Descargar la imagen
-                img_response = requests.get(image_url, timeout=5)
-                if img_response.status_code == 200:
-                    image_data = img_response.content
-                    
-                    # Validar tamaño
-                    if len(image_data) > 5 * 1024 * 1024:
-                        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                                          detail="Imagen muy grande.")
-                    
-                    # Guardar en BD
-                    restaurant.image_data = image_data
-                    db.commit()
-                    db.refresh(restaurant)
-                    
-                    # Convertir a base64
-                    image_base64 = base64.b64encode(image_data).decode()
-                    
-                    return {
-                        "message": f"Imagen de {cuisine_type} descargada automáticamente",
-                        "image_base64": image_base64,
-                        "data_uri": f"data:image/jpeg;base64,{image_base64}",
-                        "source": "Unsplash"
-                    }
-        
-        # Fallback: generar imagen de placeholder mejorado
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                          detail="No se pudo descargar imagen. Intenta de nuevo más tarde.")
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error al descargar imagen automática: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                          detail="Error al descargar imagen automática.")
+    new_user = User(
+        restaurant_id=body.restaurant_id,
+        login_email=email_normalized,
+        password_hash=hash_password(body.password),
+        is_active=True,
+        role=body.role,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
 
+    restaurant_name = None
+    if body.restaurant_id and body.restaurant_id != 0:
+        r = db.query(Restaurant).filter(Restaurant.restaurant_id == body.restaurant_id).first()
+        if r:
+            restaurant_name = r.name
+
+    return UserAdminResponse(
+        user_id=new_user.user_id,
+        restaurant_id=new_user.restaurant_id,
+        email=new_user.login_email,
+        is_active=new_user.is_active,
+        role=new_user.role,
+        created_at=new_user.created_at,
+        restaurant_name=restaurant_name,
+    )
+
+
+@app.patch(
+    "/admin/users/{user_id}",
+    response_model=UserAdminResponse,
+    summary="Actualizar un usuario",
+    tags=["Admin - Users"],
+)
+async def admin_update_user(
+    user_id: int,
+    body: UserUpdateRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """Permite al admin activar/desactivar un usuario, cambiar su rol o email."""
+    _require_admin_auth(authorization)
+
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Usuario {user_id} no encontrado.")
+
+    if body.is_active is not None:
+        user.is_active = body.is_active
+    if body.role is not None:
+        user.role = body.role
+    if body.email is not None:
+        email_normalized = body.email.strip().lower()
+        conflict = db.query(User).filter(User.login_email == email_normalized, User.user_id != user_id).first()
+        if conflict:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un usuario con ese email.")
+        user.login_email = email_normalized
+
+    db.commit()
+    db.refresh(user)
+
+    restaurant_name = None
+    if user.restaurant_id and user.restaurant_id != 0:
+        r = db.query(Restaurant).filter(Restaurant.restaurant_id == user.restaurant_id).first()
+        if r:
+            restaurant_name = r.name
+
+    return UserAdminResponse(
+        user_id=user.user_id,
+        restaurant_id=user.restaurant_id,
+        email=user.login_email,
+        is_active=user.is_active,
+        role=user.role,
+        created_at=user.created_at,
+        restaurant_name=restaurant_name,
+    )
+
+
+@app.post(
+    "/admin/users/{user_id}/reset-password",
+    summary="Restablecer contraseña de un usuario",
+    tags=["Admin - Users"],
+)
+async def admin_reset_password(
+    user_id: int,
+    body: UserResetPasswordRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """Restablece la contraseña de cualquier usuario. Solo admin."""
+    _require_admin_auth(authorization)
+
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Usuario {user_id} no encontrado.")
+
+    user.password_hash = hash_password(body.new_password)
+    db.commit()
+    return {"success": True, "message": f"Contraseña del usuario {user_id} actualizada."}
 
 
 @app.delete(
-    "/restaurants/{restaurant_id}",
-    summary="Eliminar restaurante",
-    tags=["Restaurants"],
+    "/admin/users/{user_id}",
+    summary="Eliminar un usuario",
+    tags=["Admin - Users"],
 )
-async def delete_restaurant(
-    restaurant_id: int,
+async def admin_delete_user(
+    user_id: int,
     authorization: str | None = Header(default=None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    from ..db.models import User
-    payload = _require_auth(authorization)
-    
-    if payload.get("role") != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo el admin puede eliminar restaurantes.")
-    
-    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
-    if not restaurant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado.")
-    
-    # También podemos borrar al usuario asociado, aunque si hay CASCADE igual se borra
-    db.query(User).filter(User.restaurant_id == restaurant_id).delete()
-    db.delete(restaurant)
+    """Elimina permanentemente un usuario. Solo admin."""
+    _require_admin_auth(authorization)
+
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Usuario {user_id} no encontrado.")
+
+    db.delete(user)
     db.commit()
-    return {"message": "Restaurante eliminado correctamente"}
+    return {"success": True, "message": f"Usuario {user_id} eliminado."}
 
-def _split_course_items(raw_value: str | None) -> list[str]:
-    if not raw_value:
+
+@app.post(
+    "/auth/change-password",
+    summary="Cambiar propia contraseña",
+    tags=["Auth"],
+)
+async def auth_change_password(
+    body: UserResetPasswordRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """Permite a cualquier usuario autenticado cambiar su propia contraseña."""
+    payload = _require_auth(authorization)
+    email = payload.get("email", "")
+
+    user = db.query(User).filter(User.login_email == email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+
+    user.password_hash = hash_password(body.new_password)
+    db.commit()
+    return {"success": True, "message": "Contraseña actualizada correctamente."}
+
+
+def _canonical_course(course: str) -> str:
+    normalized = (course or "").strip().lower()
+    if normalized in {"starter", "first", "first_course", "entrada"}:
+        return "first_course"
+    if normalized in {"main", "second", "second_course", "principal"}:
+        return "second_course"
+    return "dessert"
+
+
+def _extract_course_items(raw_value: str | list[str] | None) -> list[str]:
+    if raw_value is None:
         return []
-    return [item.strip() for item in raw_value.split(';') if item and item.strip()]
+    if isinstance(raw_value, list):
+        values = raw_value
+    else:
+        values = raw_value.split(";")
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = " ".join(str(value).strip().split())
+        normalized_key = _normalize_dish_name(cleaned)
+        if not cleaned or normalized_key in seen:
+            continue
+        seen.add(normalized_key)
+        result.append(cleaned)
+    return result
 
 
-def _canonical_course(course_type: str | None) -> str:
-    normalized = (course_type or '').strip().lower()
-    if normalized in {'starter', 'first_course', 'primero', 'primeros', 'entrante', 'entrantes'}:
-        return 'starter'
-    if normalized in {'main', 'second_course', 'segundo', 'segundos', 'principal', 'principales'}:
-        return 'main'
-    if normalized in {'dessert', 'postre', 'postres'}:
-        return 'dessert'
-    return normalized
+def _normalize_dish_name(dish_name: str) -> str:
+    compact = " ".join((dish_name or "").strip().split())
+    ascii_like = "".join(
+        char for char in unicodedata.normalize("NFKD", compact)
+        if not unicodedata.combining(char)
+    )
+    return ascii_like.casefold()
 
 
-def _ensure_calendar_date(db: Session, service_date: date) -> int:
-    existing = db.execute(
-        text(
-            """
-            SELECT TOP 1 date_id
-            FROM dim_calendar
-            WHERE service_date = :service_date
-            """
-        ),
-        {"service_date": service_date},
-    ).scalar()
+def _ensure_calendar_date(db: Session, service_date: date, date_id: int) -> None:
+    exists = db.execute(
+        text("SELECT 1 FROM dbo.dim_calendar WHERE date_id = :date_id"),
+        {"date_id": date_id},
+    ).first()
+    if exists:
+        return
 
-    if existing is not None:
-        return int(existing)
-
-    date_id = int(service_date.strftime('%Y%m%d'))
     db.execute(
         text(
             """
-            INSERT INTO dim_calendar (
-                date_id, service_date, day_of_week, month,
-                max_temp_c, precipitation_mm,
-                is_holiday, is_bridge_day, is_business_day,
-                is_rain_service_peak, is_stadium_event, is_azca_event, is_payday_week
-            )
-            VALUES (
-                :date_id, :service_date, :day_of_week, :month,
-                NULL, NULL,
-                0, 0, :is_business_day,
-                0, 0, 0, :is_payday_week
-            )
+            INSERT INTO dbo.dim_calendar (date_id, service_date)
+            VALUES (:date_id, :service_date)
             """
         ),
-        {
-            "date_id": date_id,
-            "service_date": service_date,
-            "day_of_week": service_date.weekday(),
-            "month": service_date.month,
-            "is_business_day": 1 if service_date.weekday() < 5 else 0,
-            "is_payday_week": 1 if service_date.day <= 7 else 0,
-        },
+        {"date_id": date_id, "service_date": service_date},
     )
-    return date_id
+
+
+def _current_service_date() -> date:
+    return datetime.now(ZoneInfo("Europe/Madrid")).date()
 
 
 def _fact_menus_has_includes_drink(db: Session) -> bool:
-    exists = db.execute(
+    column_exists = db.execute(
         text(
             """
             SELECT TOP 1 1
@@ -1763,11 +2081,11 @@ def _fact_menus_has_includes_drink(db: Session) -> bool:
             """
         )
     ).first()
-    return exists is not None
+    return column_exists is not None
 
 
 def _fact_menu_items_has_target_rating(db: Session) -> bool:
-    exists = db.execute(
+    column_exists = db.execute(
         text(
             """
             SELECT TOP 1 1
@@ -1777,11 +2095,289 @@ def _fact_menu_items_has_target_rating(db: Session) -> bool:
             """
         )
     ).first()
-    return exists is not None
+    return column_exists is not None
 
 
-def _current_service_date() -> date:
-    return datetime.now(ZoneInfo("Europe/Madrid")).date()
+@app.post(
+    "/restaurants/{restaurant_id}/menu",
+    response_model=DailyMenuResponse,
+    summary="Publicar menú del día",
+    tags=["Restaurants"],
+)
+async def post_daily_menu(
+    restaurant_id: int,
+    request: DailyMenuRequest,
+    db: Session = Depends(get_db),
+):
+    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+    if not restaurant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado")
+
+    service_date = _current_service_date()
+    date_id = int(service_date.strftime("%Y%m%d"))
+
+    starters = _extract_course_items(request.starter)
+    mains = _extract_course_items(request.main)
+    desserts = _extract_course_items(request.dessert)
+
+    try:
+        _ensure_calendar_date(db, service_date, date_id)
+        has_includes_drink = _fact_menus_has_includes_drink(db)
+        has_target_rating = _fact_menu_items_has_target_rating(db)
+
+        previous_menu_ids = db.execute(
+            text(
+                """
+                SELECT menu_id
+                FROM dbo.fact_menus
+                WHERE restaurant_id = :restaurant_id
+                  AND date_id = :date_id
+                """
+            ),
+            {"restaurant_id": restaurant_id, "date_id": date_id},
+        ).fetchall()
+
+        for row in previous_menu_ids:
+            previous_menu_id = int(row[0])
+            db.execute(
+                text("DELETE FROM dbo.fact_menu_items WHERE menu_id = :menu_id"),
+                {"menu_id": previous_menu_id},
+            )
+            db.execute(
+                text("DELETE FROM dbo.fact_menus WHERE menu_id = :menu_id"),
+                {"menu_id": previous_menu_id},
+            )
+
+        if has_includes_drink:
+            menu_id = db.execute(
+                text(
+                    """
+                    INSERT INTO dbo.fact_menus (date_id, restaurant_id, includes_drink)
+                    OUTPUT INSERTED.menu_id
+                    VALUES (:date_id, :restaurant_id, :includes_drink)
+                    """
+                ),
+                {
+                    "date_id": date_id,
+                    "restaurant_id": restaurant_id,
+                    "includes_drink": 1 if request.includes_drink else 0,
+                },
+            ).scalar_one()
+        else:
+            menu_id = db.execute(
+                text(
+                    """
+                    INSERT INTO dbo.fact_menus (date_id, restaurant_id)
+                    OUTPUT INSERTED.menu_id
+                    VALUES (:date_id, :restaurant_id)
+                    """
+                ),
+                {
+                    "date_id": date_id,
+                    "restaurant_id": restaurant_id,
+                },
+            ).scalar_one()
+
+        course_payload = {
+            "first_course": starters,
+            "second_course": mains,
+            "dessert": desserts,
+        }
+
+        inserted_dish_ids: set[int] = set()
+
+        for course_type, dish_names in course_payload.items():
+            existing_dishes = db.execute(
+                text(
+                    """
+                    SELECT dish_id, dish_name
+                    FROM dbo.dim_dishes
+                    WHERE course_type = :course_type
+                    """
+                ),
+                {"course_type": course_type},
+            ).fetchall()
+
+            dish_index: dict[str, int] = {}
+            for row in existing_dishes:
+                current_dish_id = int(row[0])
+                current_dish_name = str(row[1] or "")
+                key = _normalize_dish_name(current_dish_name)
+                if key and key not in dish_index:
+                    dish_index[key] = current_dish_id
+
+            for dish_name in dish_names:
+                normalized_name = _normalize_dish_name(dish_name)
+                dish_id = dish_index.get(normalized_name)
+
+                if dish_id is None:
+                    clean_dish_name = " ".join(dish_name.strip().split())
+                    dish_id = db.execute(
+                        text(
+                            """
+                            INSERT INTO dbo.dim_dishes (course_type, dish_name)
+                            OUTPUT INSERTED.dish_id
+                            VALUES (:course_type, :dish_name)
+                            """
+                        ),
+                        {"course_type": course_type, "dish_name": clean_dish_name},
+                    ).scalar_one()
+                    dish_index[normalized_name] = int(dish_id)
+
+                if int(dish_id) in inserted_dish_ids:
+                    continue
+
+                already_in_menu = db.execute(
+                    text(
+                        """
+                        SELECT TOP 1 1
+                        FROM dbo.fact_menu_items
+                        WHERE menu_id = :menu_id AND dish_id = :dish_id
+                        """
+                    ),
+                    {"menu_id": menu_id, "dish_id": dish_id},
+                ).first()
+
+                if already_in_menu:
+                    inserted_dish_ids.add(int(dish_id))
+                    continue
+
+                if has_target_rating:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO dbo.fact_menu_items (menu_id, dish_id, target_rating)
+                            VALUES (:menu_id, :dish_id, NULL)
+                            """
+                        ),
+                        {"menu_id": menu_id, "dish_id": dish_id},
+                    )
+                else:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO dbo.fact_menu_items (menu_id, dish_id)
+                            VALUES (:menu_id, :dish_id)
+                            """
+                        ),
+                        {"menu_id": menu_id, "dish_id": dish_id},
+                    )
+                inserted_dish_ids.add(int(dish_id))
+
+        db.commit()
+
+        return DailyMenuResponse(
+            menu_id=menu_id,
+            restaurant_id=restaurant_id,
+            date=service_date,
+            starter="; ".join(starters) if starters else None,
+            main="; ".join(mains) if mains else None,
+            dessert="; ".join(desserts) if desserts else None,
+            includes_drink=request.includes_drink,
+            menu_price=restaurant.menu_price,
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error("❌ Error en POST /restaurants/%s/menu: %s", restaurant_id, str(e), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al guardar el menú del día",
+        )
+
+
+@app.get(
+    "/restaurants/{restaurant_id}/menu/today",
+    response_model=DailyMenuResponse,
+    summary="Obtener menú real de hoy",
+    tags=["Restaurants"],
+)
+async def get_daily_menu(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+):
+    service_date = _current_service_date()
+    date_id = int(service_date.strftime("%Y%m%d"))
+
+    has_includes_drink = _fact_menus_has_includes_drink(db)
+
+    if has_includes_drink:
+        menu_row = db.execute(
+            text(
+                """
+                SELECT TOP 1 menu_id, includes_drink
+                FROM dbo.fact_menus
+                WHERE restaurant_id = :restaurant_id AND date_id = :date_id
+                ORDER BY menu_id DESC
+                """
+            ),
+            {"restaurant_id": restaurant_id, "date_id": date_id},
+        ).first()
+    else:
+        menu_row = db.execute(
+            text(
+                """
+                SELECT TOP 1 menu_id, CAST(0 AS BIT) AS includes_drink
+                FROM dbo.fact_menus
+                WHERE restaurant_id = :restaurant_id AND date_id = :date_id
+                ORDER BY menu_id DESC
+                """
+            ),
+            {"restaurant_id": restaurant_id, "date_id": date_id},
+        ).first()
+
+    if not menu_row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay menú publicado para hoy")
+
+    menu_id = int(menu_row[0])
+    includes_drink = bool(menu_row[1])
+
+    items = db.execute(
+        text(
+            """
+            SELECT d.course_type, d.dish_name
+            FROM dbo.fact_menu_items fmi
+            INNER JOIN dbo.dim_dishes d ON d.dish_id = fmi.dish_id
+            WHERE fmi.menu_id = :menu_id
+            ORDER BY d.course_type, d.dish_name
+            """
+        ),
+        {"menu_id": menu_id},
+    ).fetchall()
+
+    grouped: dict[str, list[str]] = {
+        "first_course": [],
+        "second_course": [],
+        "dessert": [],
+    }
+    grouped_seen: dict[str, set[str]] = {
+        "first_course": set(),
+        "second_course": set(),
+        "dessert": set(),
+    }
+    for row in items:
+        course_key = _canonical_course(str(row[0]))
+        dish_label = " ".join(str(row[1]).strip().split())
+        dish_key = _normalize_dish_name(dish_label)
+        if dish_key in grouped_seen[course_key]:
+            continue
+        grouped_seen[course_key].add(dish_key)
+        grouped[course_key].append(dish_label)
+
+    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+
+    return DailyMenuResponse(
+        menu_id=menu_id,
+        restaurant_id=restaurant_id,
+        date=service_date,
+        starter="; ".join(grouped["first_course"]) if grouped["first_course"] else None,
+        main="; ".join(grouped["second_course"]) if grouped["second_course"] else None,
+        dessert="; ".join(grouped["dessert"]) if grouped["dessert"] else None,
+        includes_drink=includes_drink,
+        menu_price=restaurant.menu_price if restaurant else None,
+    )
 
 
 def _ensure_prediction_engine_loaded() -> bool:
@@ -1793,8 +2389,7 @@ def _ensure_prediction_engine_loaded() -> bool:
         logger.info("✅ Motor de predicción inicializado (lazy)")
         return True
     except Exception as engine_error:
-        logger.error(f"❌ No se pudo inicializar PredictionEngine (lazy): {str(engine_error)}", exc_info=True)
-        prediction_engine = None
+        logger.error("❌ No se pudo inicializar PredictionEngine: %s", str(engine_error), exc_info=True)
         return False
 
 
@@ -1805,259 +2400,215 @@ def _ensure_unified_menu_model_loaded(app: FastAPI) -> bool:
         model_path = Path(__file__).parent.parent / "azca" / "artifacts" / "AzcaMenuModel.pkl"
         with open(model_path, "rb") as f:
             app.state.model = pickle.load(f)
-        logger.info(f"✅ Modelo unificado cargado (lazy): {model_path}")
+        logger.info("✅ AzcaMenuModel.pkl cargado en app.state (lazy)")
         return True
     except Exception as model_error:
-        logger.error(f"❌ Error cargando AzcaMenuModel.pkl (lazy): {str(model_error)}", exc_info=True)
+        logger.error("❌ Error cargando AzcaMenuModel.pkl (lazy): %s", str(model_error), exc_info=True)
         return False
 
 
-@app.post(
-    "/restaurants/{restaurant_id}/menu",
-    response_model=DailyMenuResponse,
-    summary="Publicar Men? del D?a",
-    tags=["Restaurants"],
-)
-async def post_daily_menu(
-    restaurant_id: int,
-    payload: DailyMenuRequest,
+# =============================
+# ENDPOINTS PARA IMÁGENES DE RESTAURANTES
+# =============================
+
+@app.post("/upload-restaurant-image")
+async def post_upload_restaurant_image(
+    restaurant_id: int = Form(...),
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """Guarda el men? del d?a en fact_menus + fact_menu_items + dim_dishes."""
+    """
+    Upload restaurant image to Blob Storage (container: fotos)
+    
+    - Admin: puede subir fotos para cualquier restaurante
+    - Restaurant owner: puede subir fotos solo para su propio restaurante
+    """
+    payload = _require_auth(authorization)
+    role = payload.get("role")
+    user_restaurant_id = payload.get("restaurant_id")
+    
+    # Validar permisos
+    if role == "admin":
+        # Admin puede subir para cualquier restaurante
+        pass
+    elif role == "restaurant_owner":
+        # Restaurant owner solo puede subir para su propio restaurante
+        if user_restaurant_id != restaurant_id:
+            raise HTTPException(
+                status_code=403, 
+                detail="No tienes permisos para subir fotos a este restaurante"
+            )
+    else:
+        raise HTTPException(status_code=403, detail="Rol no autorizado")
+    
+    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+    if not restaurant:
+        raise HTTPException(status_code=404, detail="Restaurante no encontrado")
+    
     try:
-        today = _current_service_date()
-        date_id = _ensure_calendar_date(db, today)
-
-        restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
-        if not restaurant:
-            raise HTTPException(status_code=404, detail="Restaurante no encontrado.")
-
-        existing = db.execute(
-            text(
-                """
-                SELECT TOP 1 menu_id
-                FROM fact_menus
-                WHERE restaurant_id = :restaurant_id
-                  AND date_id = :date_id
-                ORDER BY menu_id DESC
-                """
-            ),
-            {"restaurant_id": restaurant_id, "date_id": date_id},
-        ).mappings().first()
-
-        if existing:
-            existing_menu_id = int(existing["menu_id"])
-            db.execute(text("DELETE FROM fact_menu_items WHERE menu_id = :menu_id"), {"menu_id": existing_menu_id})
-            db.execute(text("DELETE FROM fact_menus WHERE menu_id = :menu_id"), {"menu_id": existing_menu_id})
-
-        has_includes_drink = _fact_menus_has_includes_drink(db)
-
-        if has_includes_drink:
-            menu_id = int(
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO fact_menus (date_id, restaurant_id, includes_drink)
-                        OUTPUT inserted.menu_id
-                        VALUES (:date_id, :restaurant_id, :includes_drink)
-                        """
-                    ),
-                    {
-                        "date_id": date_id,
-                        "restaurant_id": restaurant_id,
-                        "includes_drink": 1 if payload.includes_drink else 0,
-                    },
-                ).scalar_one()
-            )
-        else:
-            menu_id = int(
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO fact_menus (date_id, restaurant_id)
-                        OUTPUT inserted.menu_id
-                        VALUES (:date_id, :restaurant_id)
-                        """
-                    ),
-                    {
-                        "date_id": date_id,
-                        "restaurant_id": restaurant_id,
-                    },
-                ).scalar_one()
-            )
-
-        has_target_rating = _fact_menu_items_has_target_rating(db)
-
-        course_groups = {
-            'starter': _split_course_items(payload.starter),
-            'main': _split_course_items(payload.main),
-            'dessert': _split_course_items(payload.dessert),
-        }
-
-        for course_type, dishes in course_groups.items():
-            for dish_name in dishes:
-                existing_dish = db.execute(
-                    text(
-                        """
-                        SELECT TOP 1 dish_id
-                        FROM dim_dishes
-                        WHERE LOWER(course_type) = :course_type
-                          AND LOWER(dish_name) = :dish_name
-                        """
-                    ),
-                    {
-                        "course_type": course_type,
-                        "dish_name": dish_name.lower(),
-                    },
-                ).scalar()
-
-                if existing_dish is not None:
-                    dish_id = int(existing_dish)
-                else:
-                    dish_id = int(
-                        db.execute(
-                            text(
-                                """
-                                INSERT INTO dim_dishes (course_type, dish_name)
-                                OUTPUT inserted.dish_id
-                                VALUES (:course_type, :dish_name)
-                                """
-                            ),
-                            {
-                                "course_type": course_type,
-                                "dish_name": dish_name,
-                            },
-                        ).scalar_one()
-                    )
-
-                if has_target_rating:
-                    db.execute(
-                        text(
-                            """
-                            INSERT INTO fact_menu_items (menu_id, dish_id, target_rating)
-                            VALUES (:menu_id, :dish_id, NULL)
-                            """
-                        ),
-                        {
-                            "menu_id": menu_id,
-                            "dish_id": dish_id,
-                        },
-                    )
-                else:
-                    db.execute(
-                        text(
-                            """
-                            INSERT INTO fact_menu_items (menu_id, dish_id)
-                            VALUES (:menu_id, :dish_id)
-                            """
-                        ),
-                        {
-                            "menu_id": menu_id,
-                            "dish_id": dish_id,
-                        },
-                    )
-
-        db.commit()
-
-        return DailyMenuResponse(
-            menu_id=menu_id,
+        file_content = await file.read()
+        if not file.content_type or "image" not in file.content_type:
+            raise HTTPException(status_code=400, detail="Tipo de archivo inválido. Solo imágenes.")
+        
+        if len(file_content) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Archivo demasiado grande (máx 5MB)")
+        
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ext = Path(file.filename or "photo").suffix or ".jpg"
+        blob_filename = f"photo_{timestamp}{ext}"
+        
+        blob_manager = get_blob_manager()
+        blob_name = blob_manager.upload_restaurant_image(
             restaurant_id=restaurant_id,
-            date=today,
-            starter='; '.join(course_groups['starter']) if course_groups['starter'] else None,
-            main='; '.join(course_groups['main']) if course_groups['main'] else None,
-            dessert='; '.join(course_groups['dessert']) if course_groups['dessert'] else None,
-            includes_drink=bool(payload.includes_drink),
-            menu_price=restaurant.menu_price,
+            file_content=file_content,
+            filename=blob_filename
         )
+        
+        if not blob_name:
+            raise HTTPException(status_code=500, detail="Error en la carga del archivo")
+        
+        sas_url = blob_manager.get_blob_sas_url(blob_name)
+        if not sas_url:
+            raise HTTPException(status_code=500, detail="Error generando URL de acceso")
+        
+        restaurant.image_url = sas_url
+        db.commit()
+        db.refresh(restaurant)
+        
+        logger.info(f"✅ Foto subida para restaurante {restaurant_id}: {blob_name}")
+        return {
+            "success": True, 
+            "image_url": sas_url, 
+            "restaurant_id": restaurant_id,
+            "message": "Foto subida exitosamente"
+        }
+    
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        logger.error(f"Error guardando men?: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="No se pudo publicar el men?.")
+        logger.error(f"Error subiendo imagen: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error en la carga")
 
 
-@app.get(
-    "/restaurants/{restaurant_id}/menu/today",
-    response_model=DailyMenuResponse,
-    summary="Obtener el Men? del D?a actual del restaurante",
-    tags=["Restaurants"],
+@app.get("/get-restaurant-image/{restaurant_id}")
+async def get_rest_image(restaurant_id: int, db: Session = Depends(get_db)):
+    """Get restaurant image URL"""
+    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+    
+    if not restaurant:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    
+    if restaurant.image_url:
+        return {"image_url": restaurant.image_url, "is_default": False, "restaurant_id": restaurant_id}
+    
+    default_url = get_default_image_url(restaurant.cuisine_type)
+    return {"image_url": default_url, "is_default": True, "restaurant_id": restaurant_id}
+
+
+@app.post(
+    "/restaurants/{restaurant_id}/photo-upload", 
+    response_model=dict
 )
-async def get_daily_menu(restaurant_id: int, db: Session = Depends(get_db)):
-    today = _current_service_date()
-    date_id = _ensure_calendar_date(db, today)
+async def upload_restaurant_photo(
+    restaurant_id: int,
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """Upload restaurant photo to Azure Blob Storage"""
+    payload = _require_auth(authorization)
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    
+    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+    if not restaurant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+    
+    try:
+        file_content = await file.read()
+        allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+        if file.content_type not in allowed_types:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file type")
+        
+        if len(file_content) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large")
+        
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ext = Path(file.filename or "photo").suffix or ".jpg"
+        blob_filename = f"photo_{timestamp}{ext}"
+        
+        blob_manager = get_blob_manager()
+        blob_name = blob_manager.upload_restaurant_image(
+            restaurant_id=restaurant_id,
+            file_content=file_content,
+            filename=blob_filename
+        )
+        
+        if not blob_name:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Upload failed")
+        
+        sas_url = blob_manager.get_blob_sas_url(blob_name)
+        if not sas_url:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="SAS URL failed")
+        
+        restaurant.image_url = sas_url
+        db.commit()
+        db.refresh(restaurant)
+        
+        logger.info(f"✅ Image uploaded for restaurant {restaurant_id}: {blob_name}")
+        return {
+            "success": True,
+            "restaurant_id": restaurant_id,
+            "image_url": sas_url,
+            "message": "Image uploaded successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading photo: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Upload error")
 
-    has_includes_drink = _fact_menus_has_includes_drink(db)
-    if has_includes_drink:
-        row = db.execute(
-            text(
-                """
-                SELECT TOP 1 menu_id, restaurant_id, date_id, includes_drink
-                FROM fact_menus
-                WHERE restaurant_id = :restaurant_id
-                  AND date_id = :date_id
-                ORDER BY menu_id DESC
-                """
-            ),
-            {"restaurant_id": restaurant_id, "date_id": date_id},
-        ).mappings().first()
-    else:
-        row = db.execute(
-            text(
-                """
-                SELECT TOP 1 menu_id, restaurant_id, date_id, CAST(0 AS BIT) AS includes_drink
-                FROM fact_menus
-                WHERE restaurant_id = :restaurant_id
-                  AND date_id = :date_id
-                ORDER BY menu_id DESC
-                """
-            ),
-            {"restaurant_id": restaurant_id, "date_id": date_id},
-        ).mappings().first()
 
-    if not row:
-        raise HTTPException(status_code=404, detail="Men? del d?a no disponible.")
 
-    dishes_rows = db.execute(
-        text(
-            """
-            SELECT d.course_type, d.dish_name
-            FROM fact_menu_items fmi
-            JOIN dim_dishes d ON d.dish_id = fmi.dish_id
-            WHERE fmi.menu_id = :menu_id
-            ORDER BY d.dish_id ASC
-            """
-        ),
-        {"menu_id": int(row['menu_id'])},
-    ).mappings().all()
+@app.patch(
+    "/restaurants/{restaurant_id}/image",
+    response_model=RestaurantDetailItem,
+    summary="Actualizar imagen del restaurante (legacy)",
+    tags=["Data"],
+    deprecated=True,
+)
+async def update_restaurant_image(
+    restaurant_id: int,
+    request: RestaurantImageUpdateRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    [DEPRECATED] Usa POST /restaurants/{restaurant_id}/image/upload
+    
+    Actualiza la URL de imagen del restaurante.
+    Mantener por compatibilidad con versiones antiguas.
+    """
+    payload = _require_auth(authorization)
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado.")
 
-    menu_price = db.execute(
-        text(
-            """
-            SELECT TOP 1 menu_price
-            FROM dim_restaurants
-            WHERE restaurant_id = :restaurant_id
-            """
-        ),
-        {"restaurant_id": restaurant_id},
-    ).scalar()
+    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+    if not restaurant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado.")
 
-    buckets: dict[str, list[str]] = {'starter': [], 'main': [], 'dessert': []}
-    for dish in dishes_rows:
-        key = _canonical_course(str(dish['course_type'] or ''))
-        if key in buckets:
-            buckets[key].append(str(dish['dish_name']).strip())
+    restaurant.image_url = request.image_url.strip()
+    db.commit()
+    db.refresh(restaurant)
+    return RestaurantDetailItem.from_orm(restaurant)
 
-    return DailyMenuResponse(
-        menu_id=int(row['menu_id']),
-        restaurant_id=int(row['restaurant_id']),
-        date=today,
-        starter='; '.join(buckets['starter']) if buckets['starter'] else None,
-        main='; '.join(buckets['main']) if buckets['main'] else None,
-        dessert='; '.join(buckets['dessert']) if buckets['dessert'] else None,
-        includes_drink=bool(row.get('includes_drink')),
-        menu_price=float(menu_price) if menu_price is not None else None,
-    )
+
+
+# ============================================================================
+# FUNCIONES AUXILIARES PARA CÁLCULO AUTOMÁTICO
+# ============================================================================
 
 def get_weather_data(service_date: date, cache: CacheManager = None) -> dict:
     """
@@ -2516,29 +3067,6 @@ def get_dish_name_by_id(db: Session, dish_id: int) -> str:
     return dish[0]
 
 
-def get_restaurant_historical_dish_ids(
-    db: Session,
-    restaurant_id: int,
-    course_type: str,
-) -> list[int]:
-    """
-    Obtiene los dish_id históricos de un restaurante para un tipo de curso.
-
-    Si no hay histórico para ese curso, retorna una lista vacía para permitir
-    que el caller decida si hace fallback al ranking global del modelo.
-    """
-    dish_ids = db.query(distinct(DimDishes.dish_id)).join(
-        FactMenuItems, DimDishes.dish_id == FactMenuItems.dish_id
-    ).join(
-        FactMenus, FactMenuItems.menu_id == FactMenus.menu_id
-    ).filter(
-        FactMenus.restaurant_id == restaurant_id,
-        DimDishes.course_type == course_type,
-    ).all()
-
-    return [int(dish_id) for (dish_id,) in dish_ids if dish_id is not None]
-
-
 def save_prediction_log(
     db: Session,
     restaurant_id: int,
@@ -2610,18 +3138,16 @@ def save_prediction_log(
         return -1
 
 
-def predict_top3_dishes(model, features_dict: dict, allowed_dish_ids: list[int] | None = None, top_k: int = 3) -> list:
+def predict_top3_dishes(model, features_dict: dict) -> list:
     """
-    Obtiene el top de platos predichos usando el modelo cargado en memoria.
+    Obtiene el top 3 de platos predichos usando el modelo cargado en memoria.
     
     Args:
         model: Modelo pickle cargado (sklearn Pipeline con predict_proba)
         features_dict: Diccionario con los 15 features
-        allowed_dish_ids: Lista opcional de dish_id permitidos
-        top_k: Número máximo de platos a devolver
         
     Returns:
-        Lista de tuples [(dish_id, probability), ...]
+        Lista de tuples [(dish_id, probability), ...]  para el top 3
     """
     import pandas as pd
     import numpy as np
@@ -2645,40 +3171,19 @@ def predict_top3_dishes(model, features_dict: dict, allowed_dish_ids: list[int] 
     # Obtener probabilities de la primera fila
     probabilities = proba[0]
     
-    ranked_predictions = sorted(
-        ((int(class_id), float(probability)) for class_id, probability in zip(classes, probabilities)),
-        key=lambda item: item[1],
-        reverse=True,
-    )
-
-    if allowed_dish_ids:
-        allowed_set = set(allowed_dish_ids)
-        filtered_predictions = [
-            prediction for prediction in ranked_predictions if prediction[0] in allowed_set
-        ]
-        logger.info(
-            f"🎯 Ranking filtrado por histórico del restaurante: {len(filtered_predictions)} candidatos válidos de {len(allowed_set)} dish_ids históricos"
-        )
-        if filtered_predictions:
-            result = filtered_predictions[:top_k]
-            logger.info(f"✅ Top {len(result)} predicciones filtradas: {result}")
-            return result
-
-        logger.warning(
-            "⚠️ No hubo intersección entre el ranking del modelo y el histórico del restaurante; usando top global"
-        )
-
-    top_indices = np.argsort(probabilities)[-top_k:][::-1]
-    logger.info(f"✅ Top indices globales: {top_indices}")
-
-    result = [
-        (int(classes[idx]), float(probabilities[idx]))
-        for idx in top_indices
+    # Obtener indices de top 3 probabilidades
+    top3_indices = np.argsort(probabilities)[-3:][::-1]  # Orden descendente
+    logger.info(f"✅ Top 3 indices: {top3_indices}")
+    
+    # Retornar [(class_id, probability), ...]
+    top3_predictions = [
+        (classes[idx], probabilities[idx])
+        for idx in top3_indices
     ]
-
-    logger.info(f"✅ Top {len(result)} predicciones globales: {result}")
-
-    return result
+    
+    logger.info(f"✅ Top 3 predicciones: {top3_predictions}")
+    
+    return top3_predictions
 
 
 # ============================================================================
@@ -2750,28 +3255,40 @@ def persist_extracted_dishes(db: Session, sections) -> int:
 
     try:
         for course_type, dishes in grouped_dishes.items():
+            existing_dishes = db.execute(
+                text(
+                    """
+                    SELECT dish_id, dish_name
+                    FROM dbo.dim_dishes
+                    WHERE course_type = :course_type
+                    """
+                ),
+                {"course_type": course_type},
+            ).fetchall()
+
+            existing_index: set[str] = set()
+            for row in existing_dishes:
+                existing_name = str(row[1] or "")
+                existing_key = _normalize_dish_name(existing_name)
+                if existing_key:
+                    existing_index.add(existing_key)
+
             for dish_name in dishes:
-                normalized_name = (dish_name or "").strip()
-                if not normalized_name:
+                cleaned_name = " ".join((dish_name or "").strip().split())
+                if not cleaned_name:
                     continue
 
-                dedupe_key = (course_type, normalized_name.casefold())
+                normalized_key = _normalize_dish_name(cleaned_name)
+                dedupe_key = (course_type, normalized_key)
                 if dedupe_key in seen:
                     continue
                 seen.add(dedupe_key)
 
-                existing = (
-                    db.query(DimDish.dish_id)
-                    .filter(
-                        DimDish.course_type == course_type,
-                        func.lower(DimDish.dish_name) == normalized_name.lower(),
-                    )
-                    .first()
-                )
-                if existing:
+                if normalized_key in existing_index:
                     continue
 
-                db.add(DimDish(course_type=course_type, dish_name=normalized_name))
+                db.add(DimDish(course_type=course_type, dish_name=cleaned_name))
+                existing_index.add(normalized_key)
                 inserted += 1
 
         if inserted > 0:
@@ -2837,6 +3354,94 @@ async def extract_menu_sections_ocr_only(
         )
     except Exception as exc:
         logger.error(f"Error en /ocr/menu-sections: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al procesar OCR del menú.",
+        )
+
+
+@app.post(
+    "/restaurants/{restaurant_id}/menu-upload",
+    response_model=dict,
+    tags=["Restaurantes"],
+    summary="Subir menú del restaurante (OCR automático)",
+)
+async def upload_restaurant_menu(
+    restaurant_id: int,
+    menu_file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Sube un menú para un restaurante específico y extrae sus platos con OCR.
+    Solo el dueño del restaurante o un administrador puede realizar esta acción.
+    """
+    payload = _require_auth(authorization)
+    role = payload.get("role")
+    user_restaurant_id = payload.get("restaurant_id")
+    
+    # Validar permisos
+    if role == "restaurant_owner" and user_restaurant_id != restaurant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="No tienes permisos para subir el menú a este restaurante"
+        )
+    elif role not in ("admin", "restaurant_owner"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Rol no autorizado")
+        
+    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+    if not restaurant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado")
+
+    try:
+        file_bytes = await menu_file.read()
+        if not file_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El archivo de menú está vacío.",
+            )
+
+        raw_text, ocr_provider = extract_menu_text_with_default_ocr(
+            file_bytes=file_bytes,
+            content_type=menu_file.content_type,
+        )
+        sections = MenuSectionExtractor.extract(raw_text)
+        
+        # Opcional: Persistir los platos extraídos
+        persist_extracted_dishes(db, sections)
+        
+        # Crear un registro en MenusAzca para hoy y el restaurante
+        today = datetime.now().date()
+        
+        starter = next((s[0] for s in sections.get("starter", []) if s), None)
+        main = next((s[0] for s in sections.get("main", []) if s), None)
+        dessert = next((s[0] for s in sections.get("dessert", []) if s), None)
+        
+        # Check if already exists (simplificado para el ejemplo)
+        # Podrías querer almacenar un DailyMenu (nuevo modelo) o algo similar
+        # para mapear correctamente esto, pero te devuelvo los detalles para que
+        # al menos el front end lo reciba.
+        
+        extracted_menu_data = build_extracted_menu(sections)
+
+        return {
+            "success": True,
+            "restaurant_id": restaurant_id,
+            "message": "Menú procesado exitosamente por OCR.",
+            "ocr_provider": ocr_provider,
+            "extracted_menu": extracted_menu_data.dict()
+        }
+
+    except HTTPException:
+        raise
+    except RuntimeError as runtime_error:
+        logger.error(f"OCR no disponible: {runtime_error}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(runtime_error),
+        )
+    except Exception as exc:
+        logger.error(f"Error procesando menú para restaurante {restaurant_id}: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al procesar OCR del menú.",
@@ -3067,7 +3672,7 @@ async def predict_starter(
     Returns:
         StarterPredictionResponse: Top 3 starters con scores de probabilidad
     """
-    # Acceder al modelo desde app.state (cargado en lifespan)
+    # Acceder al modelo desde app.state (cargado en lifespan o lazy)
     if not _ensure_unified_menu_model_loaded(http_request.app):
         logger.error("Modelo no cargado en app.state")
         raise HTTPException(
@@ -3140,23 +3745,10 @@ async def predict_starter(
         for key, val in starter_input.items():
             logger.info(f"      {key}: {val} ({type(val).__name__})")
         logger.info("="*80)
-
-        allowed_dish_ids = get_restaurant_historical_dish_ids(
-            db,
-            request.restaurant_id,
-            "first_course",
-        )
-        logger.info(
-            f"🍽️ Histórico de starters para restaurante {request.restaurant_id}: {len(allowed_dish_ids)} candidatos"
-        )
         
         # 5. Llamar al modelo cargado en memoria para obtener top 3 predicciones
         try:
-            top_dishes = predict_top3_dishes(
-                http_request.app.state.model,
-                starter_input,
-                allowed_dish_ids=allowed_dish_ids,
-            )
+            top_dishes = predict_top3_dishes(http_request.app.state.model, starter_input)
         except Exception as pred_error:
             logger.error(f"❌ Error durante predict_top3_dishes: {str(pred_error)}", exc_info=True)
             raise HTTPException(
@@ -3174,8 +3766,7 @@ async def predict_starter(
         if sum_scores > 0:
             normalized_scores = [score / sum_scores for score in scores]
         else:
-            prediction_count = max(len(scores), 1)
-            normalized_scores = [1 / prediction_count] * prediction_count
+            normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
         
         # 5. Formatear respuesta (top 3 con rank y estimated_count normalizado)
         # IMPORTANTE: dish[0] es dish_id (int), necesitamos obtener el nombre real desde dim_dishes
@@ -3252,7 +3843,7 @@ async def predict_main(
     Returns:
         MainPredictionResponse: Top 3 platos principales con scores
     """
-    # Acceder al modelo desde app.state (cargado en lifespan)
+    # Acceder al modelo desde app.state (cargado en lifespan o lazy)
     if not _ensure_unified_menu_model_loaded(http_request.app):
         logger.error("Modelo no cargado en app.state")
         raise HTTPException(
@@ -3323,23 +3914,10 @@ async def predict_main(
         for key, val in main_input.items():
             logger.info(f"      {key}: {val} ({type(val).__name__})")
         logger.info("="*80)
-
-        allowed_dish_ids = get_restaurant_historical_dish_ids(
-            db,
-            request.restaurant_id,
-            "second_course",
-        )
-        logger.info(
-            f"🍽️ Histórico de principales para restaurante {request.restaurant_id}: {len(allowed_dish_ids)} candidatos"
-        )
         
         # 5. Llamar al modelo cargado en memoria para obtener top 3 predicciones
         try:
-            top_dishes = predict_top3_dishes(
-                http_request.app.state.model,
-                main_input,
-                allowed_dish_ids=allowed_dish_ids,
-            )
+            top_dishes = predict_top3_dishes(http_request.app.state.model, main_input)
         except Exception as pred_error:
             logger.error(f"❌ Error durante predict_top3_dishes: {str(pred_error)}", exc_info=True)
             raise HTTPException(
@@ -3357,8 +3935,7 @@ async def predict_main(
         if sum_scores > 0:
             normalized_scores = [score / sum_scores for score in scores]
         else:
-            prediction_count = max(len(scores), 1)
-            normalized_scores = [1 / prediction_count] * prediction_count
+            normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
         
         # 5. Formatear respuesta
         # IMPORTANTE: dish[0] es dish_id (int), necesitamos obtener el nombre real desde dim_dishes
@@ -3435,7 +4012,7 @@ async def predict_dessert(
     Returns:
         DessertPredictionResponse: Top 3 postres con scores
     """
-    # Acceder al modelo desde app.state (cargado en lifespan)
+    # Acceder al modelo desde app.state (cargado en lifespan o lazy)
     if not _ensure_unified_menu_model_loaded(http_request.app):
         logger.error("Modelo no cargado en app.state")
         raise HTTPException(
@@ -3506,23 +4083,10 @@ async def predict_dessert(
         for key, val in dessert_input.items():
             logger.info(f"      {key}: {val} ({type(val).__name__})")
         logger.info("="*80)
-
-        allowed_dish_ids = get_restaurant_historical_dish_ids(
-            db,
-            request.restaurant_id,
-            "dessert",
-        )
-        logger.info(
-            f"🍽️ Histórico de postres para restaurante {request.restaurant_id}: {len(allowed_dish_ids)} candidatos"
-        )
         
         # 5. Llamar al modelo cargado en memoria para obtener top 3 predicciones
         try:
-            top_dishes = predict_top3_dishes(
-                http_request.app.state.model,
-                dessert_input,
-                allowed_dish_ids=allowed_dish_ids,
-            )
+            top_dishes = predict_top3_dishes(http_request.app.state.model, dessert_input)
         except Exception as pred_error:
             logger.error(f"❌ Error durante predict_top3_dishes: {str(pred_error)}", exc_info=True)
             raise HTTPException(
@@ -3540,8 +4104,7 @@ async def predict_dessert(
         if sum_scores > 0:
             normalized_scores = [score / sum_scores for score in scores]
         else:
-            prediction_count = max(len(scores), 1)
-            normalized_scores = [1 / prediction_count] * prediction_count
+            normalized_scores = [1/3, 1/3, 1/3]  # Fallback si algo va mal
         
         # 5. Formatear respuesta
         # IMPORTANTE: dish[0] es dish_id (int), necesitamos obtener el nombre real desde dim_dishes
@@ -3619,44 +4182,19 @@ async def root():
     }
 
 
-import uuid
-import shutil
-
-@app.post(
-    "/upload-image",
-    summary="Subir una imagen al servidor",
-    tags=["Uploads"],
-)
-async def upload_image(file: UploadFile = File(...)):
-    """Guarda una imagen y devuelve la URL pública."""
-    try:
-        ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
-        filename = f"{uuid.uuid4().hex}.{ext}"
-
-        images_dir = Path(__file__).parent / "static" / "images"
-        images_dir.mkdir(parents=True, exist_ok=True)
-        file_path = images_dir / filename
-
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        return {"image_url": f"/static/images/{filename}", "message": "Imagen válida"}
-    except Exception as e:
-        logger.error(f"Error subiendo imagen: {e}")
-        raise HTTPException(status_code=500, detail="No se pudo subir la imagen.")
-
-
 # ============================================================================
 # EJECUCIÓN (Para desarrollo local)
 # ============================================================================
 
 if __name__ == "__main__":
     import uvicorn
+
+    # Ejecutar con: python -m azca.api.main
+    # o: uvicorn azca.api.main:app --reload
     uvicorn.run(
-        "api.main:app",
+        "azca.api.main:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
         log_level="info",
     )
-

@@ -73,10 +73,11 @@ export async function uploadRestaurantImage(
   restaurantId: number,
   file: File,
   token: string,
-): Promise<{ image_base64: string; content_type: string }> {
+): Promise<{ success: boolean; image_url: string; restaurant_id: number; message: string }> {
   const formData = new FormData()
-  formData.append('image_file', file)
-  const response = await fetch(`/restaurants/${restaurantId}/image`, {
+  formData.append('restaurant_id', String(restaurantId))
+  formData.append('file', file)
+  const response = await fetch('/upload-restaurant-image', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
@@ -86,9 +87,8 @@ export async function uploadRestaurantImage(
 
 export async function getRestaurantImage(
   restaurantId: number,
-): Promise<{ data_uri: string; image_url?: string }> {
+): Promise<{ image_url: string; is_default?: boolean; restaurant_id?: number }> {
   const response = await fetch(`/restaurants/${restaurantId}/image`)
   if (!response.ok) throw new Error('Sin imagen')
-  const data = await response.json()
-  return { data_uri: data.data_uri, image_url: data.data_uri }
+  return response.json()
 }
