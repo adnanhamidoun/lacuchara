@@ -2,9 +2,25 @@
 # -*- coding: utf-8 -*-
 """Verificar registros en fact_prediction_logs"""
 
+import os
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
-conn_str = 'mssql+pyodbc:///?odbc_connect=DRIVER={ODBC Driver 17 for SQL Server};Server=tcp:azcasqlserver.database.windows.net,1433;Database=azca_db;Uid=azca_user;Pwd=Azca@2024!;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;'
+# Cargar variables de entorno desde .env
+load_dotenv()
+
+# Obtener credenciales desde variables de entorno
+db_server = os.getenv('DB_SERVER', 'azcasqlserver.database.windows.net')
+db_name = os.getenv('DB_NAME', 'azca_db')
+db_user = os.getenv('DB_USER', 'azca_user')
+db_password = os.getenv('DB_PASSWORD')
+db_driver = os.getenv('DB_DRIVER', '{ODBC Driver 17 for SQL Server}')
+
+if not db_password:
+    raise ValueError("❌ DB_PASSWORD no configurada en .env")
+
+# Construir connection string de forma segura
+conn_str = f'mssql+pyodbc:///?odbc_connect=DRIVER={db_driver};Server=tcp:{db_server},1433;Database={db_name};Uid={db_user};Pwd={db_password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;'
 
 try:
     engine = create_engine(conn_str)
