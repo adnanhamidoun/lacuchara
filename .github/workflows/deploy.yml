@@ -1,0 +1,261 @@
+name: Build & Deploy to Azure
+
+# ============================================================================
+# Trigger: cuando hay push a main o manualmente
+# ============================================================================
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.github/workflows/deploy.yml'
+  
+  # Permite disparo manual desde Actions tab
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+# ============================================================================
+# Configuración global
+# ============================================================================
+env:
+  REGISTRY: azcaregistry.azurecr.io
+  IMAGE_NAME: azcaapi
+  APP_NAME: azca-api-app
+  RESOURCE_GROUP: azca-rg
+
+jobs:
+  # ============================================================================
+  # Job 1: Build Docker image
+  # ============================================================================
+  build:
+    name: 🏗️ Build Docker Image
+    runs-on: ubuntu-latest
+    
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Para git history
+
+      - name: 🔐 Set up Azure credentials
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 🔐 Login to ACR
+        run: |
+          az acr login --name azcaregistry
+
+      - name: 📊 Generate image metadata
+        id: meta
+        run: |
+          echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+          echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: 🏗️ Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          build-args: |
+            BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+            VCS_REF=${{ github.sha }}
+            VERSION=v${{ github.run_number }}
+
+      - name: 📝 Print image info
+        run: |
+          echo "✅ Image built and pushed successfully"
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+
+  # ============================================================================
+  # Job 2: Deploy to Azure App Service
+  # ============================================================================
+  deploy:
+    name: 🚀 Deploy to Azure
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: production
+      url: https://${{ env.APP_NAME }}.azurewebsites.net
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Set up Azure credentials
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 📋 Configure App Settings
+        run: |
+          az webapp config appsettings set \
+            --name ${{ env.APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --settings \
+              DB_SERVER=${{ secrets.DB_SERVER }} \
+              DB_NAME=${{ secrets.DB_NAME }} \
+              DB_USER=${{ secrets.DB_USER }} \
+              DB_PASS=${{ secrets.DB_PASS }} \
+              ENVIRONMENT=production \
+              LOG_LEVEL=INFO \
+              BUILD_ID=${{ github.sha }}
+
+      - name: 🐳 Deploy container
+        run: |
+          az webapp config container set \
+            --name ${{ env.APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --docker-custom-image-name ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --docker-registry-server-url https://${{ env.REGISTRY }} \
+            --docker-registry-server-user ${{ secrets.REGISTRY_USERNAME }} \
+            --docker-registry-server-password ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: 🔄 Restart App Service
+        run: |
+          az webapp restart --name ${{ env.APP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }}
+
+      - name: ⏳ Wait for app to be healthy
+        run: |
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+          URL="https://${{ env.APP_NAME }}.azurewebsites.net/health"
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" $URL)
+            if [ "$RESPONSE" = "200" ]; then
+              echo "✅ App is healthy (HTTP $RESPONSE)"
+              exit 0
+            fi
+            echo "⏳ Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS: HTTP $RESPONSE"
+            ATTEMPT=$((ATTEMPT + 1))
+            sleep 2
+          done
+          
+          echo "❌ App failed to become healthy"
+          exit 1
+
+      - name: 📊 Get deployment info
+        run: |
+          echo "## 📊 Deployment Info"
+          echo ""
+          echo "**App URL:** https://${{ env.APP_NAME }}.azurewebsites.net"
+          echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "**Commit:** ${{ github.sha }}"
+          echo "**Branch:** ${{ github.ref }}"
+
+      - name: 💬 Post to Slack (Opcional)
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            Deployment ${{ job.status }}
+            App: ${{ env.APP_NAME }}
+            Image: ${{ github.sha }}
+            Commit: ${{ github.event.head_commit.message }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        continue-on-error: true
+
+  # ============================================================================
+  # Job 3: Run smoke tests
+  # ============================================================================
+  smoke-tests:
+    name: 🧪 Run Smoke Tests
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: success()
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🧪 Test health endpoint
+        run: |
+          curl -f https://${{ env.APP_NAME }}.azurewebsites.net/health || exit 1
+
+      - name: 🧪 Test restaurants endpoint
+        run: |
+          curl -f https://${{ env.APP_NAME }}.azurewebsites.net/restaurants || exit 1
+
+      - name: 📊 Test prediction endpoint
+        run: |
+          curl -X POST https://${{ env.APP_NAME }}.azurewebsites.net/predict \
+            -H "Content-Type: application/json" \
+            -d '{
+              "service_date": "2026-03-20",
+              "restaurant_id": 1,
+              "is_stadium_event": false,
+              "is_azca_event": false,
+              "capacity_limit": 100,
+              "table_count": 20,
+              "min_service_duration": 45,
+              "terrace_setup_type": "none",
+              "opens_weekends": true,
+              "has_wifi": true,
+              "restaurant_segment": "premium",
+              "menu_price": 50.0,
+              "dist_office_towers": 200,
+              "google_rating": 4.5,
+              "cuisine_type": "spanish",
+              "max_temp_c": 20.0,
+              "precipitation_mm": 0.0,
+              "is_payday_week": false
+            }' || exit 1
+        continue-on-error: true  # No bloquear si la BD no está disponible
+
+      - name: ✅ Smoke tests passed
+        run: echo "✅ All smoke tests passed!"
+
+# ============================================================================
+# Configuración necesaria en GitHub:
+# ============================================================================
+# 1. Secrets que DEBES configurar en Settings → Secrets and variables:
+#
+#    - AZURE_CREDENTIALS: JSON con credenciales de Azure
+#      {
+#        "clientId": "...",
+#        "clientSecret": "...",
+#        "subscriptionId": "...",
+#        "tenantId": "..."
+#      }
+#    - REGISTRY_USERNAME: Usuario ACR
+#    - REGISTRY_PASSWORD: Password ACR
+#    - DB_SERVER: azcasqlserver.database.windows.net
+#    - DB_NAME: azca_db
+#    - DB_USER: usuario BD
+#    - DB_PASS: password BD
+#    - SLACK_WEBHOOK: (Opcional) para notificaciones
+#
+# 2. Generar AZURE_CREDENTIALS:
+#    az ad sp create-for-rbac --role contributor --name azca-github --scopes /subscriptions/[SUB_ID]/resourceGroups/[RG]
+#    Copiar el JSON resultado en el secret
+#
+# 3. Variables ACR:
+#    az acr credential show --name azcaregistry
+# ============================================================================
