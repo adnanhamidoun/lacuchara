@@ -1,7 +1,7 @@
 import importlib
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, Optional
 
 import pandas as pd
 
@@ -646,51 +646,138 @@ class MenuSectionExtractor:
 
 
 class MenuMLPredictor:
+    # These columns match the training table schema (dbo.tbl_menus_training_data_NUMERIC...)
+    # WARNING: The model expects *exactly* these columns in this order.
     BASE_FEATURE_COLUMNS = [
-        "max_temp_c",
-        "is_holiday",
-        "is_bridge_day",
-        "is_business_day",
-        "cuisine_type",
-        "restaurant_segment",
-        "menu_price",
         "day_of_week",
         "month",
-        "starter_yesterday",
-        "main_yesterday",
-        "dessert_yesterday",
-        "starter_last_week",
-        "main_last_week",
-        "dessert_last_week",
+        "max_temp_c",
+        "precipitation_mm",
+        "is_holiday",
+        "is_payday_week",
+        "is_stadium_event",
+        "is_azca_event",
+        "restaurant_id",
+        "menu_price",
+        "cuisine_type_id",
+        "restaurant_segment_id",
+        "terrace_setup_type_id",
+        "course_type_id",
+        "prev_dish_id",
+        "dish_id",
     ]
 
+    # These correspond to the two Azure ML registered models.
     MODEL_BY_CATEGORY = {
-        "starter": "azca_menu_starter_v2",
-        "main": "azca_menu_main_v2",
-        "dessert": "azca_menu_dessert_v2",
+        "starter": "azca-menus-model",
+        "main": "azca-menus-model",
+        "dessert": "azca-menus-model",
     }
 
-    def __init__(self, model_provider: Any) -> None:
+    # Mapping tables used to transform categorical fields into numeric IDs.
+    CUISINE_TYPE_ID = {
+        "grill": 1,
+        "spanish": 2,
+        "mediterranean": 3,
+        "stew": 4,
+        "fried": 5,
+        "italian": 6,
+        "asian": 7,
+        "latin": 8,
+        "arabic": 9,
+        "avantgarde": 10,
+        "plantbased": 11,
+        "streetfood": 12,
+    }
+
+    RESTAURANT_SEGMENT_ID = {
+        "gourmet": 1,
+        "traditional": 2,
+        "business": 3,
+        "family": 4,
+    }
+
+    TERRACE_SETUP_TYPE_ID = {
+        "yearround": 1,
+        "summer": 2,
+        "none": 3,
+    }
+
+    COURSE_TYPE_ID = {
+        "starter": 1,
+        "main": 2,
+        "dessert": 3,
+    }
+
+    def __init__(
+        self,
+        model_provider: Any,
+        dish_id_resolver: Optional[Callable[[str], int]] = None,
+    ) -> None:
+        """Initialize with a model provider and optional dish-id resolver.
+
+        Args:
+            model_provider: Provides models by name (Azure ML / local pickle).
+            dish_id_resolver: Callable[[str], int] to map dish names to dish IDs.
+        """
         self.model_provider = model_provider
+        self._resolve_dish_id = dish_id_resolver
 
     def _build_features(self, common: dict[str, Any], sections: MenuSections) -> pd.DataFrame:
+        """Build a feature row matching the training schema used by the menu model."""
+        # Default values to keep prediction stable when data is missing
+        day_of_week = int(common.get("day_of_week", 0))
+        month = int(common.get("month", 1))
+        max_temp_c = float(common.get("max_temp_c", 20.0))
+        precipitation_mm = float(common.get("precipitation_mm", 0.0))
+        is_holiday = bool(common.get("is_holiday", False))
+        is_payday_week = bool(common.get("is_payday_week", False))
+        is_stadium_event = bool(common.get("is_stadium_event", False))
+        is_azca_event = bool(common.get("is_azca_event", False))
+
+        restaurant_id = int(common.get("restaurant_id", 1))
+        menu_price = float(common.get("menu_price", 15.0))
+
+        cuisine_type = (common.get("cuisine_type") or "mediterranean").lower()
+        restaurant_segment = (common.get("restaurant_segment") or "traditional").lower()
+        terrace_setup_type = (common.get("terrace_setup_type") or "none").lower()
+        category = (common.get("category") or "starter").lower()
+
+        cuisine_type_id = self.CUISINE_TYPE_ID.get(cuisine_type, 0)
+        restaurant_segment_id = self.RESTAURANT_SEGMENT_ID.get(restaurant_segment, 0)
+        terrace_setup_type_id = self.TERRACE_SETUP_TYPE_ID.get(terrace_setup_type, 0)
+        course_type_id = self.COURSE_TYPE_ID.get(category, 0)
+
+        # The model was trained with these IDs in the training table.
+        prev_dish_id = 0
+        if self._resolve_dish_id:
+            prev_dish_name = getattr(sections, category, None)
+            if prev_dish_name:
+                prev_dish_id = self._resolve_dish_id(prev_dish_name) or 0
+
+        # dish_id is usually the label and not known at inference time.
+        # We set to 0 to keep the column count correct.
+        dish_id = 0
+
         row = {
-            "max_temp_c": float(common.get("max_temp_c", 20.0)),
-            "is_holiday": bool(common.get("is_holiday", False)),
-            "is_bridge_day": bool(common.get("is_bridge_day", False)),
-            "is_business_day": bool(common.get("is_business_day", True)),
-            "cuisine_type": common.get("cuisine_type", "mediterranean") or "mediterranean",
-            "restaurant_segment": common.get("restaurant_segment", "casual") or "casual",
-            "menu_price": float(common.get("menu_price", 15.0)),
-            "day_of_week": int(common.get("day_of_week", 0)),
-            "month": int(common.get("month", 1)),
-            "starter_yesterday": sections.starter,
-            "main_yesterday": sections.main,
-            "dessert_yesterday": sections.dessert,
-            "starter_last_week": sections.starter,
-            "main_last_week": sections.main,
-            "dessert_last_week": sections.dessert,
+            "day_of_week": day_of_week,
+            "month": month,
+            "max_temp_c": max_temp_c,
+            "precipitation_mm": precipitation_mm,
+            "is_holiday": is_holiday,
+            "is_payday_week": is_payday_week,
+            "is_stadium_event": is_stadium_event,
+            "is_azca_event": is_azca_event,
+            "restaurant_id": restaurant_id,
+            "menu_price": menu_price,
+            "cuisine_type_id": cuisine_type_id,
+            "restaurant_segment_id": restaurant_segment_id,
+            "terrace_setup_type_id": terrace_setup_type_id,
+            "course_type_id": course_type_id,
+            "prev_dish_id": prev_dish_id,
+            "dish_id": dish_id,
         }
+
         return pd.DataFrame([[row[col] for col in self.BASE_FEATURE_COLUMNS]], columns=self.BASE_FEATURE_COLUMNS)
 
     @staticmethod
@@ -709,6 +796,11 @@ class MenuMLPredictor:
         for category, model_name in self.MODEL_BY_CATEGORY.items():
             try:
                 model = self.model_provider.get_model(model_name)
+
+                # Ensure each category passes its own context (course_type_id, prev_dish_id) correctly.
+                category_input = {**common, "category": category}
+                features = self._build_features(category_input, sections)
+
                 top3 = self._top3_from_model(model, features)
                 if top3:
                     predictions[category] = top3

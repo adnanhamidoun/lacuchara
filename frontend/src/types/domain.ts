@@ -18,9 +18,29 @@ export interface RestaurantDetail extends RestaurantItem {
   image_url: string | null
 }
 
+export interface RestaurantUpdatePayload {
+  name?: string | null
+  capacity_limit?: number | null
+  table_count?: number | null
+  min_service_duration?: number | null
+  terrace_setup_type?: string | null
+  opens_weekends?: boolean | null
+  has_wifi?: boolean | null
+  restaurant_segment?: string | null
+  menu_price?: number | null
+  dist_office_towers?: number | null
+  google_rating?: number | null
+  cuisine_type?: string | null
+}
+
 export interface RestaurantsListResponse {
   count: number
   restaurants: RestaurantItem[]
+}
+
+export interface RestaurantsDetailListResponse {
+  count: number
+  restaurants: RestaurantDetail[]
 }
 
 export interface Inscripcion {

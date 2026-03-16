@@ -1,12 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
 	:root {
-		--font-display: 'Playfair Display', serif;
+		--font-sans: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+		--font-display: var(--font-sans);
 		--bg: #ffffff;
 		--surface: #ffffff;
 		--surface-soft: #f4f6f8;
@@ -31,7 +30,7 @@
 	}
 
 	body {
-		font-family: 'Inter', sans-serif;
+		font-family: var(--font-sans);
 		background-color: var(--bg);
 		background-image:
 			radial-gradient(circle at 15% 0%, rgba(216, 139, 90, 0.08), transparent 28%),
@@ -199,6 +198,9 @@
 
 	.restaurant-card {
 		contain: paint;
+		will-change: transform, box-shadow, border-color;
+		transform: translateZ(0);
+		backface-visibility: hidden;
 	}
 
 	.restaurant-card img {

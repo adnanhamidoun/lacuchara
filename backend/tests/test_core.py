@@ -1,10 +1,11 @@
 import pytest
+import pickle
 from datetime import datetime
 from pathlib import Path
 
 from azca.core.manager import ModelProvider
 from azca.core.pipeline import InferencePipeline
-from azca.core.engine import PredictionEngine
+from azca.core.engine import PredictionEngine, CloudInferenceClient
 
 
 class TestModelProvider:
@@ -25,6 +26,32 @@ class TestModelProvider:
         # First call should populate cache
         provider._cache["test_model"] = "cached_value"
         assert provider._cache["test_model"] == "cached_value"
+
+    def test_load_local_generic_model_pickle(self, tmp_path):
+        """Test local recursive resolve for model.pkl downloaded by Azure ML."""
+        model_dir = tmp_path / "azca-menus-model" / "1"
+        model_dir.mkdir(parents=True)
+        payload = {"source": "generic-model"}
+
+        with open(model_dir / "model.pkl", "wb") as model_file:
+            pickle.dump(payload, model_file)
+
+        provider = ModelProvider(artifacts_path=tmp_path, prefer_azure=False)
+        model = provider.get_model("azca-menus-model")
+        assert model == payload
+
+    def test_load_local_generic_model_pickle_via_alias(self, tmp_path):
+        """Test logical alias maps to registered-name folder with model.pkl."""
+        model_dir = tmp_path / "azca-menus-model" / "2"
+        model_dir.mkdir(parents=True)
+        payload = {"source": "alias"}
+
+        with open(model_dir / "model.pkl", "wb") as model_file:
+            pickle.dump(payload, model_file)
+
+        provider = ModelProvider(artifacts_path=tmp_path, prefer_azure=False)
+        model = provider.get_model("azca_menu_starter_v2")
+        assert model == payload
 
 
 class TestInferencePipeline:
@@ -108,6 +135,39 @@ class TestPredictionEngine:
             pipeline_config=custom_config
         )
         assert engine.pipeline.fixed_fields["restaurant_id"] == 50
+
+
+class TestCloudInferenceClient:
+    def test_extract_numeric_prediction_from_list(self):
+        value = CloudInferenceClient._extract_numeric_prediction({"predictions": [123.0]})
+        assert value == 123.0
+
+    def test_extract_numeric_prediction_from_dict(self):
+        value = CloudInferenceClient._extract_numeric_prediction({"prediction": {"value": 87}})
+        assert value == 87.0
+
+    def test_extract_ranked_predictions_from_classes_probabilities(self):
+        ranked = CloudInferenceClient._extract_ranked_predictions(
+            {
+                "classes": ["A", "B", "C"],
+                "probabilities": [0.11, 0.87, 0.32],
+            },
+            top_k=2,
+        )
+        assert ranked == [("B", 0.87), ("C", 0.32)]
+
+    def test_extract_ranked_predictions_from_list_of_dicts(self):
+        ranked = CloudInferenceClient._extract_ranked_predictions(
+            {
+                "predictions": [
+                    {"label": "Dish 1", "score": 0.20},
+                    {"label": "Dish 2", "score": 0.93},
+                    {"label": "Dish 3", "score": 0.55},
+                ]
+            },
+            top_k=3,
+        )
+        assert ranked == [("Dish 2", 0.93), ("Dish 3", 0.55), ("Dish 1", 0.20)]
 
 
 if __name__ == "__main__":

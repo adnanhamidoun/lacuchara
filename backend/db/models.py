@@ -73,7 +73,6 @@ class Restaurant(Base):
     password_hash = Column(String(255), nullable=True)
     image_url = Column(String(500), nullable=True)
     image_data = Column(LargeBinary, nullable=True)
-
     def __repr__(self):
         return f"<Restaurant(id={self.restaurant_id}, name='{self.name}')>"
 
@@ -165,7 +164,6 @@ class DimDish(Base):
         return f"<DimDish(id={self.dish_id}, course_type='{self.course_type}', dish_name='{self.dish_name}')>"
 
 
-# Alias para compatibilidad con código que usa el nombre plural
 DimDishes = DimDish
 
 
@@ -334,9 +332,6 @@ class MenusAzca(Base):
         return f"<MenusAzca(rest_id={self.restaurant_id}, first='{self.first_course}', second='{self.second_course}', dessert='{self.dessert}')>"
 
 
-# DimDishes ya está definido como alias arriba
-
-
 class FactMenuItems(Base):
     """
     Modelo ORM para la tabla fact_menu_items.
@@ -363,6 +358,7 @@ class FactMenus(Base):
     menu_id = Column(Integer, primary_key=True)
     restaurant_id = Column(Integer, nullable=False, index=True)
     date_id = Column(Integer, nullable=False)  # YYYYMMDD format
+    includes_drink = Column(Boolean, nullable=False, default=False)
     
     def __repr__(self):
         return f"<FactMenus(menu_id={self.menu_id}, rest_id={self.restaurant_id}, date={self.date_id})>"

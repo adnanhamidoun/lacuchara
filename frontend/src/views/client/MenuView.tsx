@@ -23,10 +23,29 @@ type MenuPredictionState = {
   desserts: PredictedDish[]
 }
 
+type TodayMenuResponse = {
+  menu_id: number
+  restaurant_id: number
+  date: string
+  starter: string | null
+  main: string | null
+  dessert: string | null
+  includes_drink: boolean
+  menu_price?: number | null
+}
+
 const emptyPredictions: MenuPredictionState = {
   starters: [],
   mains: [],
   desserts: [],
+}
+
+function parseMenuCourse(rawValue: string | null | undefined): string[] {
+  if (!rawValue) return []
+  return rawValue
+    .split(';')
+    .map((value) => value.trim())
+    .filter(Boolean)
 }
 
 export default function MenuView() {
@@ -39,8 +58,14 @@ export default function MenuView() {
   const [menuError, setMenuError] = useState('')
   const [servicePrediction, setServicePrediction] = useState<number | null>(null)
   const [serviceError, setServiceError] = useState('')
+  const [todayMenu, setTodayMenu] = useState<TodayMenuResponse | null>(null)
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const tomorrow = useMemo(() => {
+    const date = new Date()
+    date.setDate(date.getDate() + 1)
+    return date.toISOString().slice(0, 10)
+  }, [])
   const [selectedDate, setSelectedDate] = useState(today)
 
   const restaurantIdNumber = useMemo(() => {
@@ -73,6 +98,27 @@ export default function MenuView() {
 
     loadRestaurant()
   }, [restaurantIdNumber])
+
+  useEffect(() => {
+    if (!restaurantIdNumber) return
+
+    const loadTodayMenu = async () => {
+      try {
+        const response = await fetch(`/restaurants/${restaurantIdNumber}/menu/today`)
+        if (!response.ok) {
+          setTodayMenu(null)
+          return
+        }
+        const data = (await response.json()) as TodayMenuResponse
+        setTodayMenu(data)
+        setSelectedDate((current) => (current <= today ? tomorrow : current))
+      } catch {
+        setTodayMenu(null)
+      }
+    }
+
+    loadTodayMenu()
+  }, [restaurantIdNumber, today, tomorrow])
 
   useEffect(() => {
     if (!restaurantIdNumber || !restaurant) return
@@ -188,7 +234,7 @@ export default function MenuView() {
         <div>
           <h2 className="text-2xl font-bold text-[var(--text)]">Menú Predicho por IA</h2>
           <p className="text-sm text-[var(--text-muted)]">
-            Predicción automática para entrante, principal y postre según el modelo y la fecha elegida.
+            Si el restaurante publicó menú hoy, se muestra ese menú y la predicción aplica a días posteriores.
           </p>
         </div>
 
@@ -223,11 +269,47 @@ export default function MenuView() {
               type="date"
               value={selectedDate}
               onChange={(event) => setSelectedDate(event.target.value)}
+              min={todayMenu ? tomorrow : today}
               className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
             />
           </label>
         </div>
       </div>
+
+      {todayMenu ? (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h4 className="font-semibold text-[var(--text)]">Menú del día (hoy)</h4>
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1 text-xs text-[var(--text-muted)]">
+              {(todayMenu.includes_drink ? 'Incluye bebida' : 'No incluye bebida')}
+            </span>
+          </div>
+
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]/40 p-4">
+            {[
+              { title: 'Entrantes', items: parseMenuCourse(todayMenu.starter) },
+              { title: 'Principales', items: parseMenuCourse(todayMenu.main) },
+              { title: 'Postres', items: parseMenuCourse(todayMenu.dessert) },
+            ].map((section) => (
+              <div key={section.title} className="mb-4 last:mb-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{section.title}</p>
+                {section.items.length > 0 ? (
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--text)]">
+                    {section.items.map((item, index) => (
+                      <li key={`${section.title}-${index}`}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-[var(--text-muted)]">Sin información.</p>
+                )}
+              </div>
+            ))}
+            <div className="mt-4 border-t border-[var(--border)] pt-3 text-sm font-semibold text-[var(--text)]">
+              Precio del menú: €{(todayMenu.menu_price ?? restaurant?.menu_price ?? 20).toFixed(2)}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
         <h4 className="font-semibold text-[var(--text)]">Predicción de servicios</h4>

@@ -33,18 +33,18 @@ const TERRACE_OPTIONS: Array<{ value: TerraceOption; label: string }> = [
 ]
 
 const CUISINE_OPTIONS: Array<{ value: CuisineOption; label: string }> = [
-  { value: 'grill', label: `${CUISINE_META.grill.emoji} ${CUISINE_META.grill.label}` },
-  { value: 'spanish', label: `${CUISINE_META.spanish.emoji} ${CUISINE_META.spanish.label}` },
-  { value: 'mediterranean', label: `${CUISINE_META.mediterranean.emoji} ${CUISINE_META.mediterranean.label}` },
-  { value: 'stew', label: `${CUISINE_META.stew.emoji} ${CUISINE_META.stew.label}` },
-  { value: 'fried', label: `${CUISINE_META.fried.emoji} ${CUISINE_META.fried.label}` },
-  { value: 'italian', label: `${CUISINE_META.italian.emoji} ${CUISINE_META.italian.label}` },
-  { value: 'asian', label: `${CUISINE_META.asian.emoji} ${CUISINE_META.asian.label}` },
-  { value: 'latin', label: `${CUISINE_META.latin.emoji} ${CUISINE_META.latin.label}` },
-  { value: 'arabic', label: `${CUISINE_META.arabic.emoji} ${CUISINE_META.arabic.label}` },
-  { value: 'avantgarde', label: `${CUISINE_META.avantgarde.emoji} ${CUISINE_META.avantgarde.label}` },
-  { value: 'plantbased', label: `${CUISINE_META.plantbased.emoji} ${CUISINE_META.plantbased.label}` },
-  { value: 'streetfood', label: `${CUISINE_META.streetfood.emoji} ${CUISINE_META.streetfood.label}` },
+  { value: 'grill', label: CUISINE_META.grill.label },
+  { value: 'spanish', label: CUISINE_META.spanish.label },
+  { value: 'mediterranean', label: CUISINE_META.mediterranean.label },
+  { value: 'stew', label: CUISINE_META.stew.label },
+  { value: 'fried', label: CUISINE_META.fried.label },
+  { value: 'italian', label: CUISINE_META.italian.label },
+  { value: 'asian', label: CUISINE_META.asian.label },
+  { value: 'latin', label: CUISINE_META.latin.label },
+  { value: 'arabic', label: CUISINE_META.arabic.label },
+  { value: 'avantgarde', label: CUISINE_META.avantgarde.label },
+  { value: 'plantbased', label: CUISINE_META.plantbased.label },
+  { value: 'streetfood', label: CUISINE_META.streetfood.label },
 ]
 
 interface FormState {
