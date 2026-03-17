@@ -75,6 +75,7 @@ from ..core.auth import create_access_token, decode_access_token, verify_passwor
 from ..core.blob_storage import (
     get_blob_manager,
     get_default_image_url,
+    get_restaurant_image_url,
 )
 
 # Importar PredictionEngine - pero con fallback si falta
@@ -840,6 +841,42 @@ def _require_admin_auth(authorization: str | None) -> dict:
     if payload.get("role") != "admin":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión no válida para administrador.")
     return payload
+
+
+def _require_restaurant_or_admin_auth(authorization: str | None, requested_restaurant_id: int | None) -> dict:
+    """
+    Requiere que el usuario sea restaurant_owner o admin.
+    Si es restaurant_owner, valida que solo acceda a su propio restaurante.
+    
+    Args:
+        authorization: Header de autorización
+        requested_restaurant_id: ID del restaurante solicitado (para validar permisos)
+        
+    Returns:
+        Payload del token si la autorización es válida
+    """
+    payload = _require_auth(authorization)
+    role = payload.get("role")
+    user_restaurant_id = payload.get("restaurant_id")
+    
+    # Admin puede acceder a cualquier restaurante
+    if role == "admin":
+        return payload
+    
+    # Restaurant owner solo puede acceder a su propio restaurante
+    if role == "restaurant_owner":
+        if user_restaurant_id != requested_restaurant_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para acceder a este restaurante."
+            )
+        return payload
+    
+    # Cualquier otro rol es rechazado
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Rol no autorizado para hacer predicciones de menú."
+    )
 
 
 # ============================================================================
@@ -2539,17 +2576,30 @@ async def post_upload_restaurant_image(
 
 @app.get("/get-restaurant-image/{restaurant_id}")
 async def get_rest_image(restaurant_id: int, db: Session = Depends(get_db)):
-    """Get restaurant image URL"""
-    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
-    
-    if not restaurant:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
-    
-    if restaurant.image_url:
-        return {"image_url": restaurant.image_url, "is_default": False, "restaurant_id": restaurant_id}
-    
-    default_url = get_default_image_url(restaurant.cuisine_type)
-    return {"image_url": default_url, "is_default": True, "restaurant_id": restaurant_id}
+    """Get restaurant image URL from Azure Storage or default image"""
+    try:
+        restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+        
+        if not restaurant:
+            logger.warning(f"Restaurant not found: {restaurant_id}")
+            raise HTTPException(status_code=404, detail="Restaurant not found")
+        
+        # Try to get image from Azure Storage first
+        azure_image_url = get_restaurant_image_url(restaurant_id)
+        logger.info(f"Generated Azure URL for restaurant {restaurant_id}: {azure_image_url}")
+        
+        if restaurant.image_url:
+            logger.info(f"Using stored image URL for restaurant {restaurant_id}")
+            return {"image_url": restaurant.image_url, "is_default": False, "restaurant_id": restaurant_id}
+        
+        # Return Azure Storage URL
+        logger.info(f"Returning Azure Storage URL for restaurant {restaurant_id}")
+        return {"image_url": azure_image_url, "is_default": False, "restaurant_id": restaurant_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting restaurant image for {restaurant_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error getting image: {str(e)}")
 
 
 @app.post(
@@ -3389,6 +3439,7 @@ async def upload_restaurant_menu(
 )
 async def create_prediction(
     request: PredictionRequest,
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """
@@ -3417,6 +3468,9 @@ async def create_prediction(
     Raises:
         HTTPException: Si hay error en la predicción
     """
+    # Verificar que es admin o restaurant_owner del restaurante
+    _require_restaurant_or_admin_auth(authorization, request.restaurant_id)
+    
     global prediction_engine
 
     # Validación: Motor cargado
@@ -3563,9 +3617,13 @@ async def create_prediction(
 async def predict_starter(
     request: StarterPredictionRequest,
     http_request: Request,
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """Predice los 3 entrantes más probables usando el nuevo modelo de menús."""
+    # Verificar que es admin o restaurant_owner del restaurante
+    _require_restaurant_or_admin_auth(authorization, request.restaurant_id)
+    
     if not _ensure_unified_menu_model_loaded(http_request.app):
         logger.error("Modelo no cargado en app.state")
         raise HTTPException(
@@ -3661,9 +3719,13 @@ async def predict_starter(
 async def predict_main(
     request: MainPredictionRequest,
     http_request: Request,
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """Predice los 3 principales más probables usando el nuevo modelo de menús."""
+    # Verificar que es admin o restaurant_owner del restaurante
+    _require_restaurant_or_admin_auth(authorization, request.restaurant_id)
+    
     if not _ensure_unified_menu_model_loaded(http_request.app):
         logger.error("Modelo no cargado en app.state")
         raise HTTPException(
@@ -3759,9 +3821,13 @@ async def predict_main(
 async def predict_dessert(
     request: DessertPredictionRequest,
     http_request: Request,
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """Predice los 3 postres más probables usando el nuevo modelo de menús."""
+    # Verificar que es admin o restaurant_owner del restaurante
+    _require_restaurant_or_admin_auth(authorization, request.restaurant_id)
+    
     if not _ensure_unified_menu_model_loaded(http_request.app):
         logger.error("Modelo no cargado en app.state")
         raise HTTPException(
@@ -4010,6 +4076,7 @@ def cast_features_for_model(df: pd.DataFrame) -> pd.DataFrame:
 async def predict_top_dishes_regression(
     restaurant_id: int,
     service_date: date = Query(..., description="Fecha del servicio (YYYY-MM-DD)"),
+    authorization: str | None = Header(default=None),
     request: Request = None,
     db: Session = Depends(get_db),
 ):
@@ -4028,6 +4095,9 @@ async def predict_top_dishes_regression(
     Returns:
         TopDishesResponse: Los 3 platos con mayor puntuación predicha
     """
+    # Verificar que es admin o restaurant_owner del restaurante
+    _require_restaurant_or_admin_auth(authorization, restaurant_id)
+    
     try:
         exec_start = datetime.now()
         logger.info(f"📍 GET /predict/top-dishes/{restaurant_id}?service_date={service_date}")

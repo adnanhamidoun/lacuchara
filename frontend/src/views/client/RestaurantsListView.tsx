@@ -111,17 +111,23 @@ const RestaurantCard = memo(function RestaurantCard({ restaurant, index, showOpe
   const rating = restaurant.google_rating
   const [imageUrl, setImageUrl] = useState<string>('https://placehold.co/400x200?text=Restaurante')
 
-  // Cargar imagen desde el nuevo endpoint
+  // Cargar imagen desde Azure Storage
   useEffect(() => {
     const loadImage = async () => {
       try {
-        const response = await fetch(`/restaurants/${restaurant.restaurant_id}/image`)
+        console.log(`[RestaurantCard] Loading image for restaurant ${restaurant.restaurant_id}`)
+        const response = await fetch(`/get-restaurant-image/${restaurant.restaurant_id}`)
+        console.log(`[RestaurantCard] Response status: ${response.status}`)
+        
         if (response.ok) {
           const data = await response.json()
-          setImageUrl(data.data_uri)
+          console.log(`[RestaurantCard] Image URL received: ${data.image_url}`)
+          setImageUrl(data.image_url)
+        } else {
+          console.error(`[RestaurantCard] Failed to load image: ${response.status} ${response.statusText}`)
         }
-      } catch {
-        // Usar placeholder si hay error
+      } catch (error) {
+        console.error(`[RestaurantCard] Error loading image:`, error)
       }
     }
     loadImage()

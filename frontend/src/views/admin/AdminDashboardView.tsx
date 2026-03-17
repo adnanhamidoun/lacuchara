@@ -176,47 +176,28 @@ function RestaurantsList({
     restaurants.forEach((rest) => {
       const loadImage = async () => {
         try {
-          // Intenta obtener imagen existente
-          const response = await fetch(`/restaurants/${rest.restaurant_id}/image`)
+          console.log(`[AdminDashboard] Loading image for restaurant ${rest.restaurant_id}`)
+          const response = await fetch(`/get-restaurant-image/${rest.restaurant_id}`)
+          console.log(`[AdminDashboard] Response status: ${response.status}`)
+          
           if (response.ok) {
             const data = await response.json()
+            console.log(`[AdminDashboard] Image URL: ${data.image_url}`)
             setImageUrls((prev) => ({
               ...prev,
-              [rest.restaurant_id]: data.data_uri,
+              [rest.restaurant_id]: data.image_url,
             }))
           } else {
-            // Si no hay imagen, descarga automáticamente una
-            await downloadAutoImage(rest.restaurant_id)
+            console.error(`[AdminDashboard] Failed: ${response.status}`)
           }
-        } catch {
-          // Si falla, intenta descargar automáticamente
-          await downloadAutoImage(rest.restaurant_id)
-        }
-      }
-
-      const downloadAutoImage = async (restaurantId: number) => {
-        try {
-          const autoResponse = await fetch(`/restaurants/${restaurantId}/image/auto`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${(session as any)?.token || ''}`
-            }
-          })
-          if (autoResponse.ok) {
-            const data = await autoResponse.json()
-            setImageUrls((prev) => ({
-              ...prev,
-              [restaurantId]: data.data_uri,
-            }))
-          }
-        } catch {
-          // Use initials fallback
+        } catch (error) {
+          console.error(`[AdminDashboard] Error:`, error)
         }
       }
 
       loadImage()
     })
-  }, [restaurants, session])
+  }, [restaurants])
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -232,7 +213,7 @@ function RestaurantsList({
         return (
           <div key={rest.restaurant_id} className="flex gap-4 rounded-xl border border-[var(--border)] p-4 shadow-sm items-start relative group">
             <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-[#E07B54] shadow-md bg-gradient-to-br from-[#E07B54] to-[#D88B5A] flex-shrink-0 relative flex items-center justify-center">
-              {imageUrl.startsWith('data:') ? (
+              {imageUrl ? (
                 <img src={imageUrl} alt={rest.name} className="h-full w-full object-cover" />
               ) : (
                 <span className="text-lg font-bold text-white">{initials}</span>

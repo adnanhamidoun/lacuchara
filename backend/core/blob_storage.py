@@ -89,3 +89,21 @@ def get_blob_manager() -> BlobManager:
     connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     container_name = os.getenv("AZURE_BLOB_CONTAINER_NAME", "azca-images")
     return BlobManager(container_name=container_name, connection_string=connection_string)
+
+
+def get_restaurant_image_url(restaurant_id: int) -> str:
+    """Get the URL for a restaurant image from Azure Storage.
+    
+    Images are stored as res_{restaurant_id}.jpg in the restaurant-profiles container.
+    """
+    storage_account = os.getenv("AZURE_STORAGE_ACCOUNT_NAME", "")
+    container_name = os.getenv("AZURE_BLOB_CONTAINER_NAME", "restaurant-profiles")
+    
+    if storage_account:
+        # URL format: https://{account_name}.blob.core.windows.net/{container}/{blob}
+        blob_name = f"res_{restaurant_id}.jpg"
+        url = f"https://{storage_account}.blob.core.windows.net/{container_name}/{blob_name}"
+        return url
+    
+    # Fallback to default image if no Azure Storage configured
+    return get_default_image_url("restaurant")
