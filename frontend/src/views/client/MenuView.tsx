@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import type { RestaurantDetail } from '../../types/domain'
+import { RestaurantHero, RestaurantSpecCard, RestaurantOverview, RestaurantMenuPreviewCard } from '../../components/restaurant'
+import { FadeUpSection } from '../../components/motion'
 
 type TodayMenuResponse = {
   menu_id: number
@@ -11,14 +13,6 @@ type TodayMenuResponse = {
   dessert: string | null
   includes_drink: boolean
   menu_price?: number | null
-}
-
-function parseMenuCourse(rawValue: string | null | undefined): string[] {
-  if (!rawValue) return []
-  return rawValue
-    .split(';')
-    .map((value) => value.trim())
-    .filter(Boolean)
 }
 
 export default function MenuView() {
@@ -81,78 +75,98 @@ export default function MenuView() {
     loadTodayMenu()
   }, [restaurantIdNumber])
 
+  const navigate = useNavigate()
+  const [imageUrl, setImageUrl] = useState<string>('https://placehold.co/800x400?text=Restaurante')
+
+  // Load restaurant image - same logic as CatalogView
+  useEffect(() => {
+    if (!restaurantIdNumber) return
+
+    const loadImage = async () => {
+      try {
+        const response = await fetch(`/get-restaurant-image/${restaurantIdNumber}`)
+        
+        if (response.ok) {
+          const data = await response.json()
+          setImageUrl(data.image_url)
+        } else {
+          console.error(`Failed to load image: ${response.status}`)
+        }
+      } catch (error) {
+        console.error(`Error loading image:`, error)
+      }
+    }
+
+    loadImage()
+  }, [restaurantIdNumber])
+
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="space-y-8">
+      {/* Header with Back Button */}
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[var(--text)]">Restaurante</h2>
-          <p className="text-sm text-[var(--text-muted)]">
-            Información del restaurante seleccionado.
-          </p>
+          <h1 className="text-3xl font-bold text-[var(--text)]">Detalles del Restaurante</h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">Información completa y especificaciones</p>
         </div>
-
-        <Link
-          to="/cliente/restaurantes"
-          className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-medium text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]"
+        <button
+          onClick={() => navigate('/cliente/restaurantes')}
+          className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]"
         >
-          Volver al listado
-        </Link>
+          ← Volver al listado
+        </button>
       </div>
 
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-        <p className="text-sm text-[var(--text-muted)]">Información</p>
-        {loading ? <p className="text-sm text-[var(--text-muted)]">Cargando restaurante...</p> : null}
-        {error ? <p className="text-sm text-[#E53935]">{error}</p> : null}
-        {!loading && !error ? (
-          <div className="mt-2 space-y-2">
-            <h3 className="text-lg font-bold text-[var(--text)]">{restaurant?.name}</h3>
-            <p className="text-sm text-[var(--text-muted)]">
-              {restaurant?.cuisine_type} • {restaurant?.restaurant_segment}
-            </p>
-            <p className="text-sm text-[var(--text-muted)]">
-              Rating: {restaurant?.google_rating?.toFixed(1)} ⭐
-            </p>
-            <p className="text-sm text-[var(--text)]">
-              Precio medio menú: €{(restaurant?.menu_price ?? 20).toFixed(2)}
-            </p>
-          </div>
-        ) : null}
-      </div>
+      {/* Loading State */}
+      {loading && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center">
+          <p className="text-[var(--text-muted)]">Cargando información del restaurante...</p>
+        </div>
+      )}
 
-      {todayMenu ? (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h4 className="font-semibold text-[var(--text)]">Menú del día (hoy)</h4>
-            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1 text-xs text-[var(--text-muted)]">
-              {(todayMenu.includes_drink ? 'Incluye bebida' : 'No incluye bebida')}
-            </span>
-          </div>
+      {/* Error State */}
+      {error && (
+        <div className="rounded-2xl border border-[#E53935]/30 bg-[#E53935]/5 p-4">
+          <p className="text-sm text-[#E53935]">{error}</p>
+        </div>
+      )}
 
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]/40 p-4">
-            {[
-              { title: 'Entrantes', items: parseMenuCourse(todayMenu.starter) },
-              { title: 'Principales', items: parseMenuCourse(todayMenu.main) },
-              { title: 'Postres', items: parseMenuCourse(todayMenu.dessert) },
-            ].map((section) => (
-              <div key={section.title} className="mb-4 last:mb-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{section.title}</p>
-                {section.items.length > 0 ? (
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--text)]">
-                    {section.items.map((item, index) => (
-                      <li key={`${section.title}-${index}`}>{item}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-sm text-[var(--text-muted)]">Sin información.</p>
-                )}
-              </div>
-            ))}
-            <div className="mt-4 border-t border-[var(--border)] pt-3 text-sm font-semibold text-[var(--text)]">
-              Precio del menú: €{(todayMenu.menu_price ?? restaurant?.menu_price ?? 20).toFixed(2)}
+      {/* Main Content */}
+      {!loading && !error && restaurant && (
+        <>
+          {/* Hero Section */}
+          <FadeUpSection>
+            <RestaurantHero
+              restaurant={restaurant}
+              imageUrl={imageUrl}
+              onBack={() => navigate('/cliente/restaurantes')}
+            />
+          </FadeUpSection>
+
+          {/* Premium 2-Column Layout: Left Column (Overview + Menu) | Right Column (Specs) */}
+          {/* Grid uses explicit minmax for perfect alignment: 2fr left, 320px minimum right */}
+          <div className="grid gap-8 grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] items-start">
+            {/* Left Column: Overview + Menu Preview (2/3 width) */}
+            <div className="space-y-6">
+              {/* Restaurant Overview & Quick Facts */}
+              <FadeUpSection>
+                <RestaurantOverview restaurant={restaurant} />
+              </FadeUpSection>
+
+              {/* Menu Preview - Integrated into upper section */}
+              <FadeUpSection>
+                <RestaurantMenuPreviewCard restaurant={restaurant} menuData={todayMenu} />
+              </FadeUpSection>
+            </div>
+
+            {/* Right Column: Specifications (fixed minimum width) */}
+            <div>
+              <FadeUpSection>
+                <RestaurantSpecCard restaurant={restaurant} />
+              </FadeUpSection>
             </div>
           </div>
-        </div>
-      ) : null}
+        </>
+      )}
     </section>
   )
 }

@@ -1375,6 +1375,48 @@ async def get_restaurant_image(
         )
 
 
+@app.get(
+    "/company/logo",
+    summary="Obtener logos de la empresa AML",
+    tags=["Company"],
+    response_model=dict,
+)
+async def get_company_logos():
+    """
+    Obtiene las URLs de los logos de AML desde Azure Blob Storage.
+    
+    Retorna:
+    - Logo.png: Logo completo con texto (para página Sobre Nosotros)
+    - Logo_sin.png: Logo sin texto (para header principal)
+    """
+    try:
+        import os
+        
+        storage_account = os.getenv("AZURE_STORAGE_ACCOUNT_NAME", "storagemenus")
+        container = os.getenv("AZURE_BLOB_CONTAINER_EMPRESA", "company-assets")
+        
+        base_url = f"https://{storage_account}.blob.core.windows.net/{container}"
+        
+        logos = {
+            "logo_completo": f"{base_url}/Logo.png",
+            "logo_sin_texto": f"{base_url}/Logo_sin.png",
+        }
+        
+        logger.info(f"📦 Logos de empresa servidos desde: {base_url}")
+        
+        return logos
+        
+    except Exception as e:
+        logger.error(
+            f"❌ Error al obtener logos de empresa: {str(e)}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener logos de la empresa"
+        )
+
+
 def _parse_min_service_duration(min_service: str | None) -> int | None:
     """Convierte min_service (nvarchar) a entero de minutos si es posible."""
     if not min_service:

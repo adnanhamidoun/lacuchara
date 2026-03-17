@@ -1,6 +1,6 @@
 import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Wifi, Sparkles, Building2, Briefcase, Users, Facebook, Instagram, Linkedin, ArrowRight, Crown, Star } from 'lucide-react'
+import { Search, Wifi, Sparkles, Building2, Briefcase, Users, Linkedin, ArrowRight, Crown, Star } from 'lucide-react'
 import { isInPriceRange, type PriceRange, useRestaurants } from '../../hooks/useRestaurants'
 import type { RestaurantDetail } from '../../types/domain'
 import { getCanonicalCuisineCode, getCuisineMeta } from '../../utils/cuisine'
@@ -38,8 +38,8 @@ const SEGMENTS = [
   },
 ] as const
 
-const INITIAL_VISIBLE_RESTAURANTS = 16
-const VISIBLE_RESTAURANTS_STEP = 16
+const INITIAL_VISIBLE_RESTAURANTS = 8
+const VISIBLE_RESTAURANTS_STEP = 4
 
 type IndexedRestaurant = {
   restaurant: RestaurantDetail
@@ -361,14 +361,6 @@ export default function RestaurantsListView() {
         </div>
       </div>
 
-      <div id="sobre-nosotros" className="luxury-panel rounded-2xl border border-[#3A3037]/70 bg-[var(--surface)]/70 p-6 shadow-[0_12px_28px_rgba(0,0,0,0.28)]">
-        <h3 className="text-2xl font-bold text-[var(--text)]">Sobre Nosotros</h3>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--text-muted)]">
-          En CUISINE AML conectamos comensales con propuestas gastronómicas de alto nivel. Nuestra plataforma combina diseño elegante,
-          curaduría de restaurantes y filtros inteligentes para descubrir experiencias memorables en segundos.
-        </p>
-      </div>
-
       <div
         id="explorar"
         className="selection-surface animate-grid-shimmer space-y-4 rounded-3xl p-6"
@@ -472,14 +464,23 @@ export default function RestaurantsListView() {
 
         <div className="relative z-10 space-y-4">
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="inline-flex items-center gap-2 text-xl font-bold text-[var(--text)]">
-                <Crown size={16} className="text-[#E07B54]" />
-                Restaurantes disponibles
-              </h3>
-              <p className="text-sm text-[var(--text-muted)]">
-                Mostrando {visibleRestaurants.length} de {animatedCount} resultados
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <h3 className="inline-flex items-center gap-2 text-xl font-bold text-[var(--text)]">
+                  <Crown size={16} className="text-[#E07B54]" />
+                  Restaurantes disponibles
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Mostrando {visibleRestaurants.length} de {animatedCount} resultados
+                </p>
+              </div>
+              <Link
+                to="/restaurantes"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#E07B54] hover:text-[#D88B5A] transition-colors"
+              >
+                Ver todos
+                <ArrowRight size={14} />
+              </Link>
             </div>
             <div className="h-px w-full bg-gradient-to-r from-[#E07B54] to-transparent" />
           </div>
@@ -520,6 +521,7 @@ export default function RestaurantsListView() {
 
           <div className="space-y-2">
             <p className="text-sm font-semibold text-[var(--text)]">Soporte</p>
+            <Link to="/sobre-nosotros" className="block text-sm text-[var(--text-muted)] hover:text-[var(--text)]">Sobre Nosotros</Link>
             <a href="#" className="block text-sm text-[var(--text-muted)] hover:text-[var(--text)]">Centro de ayuda</a>
             <a href="#" className="block text-sm text-[var(--text-muted)] hover:text-[var(--text)]">Contacto</a>
           </div>
@@ -532,16 +534,34 @@ export default function RestaurantsListView() {
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-[var(--text)]">Síguenos</p>
-            <div className="flex items-center gap-2">
-              <a href="#" className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-2 text-[var(--text-muted)] hover:text-[var(--text)]">
-                <Instagram size={16} />
+            <p className="text-sm font-semibold text-[var(--text)]">Desarrollado por</p>
+            <div className="space-y-1.5">
+              <a
+                href="https://www.linkedin.com/in/mario-garcia-romero-453348304"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+              >
+                <Linkedin size={14} />
+                Mario García
               </a>
-              <a href="#" className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-2 text-[var(--text-muted)] hover:text-[var(--text)]">
-                <Facebook size={16} />
+              <a
+                href="https://www.linkedin.com/in/adnan-hamidoun-el-habti-252079311"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+              >
+                <Linkedin size={14} />
+                Adnan Hamidoun
               </a>
-              <a href="#" className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-2 text-[var(--text-muted)] hover:text-[var(--text)]">
-                <Linkedin size={16} />
+              <a
+                href="https://www.linkedin.com/in/lucian-ciusa-66a7b92b6"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+              >
+                <Linkedin size={14} />
+                Lucian Ciusa
               </a>
             </div>
           </div>

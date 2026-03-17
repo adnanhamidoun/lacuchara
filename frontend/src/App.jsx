@@ -4,7 +4,9 @@ import ProtectedRoute from './components/auth/ProtectedRoute.jsx'
 import AdminDashboardView from './views/admin/AdminDashboardView.tsx'
 import LoginView from './views/auth/LoginView.tsx'
 import MenuView from './views/client/MenuView.tsx'
-import RestaurantsListView from './views/client/RestaurantsListView.tsx'
+import LandingPageView from './views/client/LandingPageView.tsx'
+import CatalogView from './views/client/CatalogView.tsx'
+import AboutView from './views/client/AboutView.tsx'
 import RestaurantOnboardingView from './views/restaurant/RestaurantOnboardingView.tsx'
 import RestaurantPanelView from './views/restaurant/RestaurantPanelView.tsx'
 
@@ -23,7 +25,9 @@ export default function App() {
   return (
     <MainLayout>
       <Routes>
-        <Route path="/" element={<RestaurantsListView />} />
+        <Route path="/" element={<LandingPageView />} />
+        <Route path="/restaurantes" element={<CatalogView />} />
+        <Route path="/sobre-nosotros" element={<AboutView />} />
 
         <Route path="/cliente/restaurantes" element={<Navigate to="/" replace />} />
         <Route

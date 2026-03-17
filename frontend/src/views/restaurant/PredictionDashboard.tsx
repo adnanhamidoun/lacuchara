@@ -38,6 +38,8 @@ export default function PredictionDashboard() {
   const [predictionLoading, setPredictionLoading] = useState(false)
   const [predictionError, setPredictionError] = useState('')
   const [servicePrediction, setServicePrediction] = useState<number | null>(null)
+  const [todayMenuExists, setTodayMenuExists] = useState(false)
+  const [checkingTodayMenu, setCheckingTodayMenu] = useState(false)
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
   const [selectedDate, setSelectedDate] = useState(today)
@@ -69,9 +71,40 @@ export default function PredictionDashboard() {
     loadRestaurant()
   }, [session?.restaurant_id])
 
+  // Verificar si existe menú para hoy
+  useEffect(() => {
+    if (!session?.restaurant_id || !session?.token) return
+
+    const checkTodayMenu = async () => {
+      try {
+        setCheckingTodayMenu(true)
+        const response = await fetch(`/restaurants/${session.restaurant_id}/menu/today`, {
+          headers: {
+            'Authorization': `Bearer ${session.token}`,
+          },
+        })
+        setTodayMenuExists(response.ok)
+      } catch (err) {
+        setTodayMenuExists(false)
+      } finally {
+        setCheckingTodayMenu(false)
+      }
+    }
+
+    checkTodayMenu()
+  }, [session?.restaurant_id, session?.token])
+
   // Cargar predicciones
   useEffect(() => {
     if (!session?.restaurant_id || !restaurant || !session?.token) return
+
+    // Si es hoy y existe menú, no cargar predicciones
+    if (selectedDate === today && todayMenuExists) {
+      setMenuPredictions(emptyPredictions)
+      setServicePrediction(null)
+      setPredictionError('')
+      return
+    }
 
     const loadPredictions = async () => {
       try {
@@ -165,7 +198,7 @@ export default function PredictionDashboard() {
     }
 
     loadPredictions()
-  }, [session?.restaurant_id, session?.token, selectedDate, restaurant])
+  }, [session?.restaurant_id, session?.token, selectedDate, restaurant, today, todayMenuExists])
 
   if (loading) {
     return (
@@ -220,9 +253,16 @@ export default function PredictionDashboard() {
       </div>
 
       {/* Menú Completo Sugerido */}
-      {predictionLoading ? (
+      {checkingTodayMenu || predictionLoading ? (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center">
           <p className="text-sm text-[var(--text-muted)]">Calculando menú sugerido...</p>
+        </div>
+      ) : selectedDate === today && todayMenuExists ? (
+        <div className="rounded-2xl border-2 border-[#FF9800] bg-[var(--surface)] p-6 text-center">
+          <p className="text-sm font-semibold text-[#FF9800]">📋 Menú del día ya publicado</p>
+          <p className="text-xs text-[var(--text-muted)] mt-2">
+            Ya has subido el menú de hoy. Las sugerencias de IA aparecen para días futuros.
+          </p>
         </div>
       ) : predictionError ? (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">

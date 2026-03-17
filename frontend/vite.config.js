@@ -38,6 +38,10 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
         },
+        '/company': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
       },
     },
   }

@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext.jsx'
 
 export default function MainLayout({ children }) {
   const [theme, setTheme] = useState('light')
+  const [logoSinTexto, setLogoSinTexto] = useState(null)
   const { session, logout } = useAuth()
   const navigate = useNavigate()
 
@@ -14,6 +15,23 @@ export default function MainLayout({ children }) {
     const nextTheme = savedTheme || (prefersDark ? 'dark' : 'light')
     setTheme(nextTheme)
     document.documentElement.classList.toggle('dark', nextTheme === 'dark')
+
+    // Load logo
+    const loadLogo = async () => {
+      try {
+        const response = await fetch('/company/logo')
+        if (response.ok) {
+          const data = await response.json()
+          console.log('Logo loaded:', data)
+          setLogoSinTexto(data.logo_sin_texto)
+        } else {
+          console.error(`Error: Response status ${response.status}`)
+        }
+      } catch (error) {
+        console.error('Error loading logo:', error)
+      }
+    }
+    loadLogo()
   }, [])
 
   const toggleTheme = () => {
@@ -97,28 +115,40 @@ export default function MainLayout({ children }) {
 
       <header className="sticky top-0 z-40 border-b border-[#3A3037]/60 bg-[var(--bg)]/80 shadow-[0_10px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl">
         <div className="mx-auto grid w-full max-w-[1600px] grid-cols-1 items-center gap-4 px-4 py-4 md:grid-cols-3">
-          <Link to="/cliente/restaurantes" className="justify-self-start">
-            <h1 className="inline-flex items-center gap-2 text-2xl font-bold tracking-tight text-[var(--text)]">
-              <Crown size={20} className="text-[var(--accent)]" />
-              CUISINE AML
-            </h1>
-            <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Prestige Restaurant Management</p>
+          <Link to="/" className="justify-self-start">
+            <div className="inline-flex items-center gap-3">
+              {logoSinTexto ? (
+                <img
+                  src={logoSinTexto}
+                  alt="AML Logo"
+                  className="h-12 w-auto object-contain"
+                />
+              ) : (
+                <Crown size={20} className="text-[var(--accent)]" />
+              )}
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">
+                  CUISINE AML
+                </h1>
+                <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Prestige Restaurant Management</p>
+              </div>
+            </div>
           </Link>
 
           <nav className="justify-self-center">
             <ul className="luxury-panel inline-flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-[#3A3037]/60 bg-[var(--surface)]/70 p-1.5 shadow-[0_0_0_1px_rgba(216,139,90,0.08)]">
               <li>
-                <Link to="/cliente/restaurantes#inicio" className="inline-flex rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]">
+                <Link to="/" className="inline-flex rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]">
                   Inicio
                 </Link>
               </li>
               <li>
-                <Link to="/cliente/restaurantes#explorar" className="inline-flex rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]">
-                  Explorar
+                <Link to="/restaurantes" className="inline-flex rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]">
+                  Catálogo
                 </Link>
               </li>
               <li>
-                <Link to="/cliente/restaurantes#sobre-nosotros" className="inline-flex rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]">
+                <Link to="/sobre-nosotros" className="inline-flex rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]">
                   Sobre Nosotros
                 </Link>
               </li>
