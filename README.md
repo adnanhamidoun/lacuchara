@@ -359,7 +359,54 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#security-best-practices)
 
 ---
 
-## 🤝 Contributing
+## � IA Responsable (Responsible AI)
+
+AZCA implements **3 pillars of responsible AI** to ensure transparent, safe, and user-controlled predictions:
+
+### 1️⃣ **Transparencia y Explicabilidad** (Transparency)
+- **Model Cards** explaining data sources, limitations, and performance
+- **Data provenance** documented (Azure SQL, weather APIs, historical trends)
+- **AI disclaimers** warning users about potential "alucinaciones" (hallucinations)
+- **Confidence breakdowns** showing which factors influenced each prediction
+
+### 2️⃣ **Privacidad y Seguridad** (Privacy & Security)
+- **No personal data** — only aggregated, anonymous restaurant statistics
+- **GDPR compliant** — data retention policies, user privacy controls
+- **EU AI Act ready** — documentation for regulatory requirements
+- **Encrypted data** in transit (HTTPS) and at rest (Azure SQL encryption)
+
+### 3️⃣ **Control Humano** (Human Control)
+- **User feedback mechanism** — Users can rate predictions (👍 Good / 👌 Regular / 👎 Bad)
+- **Prediction rejection** — Users can ignore AI suggestions and use their expertise
+- **Supervision controls** — "You always have control" messaging
+- **Non-automated decisions** — Humans make final decisions, AI suggests
+
+### Components
+11 React components in `frontend/src/components/ai/`:
+- `AITransparencyCard` — Model Card template
+- `AIDisclaimer` — Alert system for warnings
+- `ServicePredictionTransparency` — Breaks down service predictions
+- `MenuPredictionTransparency` — Breaks down menu predictions  
+- `AIFailureWarning` — Documents failure scenarios
+- `PredictionConfidenceBreakdown` — Visual factor breakdown
+- `AIResponsibleHealthCheck` — System health dashboard
+- `AIResponsibleBadge` — Responsibility indicators
+- `AIFeedbackButton` — User feedback UI (👍👌👎)
+- `AISupervisionSection` — Control principles explanation
+- `PredictionWithDisclaimer` — Wrapper component
+
+### Quick Start
+See **[docs/guides/IA_RESPONSABLE_QUICKSTART.md](docs/guides/IA_RESPONSABLE_QUICKSTART.md)** for:
+- Component usage examples
+- Integration instructions
+- Dark mode configuration
+- Customization options
+
+**Full documentation:** [docs/guides/](docs/guides/) contains 10+ comprehensive guides
+
+---
+
+## �🤝 Contributing
 
 1. Create a feature branch: `git checkout -b feature/my-feature`
 2. Make changes and test: `pytest backend/tests/`

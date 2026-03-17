@@ -3,18 +3,18 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../components/auth/AuthContext.jsx'
 import { Lock, CheckCircle2, Loader } from 'lucide-react'
 
-const ADMIN_FEATURES = [
+const PRIVATE_FEATURES = [
   {
-    title: 'Aprobar restaurantes',
-    description: 'Valida nuevos establecimientos gastronómicos con criterios de prestige.',
+    title: 'Panel de administración',
+    description: 'Aprobaciones, supervisión del catálogo y gestión global de restaurantes.',
   },
   {
-    title: 'Supervisar catálogo',
-    description: 'Mantén menús, ofertas y fichas tecnológicas actualizadas.',
+    title: 'Panel de restaurante',
+    description: 'Gestiona tu perfil, actualiza información y administra tu presencia en CUISINE AML.',
   },
   {
-    title: 'Análisis exclusivo',
-    description: 'Accede a métricas de demanda, tendencias y datos de mercado.',
+    title: 'Herramientas inteligentes',
+    description: 'Accede a paneles y utilidades internas disponibles según tu rol.',
   },
 ]
 
@@ -73,16 +73,16 @@ export default function LoginView() {
               {/* Main Title */}
               <div className="space-y-3">
                 <h1 className="text-3xl font-bold leading-tight text-[var(--text)]">
-                  Gestiona restaurantes y aprobaciones
+                  Accede a tu área privada
                 </h1>
                 <p className="text-base text-[var(--text-muted)] leading-relaxed">
-                  Acceso exclusivo para administradores de CUISINE AML. Supervisa el catálogo, aprueba nuevos establecimientos y analiza datos de mercado.
+                  Inicio de sesión para administradores y restaurantes. El sistema te llevará automáticamente al panel correspondiente.
                 </p>
               </div>
 
               {/* Feature List */}
               <div className="space-y-3">
-                {ADMIN_FEATURES.map((feature, idx) => (
+                {PRIVATE_FEATURES.map((feature, idx) => (
                   <div key={idx} className="flex gap-3">
                     <CheckCircle2 size={18} className="mt-0.5 flex-shrink-0 text-[#E07B54]" />
                     <div>
@@ -119,10 +119,10 @@ export default function LoginView() {
 
               <div className="space-y-2">
                 <h1 className="text-2xl font-bold text-[var(--text)]">
-                  Acceso administrador
+                  Acceso privado
                 </h1>
                 <p className="text-sm text-[var(--text-muted)]">
-                  Supervisa restaurantes, aprobaciones y datos de mercado.
+                  Inicio de sesión para administradores y restaurantes.
                 </p>
               </div>
             </div>
@@ -171,7 +171,7 @@ function LoginCard({
       <div className="space-y-2 text-center">
         <h2 className="text-2xl font-bold text-[var(--text)]">Iniciar Sesión</h2>
         <p className="text-sm text-[var(--text-muted)]">
-          Acceso para administradores autorizados de CUISINE AML.
+          Acceso para administradores y restaurantes de CUISINE AML.
         </p>
       </div>
 
@@ -228,7 +228,7 @@ function LoginCard({
       {/* Footer */}
       <div className="border-t border-[var(--border)]/20 pt-3">
         <p className="text-center text-xs text-[var(--text-muted)]">
-          Acceso restringido a administradores de CUISINE AML.
+          Acceso restringido a usuarios autorizados de CUISINE AML.
           <span className="text-[#E07B54]"> Contacta con soporte si tienes dudas.</span>
         </p>
       </div>

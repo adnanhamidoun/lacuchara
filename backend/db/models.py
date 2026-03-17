@@ -339,12 +339,13 @@ class FactMenuItems(Base):
     Tabla de hechos que vincula menús con platos específicos.
     """
     __tablename__ = "fact_menu_items"
-    
-    menu_id = Column(Integer, primary_key=True)
-    dish_id = Column(Integer, primary_key=True)
+
+    item_id = Column(Integer, primary_key=True)
+    menu_id = Column(Integer, nullable=False, index=True)
+    dish_id = Column(Integer, nullable=False, index=True)
     
     def __repr__(self):
-        return f"<FactMenuItems(menu_id={self.menu_id}, dish_id={self.dish_id})>"
+        return f"<FactMenuItems(item_id={self.item_id}, menu_id={self.menu_id}, dish_id={self.dish_id})>"
 
 
 class FactMenus(Base):
@@ -472,3 +473,40 @@ class User(Base):
 
     def __repr__(self):
         return f"<User(id={self.user_id}, restaurant_id={self.restaurant_id}, email='{self.login_email}')>"
+
+
+class RestaurantRating(Base):
+    """Modelo ORM para la tabla dbo.restaurant_ratings (existente)."""
+
+    __tablename__ = "restaurant_ratings"
+
+    rating_id = Column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id = Column(Integer, nullable=False, index=True)
+    menu_id = Column(Integer, nullable=True, index=True)
+    dish_id = Column(Integer, nullable=True, index=True)
+    score = Column(Float, nullable=False)
+    comment = Column(String(1000), nullable=True)
+    reviewer_name = Column(String(255), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def __repr__(self):
+        return f"<RestaurantRating(id={self.rating_id}, rest_id={self.restaurant_id}, score={self.score})>"
+
+
+class DishRating(Base):
+    """Modelo ORM para la tabla dbo.dish_ratings (nueva)."""
+
+    __tablename__ = "dish_ratings"
+
+    rating_id = Column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id = Column(Integer, nullable=False, index=True)
+    rating_date = Column(Date, nullable=False, index=True)
+    dish_name = Column(String(500), nullable=False)
+    dish_key = Column(String(500), nullable=False, index=True)
+    rating = Column(Float, nullable=False)  # ✅ Float para aceptar decimales
+    menu_id = Column(Integer, nullable=True, index=True)
+    dish_id = Column(Integer, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def __repr__(self):
+        return f"<DishRating(id={self.rating_id}, rest_id={self.restaurant_id}, dish_id={self.dish_id}, rating={self.rating})>"

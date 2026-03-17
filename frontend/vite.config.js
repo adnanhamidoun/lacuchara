@@ -22,6 +22,10 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
         },
+        '/upload-restaurant-image': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
         '/get-restaurant-image': {
           target: apiTarget,
           changeOrigin: true,
@@ -39,6 +43,14 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '/company': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        '/ratings': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        '/rankings': {
           target: apiTarget,
           changeOrigin: true,
         },
