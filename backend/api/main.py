@@ -32,8 +32,8 @@ import unicodedata
 from contextlib import asynccontextmanager
 from datetime import datetime, date, timedelta
 from pathlib import Path
-from typing import Literal
-from zoneinfo import ZoneInfo
+from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import holidays
 import requests
@@ -94,7 +94,7 @@ except ImportError:
 
 # Importar scheduler de modelos (soft — requiere Azure ML)
 try:
-    from ..core.scheduler import start_model_refresh_scheduler, MANAGED_MODELS
+    from ..core.scheduler import start_model_refresh_scheduler
     MODEL_SCHEDULER_AVAILABLE = True
 except ImportError:
     MODEL_SCHEDULER_AVAILABLE = False
@@ -105,6 +105,10 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 prediction_engine = None
+
+DEFAULT_MENU_REGISTERED_MODEL = "azca-menus-model"
+DEFAULT_MENU_MODEL_FILENAME = "azca-menus-model.pkl"
+DEFAULT_SERVICES_REGISTERED_MODEL = "azca-services-model"
 
 app = FastAPI(
     title="AZCA Prediction API",
@@ -1061,16 +1065,75 @@ def _ensure_auth_columns_exist() -> None:
             connection.execute(text(statement))
 
 
+def _menu_registered_model_name() -> str:
+    configured_name = os.getenv("AZCA_MENU_REGISTERED_MODEL", "").strip()
+    return configured_name or DEFAULT_MENU_REGISTERED_MODEL
+
+
+def _menu_model_filename() -> str:
+    configured_name = os.getenv("AZCA_MENU_MODEL_FILENAME", "").strip()
+    return configured_name or DEFAULT_MENU_MODEL_FILENAME
+
+
+def _sync_menu_model_from_azureml(provider: Any) -> Path | None:
+    """
+    Try downloading the latest unified menu model from Azure ML and persist it
+    under artifacts with a stable filename used by the API.
+    """
+    if provider is None or not hasattr(provider, "download_model_to_artifacts"):
+        return None
+
+    disable_azure = os.getenv("AZCA_DISABLE_AZURE_ML_MODELS", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if disable_azure:
+        logger.info("ℹ️ Azure ML deshabilitado por AZCA_DISABLE_AZURE_ML_MODELS; se mantiene modelo local.")
+        return None
+
+    model_name = _menu_registered_model_name()
+    artifacts_path = Path(__file__).parent.parent / "azca" / "artifacts"
+    destination_path = artifacts_path / _menu_model_filename()
+
+    try:
+        downloaded_path = provider.download_model_to_artifacts(
+            registered_name=model_name,
+            dest_pkl_path=destination_path,
+        )
+        logger.info(
+            "✅ Modelo de menu actualizado desde Azure ML: %s (%s)",
+            model_name,
+            downloaded_path.name,
+        )
+        return downloaded_path
+    except Exception as exc:
+        logger.warning(
+            "⚠️ No se pudo actualizar '%s' desde Azure ML (%s). Se usara fallback local.",
+            model_name,
+            exc,
+        )
+        return None
+
+
 def _resolve_unified_menu_model_path() -> Path:
     """Localiza el modelo de menu compatible con nombres antiguos y nuevos."""
     artifacts_path = Path(__file__).parent.parent / "azca" / "artifacts"
 
     configured_name = os.getenv("AZCA_MENU_MODEL_FILENAME", "").strip()
-    candidate_names = [
-        name
-        for name in [configured_name, "AzcaMenuModel_v2.pkl", "azca-menus-model.pkl", "AzcaMenuModel.pkl"]
-        if name
+    candidate_names_raw = [
+        configured_name,
+        DEFAULT_MENU_MODEL_FILENAME,
+        "azca-secondary-menus-model.pkl",
+        "azca-menus-model.pkl",
+        "AzcaMenuModel.pkl",
     ]
+
+    candidate_names: list[str] = []
+    for name in candidate_names_raw:
+        if name and name not in candidate_names:
+            candidate_names.append(name)
 
     for candidate_name in candidate_names:
         candidate_path = artifacts_path / candidate_name
@@ -1123,8 +1186,63 @@ async def startup_event():
     except Exception as engine_error:
         logger.warning(f"⚠️  Motor de predicción no disponible: {str(engine_error)[:100]}")
         prediction_engine = None  # Permitirá fallback con mock en endpoints
-    
-    # 4. Cargar modelo pickle en memoria (OPTIMIZACIÓN CLAVE)
+
+    # 4. Sincronizar modelo de menu desde Azure ML y arrancar scheduler mensual
+    app.state.model_refresh_task = None
+    if prediction_engine is not None:
+        model_provider = getattr(prediction_engine, "model_provider", None)
+
+        # Intenta descargar model.pkl desde Azure ML y guardarlo renombrado
+        # como azca-menus-model.pkl para uso local consistente.
+        _sync_menu_model_from_azureml(model_provider)
+
+        # Intenta descargar el modelo de servicios para que /predict use
+        # artifacts/azca-services-model.pkl como origen principal local.
+        try:
+            model_provider.download_model_to_artifacts(
+                registered_name=DEFAULT_SERVICES_REGISTERED_MODEL,
+                dest_pkl_path=(
+                    Path(__file__).parent.parent
+                    / "azca"
+                    / "artifacts"
+                    / f"{DEFAULT_SERVICES_REGISTERED_MODEL}.pkl"
+                ),
+            )
+            logger.info("✅ Modelo de servicios actualizado: %s", DEFAULT_SERVICES_REGISTERED_MODEL)
+        except Exception as exc:
+            logger.warning(
+                "⚠️ No se pudo actualizar '%s' desde Azure ML (%s). Se usara fallback local.",
+                DEFAULT_SERVICES_REGISTERED_MODEL,
+                exc,
+            )
+
+        if MODEL_SCHEDULER_AVAILABLE and model_provider is not None:
+            scheduler_models = list(
+                dict.fromkeys([
+                    DEFAULT_SERVICES_REGISTERED_MODEL,
+                    _menu_registered_model_name(),
+                ])
+            )
+
+            try:
+                app.state.model_refresh_task = start_model_refresh_scheduler(
+                    model_provider,
+                    scheduler_models,
+                )
+                logger.info(
+                    "✅ Scheduler mensual de modelos iniciado (%s)",
+                    ", ".join(scheduler_models),
+                )
+            except Exception as scheduler_error:
+                logger.warning(
+                    "⚠️ No se pudo iniciar scheduler mensual de modelos: %s",
+                    scheduler_error,
+                )
+        elif not MODEL_SCHEDULER_AVAILABLE:
+            logger.warning("⚠️ Scheduler de modelos no disponible; se omite refresco mensual.")
+
+    # 5. Cargar modelo pickle en memoria (OPTIMIZACIÓN CLAVE)
+    model_path: Path | None = None
     try:
         model_path = _resolve_unified_menu_model_path()
         
@@ -1147,13 +1265,17 @@ async def startup_event():
         logger.info(f"   Tipo de modelo: {type(model).__name__}")
         
     except FileNotFoundError:
-        logger.error(f"❌ Modelo no encontrado en {model_path}")
+        logger.error(
+            "❌ Modelo no encontrado. Rutas candidatas: %s",
+            "azca-menus-model.pkl, azca-secondary-menus-model.pkl, AzcaMenuModel.pkl",
+        )
         raise
     except Exception as model_error:
         logger.error(f"❌ Error cargando modelo: {str(model_error)}", exc_info=True)
         raise
     
-    # 5. Inicializar caché en memoria (clima y calendario)
+    # 6. Inicializar caché en memoria (clima y calendario)
+    # 6. Inicializar caché en memoria (clima y calendario)
     try:
         app.state.cache = CacheManager(ttl_minutes=20)
         logger.info(f"✅ Caché en memoria inicializado")
@@ -2187,7 +2309,22 @@ def _ensure_calendar_date(db: Session, service_date: date, date_id: int) -> None
 
 
 def _current_service_date() -> date:
-    return datetime.now(ZoneInfo("Europe/Madrid")).date()
+    try:
+        return datetime.now(ZoneInfo("Europe/Madrid")).date()
+    except ZoneInfoNotFoundError:
+        logger.warning(
+            "⚠️ ZoneInfo Europe/Madrid no disponible (tzdata ausente). "
+            "Usando fecha local del sistema."
+        )
+        return datetime.now().date()
+    try:
+        return datetime.now(ZoneInfo("Europe/Madrid")).date()
+    except ZoneInfoNotFoundError:
+        logger.warning(
+            "⚠️ ZoneInfo Europe/Madrid no disponible (tzdata ausente). "
+            "Usando fecha local del sistema."
+        )
+        return datetime.now().date()
 
 
 def _fact_menus_has_includes_drink(db: Session) -> bool:
@@ -3738,7 +3875,7 @@ async def predict_starter(
             top_3_dishes=starter_dishes,
             service_date=request.service_date,
             restaurant_id=request.restaurant_id,
-            model_version="azca-menus-model",
+            model_version=_menu_registered_model_name(),
             execution_timestamp=datetime.now(),
         )
     except HTTPException:
@@ -3840,7 +3977,7 @@ async def predict_main(
             top_3_dishes=main_dishes,
             service_date=request.service_date,
             restaurant_id=request.restaurant_id,
-            model_version="azca-menus-model",
+            model_version=_menu_registered_model_name(),
             execution_timestamp=datetime.now(),
         )
     except HTTPException:
@@ -3942,7 +4079,7 @@ async def predict_dessert(
             top_3_dishes=dessert_dishes,
             service_date=request.service_date,
             restaurant_id=request.restaurant_id,
-            model_version="azca-menus-model",
+            model_version=_menu_registered_model_name(),
             execution_timestamp=datetime.now(),
         )
     except HTTPException:

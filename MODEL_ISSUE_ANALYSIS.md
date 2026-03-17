@@ -11,7 +11,7 @@ Error: DLL load failed while importing onnx_cpp2py_export:
 
 ### Modelos Afectados:
 1. **azca_demand_v1.pkl** → Usado por `/predict` clásico
-2. **AzcaMenuModel_v2.pkl** → Usado por `/predict/starter`, `/predict/main`, `/predict/dessert`
+2. **azca-secondary-menus-model.pkl** → Usado por `/predict/starter`, `/predict/main`, `/predict/dessert`
 
 Ambos son modelos **Azure AutoML** que tienen estas dependencias en la cadena de desserialización:
 

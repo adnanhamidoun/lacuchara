@@ -179,9 +179,11 @@ class InferencePipeline:
 
         # Build the dynamic feature row (request-derived values)
         day_of_week = int(service_date_for_calc.weekday()) if hasattr(service_date_for_calc, "weekday") else 0
+        month = int(service_date_for_calc.month) if hasattr(service_date_for_calc, "month") else 1
         row = {
             "service_date": service_date,  # Keep as datetime/Timestamp
             "day_of_week": day_of_week,
+            "month": month,
             "max_temp_c": max_temp_c,
             "precipitation_mm": precipitation_mm,
             "is_rain_service_peak": bool(precipitation_mm > 10),
@@ -222,19 +224,9 @@ class InferencePipeline:
                     row[col] = service_date
                 elif col == "day_of_week":
                     row[col] = day_of_week
-                elif col in {
-                    "is_rain_service_peak",
-                    "is_stadium_event",
-                    "is_azca_event",
-                    "is_holiday",
-                    "is_bridge_day",
-                    "is_payday_week",
-                    "is_business_day",
-                    "opens_weekends",
-                    "has_wifi",
-                }:
+                elif col.startswith("is_") or col in {"opens_weekends", "has_wifi"}:
                     row[col] = False
-                elif col in {
+                elif col.endswith("_id") or col in {
                     "restaurant_id",
                     "capacity_limit",
                     "table_count",
@@ -242,6 +234,7 @@ class InferencePipeline:
                     "dist_office_towers",
                     "services_lag_7",
                     "day_of_week",
+                    "month",
                 }:
                     row[col] = 0
                 elif col in {
@@ -250,13 +243,79 @@ class InferencePipeline:
                     "avg_4_weeks",
                     "menu_price",
                     "google_rating",
-                }:
+                } or col.endswith("_mm") or col.endswith("_price") or col.endswith("_rating"):
                     row[col] = 0.0
+                elif col.endswith("_duration"):
+                    row[col] = 0
+                elif col in {
+                    "restaurant_segment_id",
+                    "cuisine_type_id",
+                    "terrace_setup_type_id",
+                    "course_type_id",
+                    "dish_id",
+                    "prev_dish_id",
+                }:
+                    row[col] = 0
                 else:
                     row[col] = ""
 
         # Create DataFrame and select columns in requested model order
         df = pd.DataFrame([[row[col] for col in selected_columns]], columns=selected_columns)
+
+        int_columns = {
+            "day_of_week",
+            "month",
+            "restaurant_id",
+            "services_lag_7",
+            "capacity_limit",
+            "table_count",
+            "min_service_duration",
+            "dist_office_towers",
+            "dish_id",
+            "prev_dish_id",
+            "restaurant_segment_id",
+            "cuisine_type_id",
+            "terrace_setup_type_id",
+            "course_type_id",
+        }
+        float_columns = {
+            "max_temp_c",
+            "precipitation_mm",
+            "avg_4_weeks",
+            "menu_price",
+            "google_rating",
+        }
+        bool_columns = {
+            "is_rain_service_peak",
+            "is_stadium_event",
+            "is_azca_event",
+            "is_holiday",
+            "is_bridge_day",
+            "is_payday_week",
+            "is_business_day",
+            "opens_weekends",
+            "has_wifi",
+        }
+
+        # Dynamic typing guards for AutoML schemas with engineered *_id / is_* columns.
+        for col in df.columns:
+            if col.endswith("_id"):
+                int_columns.add(col)
+            if col.startswith("is_"):
+                bool_columns.add(col)
+
+        for col in int_columns.intersection(df.columns):
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype("int64")
+
+        for col in float_columns.intersection(df.columns):
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype("float64")
+
+        for col in bool_columns.intersection(df.columns):
+            df[col] = df[col].astype(bool)
+
+        if "service_date" in df.columns:
+            df["service_date"] = pd.to_datetime(df["service_date"], errors="coerce")
+
         
         print(f"📊 DataFrame construido:")
         print(f"   Tipos: {df.dtypes.to_dict()}")

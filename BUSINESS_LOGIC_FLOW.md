@@ -12,7 +12,7 @@ La API tiene **DOS flujos de predicción independientes**:
 
 2. **FLUJO 2: `/predict/starter|main|dessert` (Menú)** ❌ DESHABILITADO
    - Predice top 3 platos por categoría
-   - Modelo: `AzcaMenuModel_v2.pkl` (Azure AutoML)
+    - Modelo: `azca-secondary-menus-model.pkl` (Azure AutoML)
    - **Sin fallback (y deshabilitado con 410 Gone)**
    - Status: 410 Gone (por mi cambio anterior)
 
@@ -161,7 +161,7 @@ Obtener datos de calendario
     ↓
 Construir 8 features para modelo
     ↓
-Cargar modelo AzcaMenuModel_v2.pkl
+Cargar modelo azca-secondary-menus-model.pkl
     ├─ Error → ONNX DLL falla (Windows)
     └─ Sin fallback → HTTP 503
     ↓
@@ -174,7 +174,7 @@ HTTP 201 Created + top 3 platos
 
 ### El Problema Real
 
-El código espera `AzcaMenuModel_v2.pkl` pero al deseriarlicarlo:
+El código espera `azca-secondary-menus-model.pkl` pero al deseriarlicarlo:
 1. Python intenta importar las dependencias de Azure AutoML
 2. Azure AutoML necesita skl2onnx
 3. skl2onnx necesita onnx_cpp2py_export.dll
@@ -229,7 +229,7 @@ A esto:
 @app.post("/predict/starter")
 async def predict_starter(...):
     try:
-        model = get_model() # ← Intentar cargar AzcaMenuModel_v2.pkl
+        model = get_model() # ← Intentar cargar azca-secondary-menus-model.pkl
         predictions = model.predict_proba(features)
         top_3 = get_top_3(predictions)
         result = format_response(top_3)
@@ -252,7 +252,7 @@ async def predict_starter(...):
 
 | Aspecto | `/predict` | `/predict/starter` |
 |---------|-----------|------------------|
-| Modelo | azca_demand_v1.pkl | AzcaMenuModel_v2.pkl |
+| Modelo | azca_demand_v1.pkl | azca-secondary-menus-model.pkl |
 | Tipo | XGBoost (simple) | Azure AutoML (complejo) |
 | ONNX DLL Error | SÍ | SÍ |
 | Fallback | ✅ SI (mock=150) | ❌ NO |
@@ -272,7 +272,7 @@ Para que AMBOS flujos funcionen:
 async def predict_starter(...):
     try:
         # Intentar cargar modelo + predecir
-        model = get_model_lazy("AzcaMenuModel_v2")
+        model = get_model_lazy("azca-secondary-menus-model")
         predictions = perform_prediction(model, features)
     except Exception as e:
         logger.warning(f"Modelo fallo, usando mock: {str(e)[:100]}")
