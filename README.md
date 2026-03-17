@@ -1,19 +1,16 @@
-# AZCA Prediction Engine
+# AZCA — AI Restaurant Demand Forecasting
 
-**AI-powered restaurant demand forecasting** — Predict daily service volume with minimal input.
+**Predict daily service volume with minimal input.** Automatically enriches data from Azure SQL, weather APIs, and historical trends to forecast restaurant demand using XGBoost models.
 
-Users provide **2-3 parameters** (restaurant, date, events). The system automatically enriches data from Azure SQL, real-time weather API, and historical records, then predicts expected demand.
+## 📖 Documentation
 
----
-
-## 🎯 Quick Links
-
-| Document | Purpose |
-|----------|---------|
-| **[docs/SETUP.md](docs/SETUP.md)** | 📖 Installation & configuration |
-| **[docs/API.md](docs/API.md)** | 📡 REST endpoints reference |
-| **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | 🏗️ System design & components |
-| **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | 🚀 Production deployment guide |
+| Guide | Description |
+|-------|-------------|
+| **[docs/SETUP.md](docs/SETUP.md)** | Installation & local setup |
+| **[docs/API.md](docs/API.md)** | REST API endpoints |
+| **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | System design & components |
+| **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Production deployment |
+| **[docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)** | Project directory layout |
 
 ---
 

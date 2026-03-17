@@ -1,70 +1,33 @@
+# Environment & Credentials
+.env
+.env.local
+.env.*.local
+.aws/credentials
+*.pem
+*.key
+*.crt
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
 build/
 develop-eggs/
 dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
 MANIFEST
+.Python
 
 # Virtual Environments
 venv/
 ENV/
 env/
-azca_310_env/  # Project-specific venv
 .venv
-
-# Environment Variables (SENSITIVE - NEVER COMMIT)
-.env
-.env.local
-.env.*.local
-
-# IDE & Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-*.sublime-project
-*.sublime-workspace
-.project
-.pydevproject
-.settings/
-*.iml
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# Logs
-*.log
-logs/
-server.log
-
-# Environment
-.env
-.env.local
-.env.*.local
 
 # Frontend
 frontend/node_modules/
@@ -72,77 +35,44 @@ frontend/dist/
 frontend/.vite/
 frontend/package-lock.json
 
-# Temporary files
-.DS_Store
-*.swp
-*.swo
-*~
-.temp/
-.tmp/
-
-# IDE
-.vscode/settings.json
-.vscode/launch.json
-.idea/
-*.sublime-workspace
-.project
-.pydevproject
-.settings/
-*.iml
-
-# OS
-Thumbs.db
-.DS_Store
-
-# Credentials & Secrets
-*.pem
-*.key
-*.crt
-.aws/credentials
-.azure/
-.azureml/config.json
-
-# ML Artifacts (if large)
-# Uncomment if storing model weights in repo
-# *.pkl
-# *.joblib
-# *.h5
+# Testing
+.pytest_cache/
+.coverage
 .coverage.*
 htmlcov/
 .tox/
 .hypothesis/
 .nox/
 
-# Jupyter Notebook
-.ipynb_checkpoints
-*.ipynb_checkpoints
-
-# IPython
-.ipython/
-profile_*/
-
-# Environments
-.env
-.env.local
-.env.*.local
-
-# OS
+# IDE & Editors
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
-*.log
-*.pot
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+.settings/
+*.iml
 
-# Archivos de contraseñas u outputs de migración
-*credenciales*
-*contraseñas*
-credenciales_restaurantes.txt
-migrar_restaurantes.py
-# Development
+# Logs
+*.log
+logs/
+
+# Temporary files
+.temp/
+.tmp/
 .mypy_cache/
 .dmypy.json
 dmypy.json
 .pyre/
 .ruff_cache/
 
-# Notebooks
-notebooks_research/  # Optional: if you want to track, remove this line
+# Jupyter
+.ipynb_checkpoints
+*.ipynb_checkpoints
+notebooks_research/
