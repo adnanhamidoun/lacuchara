@@ -76,3 +76,8 @@ dmypy.json
 .ipynb_checkpoints
 *.ipynb_checkpoints
 notebooks_research/
+
+# Azure ML local configuration
+.azureml/*
+!.azureml/config.example
+!.azureml/config.example.json
