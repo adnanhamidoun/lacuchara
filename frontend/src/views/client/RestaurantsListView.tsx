@@ -1,5 +1,5 @@
 import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Search, Wifi, Sparkles, Building2, Briefcase, Users, Linkedin, ArrowRight, Crown, Star } from 'lucide-react'
 import { isInPriceRange, type PriceRange, useRestaurants } from '../../hooks/useRestaurants'
 import type { RestaurantDetail } from '../../types/domain'
@@ -193,15 +193,47 @@ RestaurantCard.displayName = 'RestaurantCard'
 
 export default function RestaurantsListView() {
   const { restaurants, cuisines, loading, error } = useRestaurants()
+  const [searchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [selectedCuisine, setSelectedCuisine] = useState('all')
   const [selectedSegment, setSelectedSegment] = useState<string>('all')
+  const [terraceFilterActive, setTerraceFilterActive] = useState(false)
   const [priceRange, setPriceRange] = useState<PriceRange>('all')
   const [wifiOnly, setWifiOnly] = useState(false)
   const [weekendsOnly, setWeekendsOnly] = useState(false)
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_RESTAURANTS)
   const [animatedCount, setAnimatedCount] = useState(0)
   const deferredSearch = useDeferredValue(search)
+  
+  // Cargar parámetros de búsqueda desde la URL al montar el componente
+  useEffect(() => {
+    const paramSearch = searchParams.get('q')
+    if (paramSearch) {
+      setSearch(paramSearch)
+    }
+
+    const paramSegment = searchParams.get('segment')
+    if (paramSegment) {
+      const normalizedSegment = normalizeSegment(paramSegment)
+      console.log('[RestaurantsListView] paramSegment:', paramSegment, 'normalized:', normalizedSegment)
+      if (['gourmet', 'traditional', 'business', 'family'].includes(normalizedSegment)) {
+        console.log('[RestaurantsListView] Setting selectedSegment to:', normalizedSegment)
+        setSelectedSegment(normalizedSegment)
+      }
+    }
+
+    const paramTerrace = searchParams.get('terrace')
+    if (paramTerrace === 'true') {
+      setTerraceFilterActive(true)
+    }
+
+    const paramZone = searchParams.get('zone')
+    if (paramZone === 'azca') {
+      // Filtro por zona, si lo tienes implementado
+      // setSelectedZone('azca')
+    }
+  }, [searchParams])
+
   const selectedCuisineCode = useMemo(
     () => (selectedCuisine === 'all' ? null : getCanonicalCuisineCode(selectedCuisine)),
     [selectedCuisine],
@@ -242,11 +274,12 @@ export default function RestaurantsListView() {
         const matchPrice = isInPriceRange(restaurant.menu_price, priceRange)
         const matchWifi = !wifiOnly || Boolean(restaurant.has_wifi)
         const matchWeekend = !weekendsOnly || Boolean(restaurant.opens_weekends)
+        const matchTerrace = !terraceFilterActive || (restaurant.terrace_setup_type !== null && restaurant.terrace_setup_type !== 'none')
 
-        return matchName && matchCuisine && matchSegment && matchPrice && matchWifi && matchWeekend
+        return matchName && matchCuisine && matchSegment && matchPrice && matchWifi && matchWeekend && matchTerrace
       })
       .map(({ restaurant }) => restaurant)
-  }, [indexedRestaurants, deferredSearch, selectedCuisineCode, selectedSegment, priceRange, wifiOnly, weekendsOnly])
+  }, [indexedRestaurants, deferredSearch, selectedCuisineCode, selectedSegment, priceRange, wifiOnly, weekendsOnly, terraceFilterActive])
 
   const visibleRestaurants = useMemo(
     () => filteredRestaurants.slice(0, visibleCount),
@@ -436,6 +469,20 @@ export default function RestaurantsListView() {
             }`}
           >
             Abre en fin de semana
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTerraceFilterActive((prev) => !prev)}
+            className={`${chipBaseClass} ${
+              terraceFilterActive
+                ? `${chipSelectedClass} animate-chip-glow shadow-[0_0_8px_rgba(224,123,84,0.5)]`
+                : 'hover:brightness-95'
+            }`}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              🌿 Con Terraza
+            </span>
           </button>
           </div>
         </div>

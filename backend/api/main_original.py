@@ -1268,7 +1268,7 @@ async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)
             "capacity_limit": inscripcion.capacity_limit,
             "table_count": inscripcion.table_count,
             "min_service_duration": _parse_min_service_duration(inscripcion.min_service),
-            "terrace_setup_type": inscripcion.terrace_setup_type,
+            "terrace_setup_type": inscripcion.terrace_setup_type or "none",
             "opens_weekends": inscripcion.opens_weekends,
             "has_wifi": inscripcion.has_wifi,
             "restaurant_segment": inscripcion.restaurant_segment,

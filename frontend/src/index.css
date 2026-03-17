@@ -6,15 +6,15 @@
 	:root {
 		--font-sans: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 		--font-display: var(--font-sans);
-		--bg: #ffffff;
+		--bg: #fafbfc;
 		--surface: #ffffff;
-		--surface-soft: #f4f6f8;
-		--text: #1a1a2e;
-		--text-muted: #4b5563;
-		--border: #d9e0e8;
-		--primary: #1a1a2e;
-		--accent: #e07b54;
-		--accent-tech: #4f8cff;
+		--surface-soft: #f5f7fb;
+		--text: #0f1419;
+		--text-muted: #54646f;
+		--border: #c8d2db;
+		--primary: #0f1419;
+		--accent: #d96d3d;
+		--accent-tech: #4070e8;
 	}
 
 	.dark {
