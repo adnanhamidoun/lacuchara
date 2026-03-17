@@ -52,7 +52,8 @@ class BlobManager:
         return self._blob_service_client is not None
 
     def upload_restaurant_image(self, restaurant_id: int, file_content: bytes, filename: str) -> str | None:
-        blob_name = f"restaurants/{restaurant_id}/{filename}"
+        # Usar solo el nombre del archivo, sin subcarpetas: res_1.jpg, res_2.jpg, etc.
+        blob_name = filename
 
         if self.use_azure:
             container_client = self._blob_service_client.get_container_client(self.container_name)
