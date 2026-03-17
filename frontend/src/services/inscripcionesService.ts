@@ -62,6 +62,20 @@ export async function createInscripcion(payload: InscripcionCreatePayload): Prom
   return parseResponse<Inscripcion>(response, 'No se pudo crear la inscripción.')
 }
 
+export async function uploadInscripcionImage(
+  file: File,
+): Promise<{ success: boolean; image_url: string; message: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch('/upload-inscripcion-image', {
+    method: 'POST',
+    body: formData,
+  })
+
+  return parseResponse(response, 'No se pudo subir la imagen de la inscripción.')
+}
+
 export async function approveInscripcion(inscripcionId: number): Promise<ApiActionResponse> {
   const response = await fetch(`/inscripciones/${inscripcionId}/approve`, {
     method: 'POST',

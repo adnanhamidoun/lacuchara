@@ -9,61 +9,42 @@ export default function AISupervisionSection({
   showDetails = true,
 }: AISupervisionSectionProps) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 space-y-4">
-      <div className="flex items-start gap-3">
-        <span className="text-2xl">👤</span>
-        <div className="flex-1">
-          <h3 className="font-semibold text-[var(--text)] text-lg">
-            Control Humano en IA
-          </h3>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Tú siempre tienes el control. La IA sugiere, tú decides.
-          </p>
-        </div>
+    <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold text-[var(--text)]">Control Humano en IA</h3>
+        <p className="text-sm text-[var(--text-muted)]">Tú siempre tienes el control. La IA sugiere, tú decides.</p>
       </div>
 
       {showDetails && (
-        <div className="space-y-3 pl-11">
+        <ul className="space-y-2.5 border-t border-[var(--border)]/70 pt-3">
           {[
             {
-              icon: '👁️',
               title: 'Transparencia',
               desc: 'Ves exactamente qué datos usa la IA y sus limitaciones',
             },
             {
-              icon: '🙋',
               title: 'Tu Voto Importa',
               desc: 'Feedback: "Buena", "Regular", "Mala" - ayuda a mejorar',
             },
             {
-              icon: '🚫',
               title: 'Siempre Puedes Rechazar',
               desc: 'Si una predicción no te gusta = ignórala. Tú decides.',
             },
             {
-              icon: '🔓',
               title: 'Explicable',
               desc: 'No es "magia". Puedes entender por qué sugirió eso.',
             },
           ].map((item, idx) => (
-            <div key={idx} className="flex gap-3">
-              <span className="text-xl flex-shrink-0">{item.icon}</span>
+            <li key={idx} className="flex items-start gap-2">
+              <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#E07B54]/70" />
               <div>
-                <p className="font-medium text-sm text-[var(--text)]">{item.title}</p>
+                <p className="text-sm font-medium text-[var(--text)]">{item.title}</p>
                 <p className="text-xs text-[var(--text-muted)]">{item.desc}</p>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-
-      {/* Cita inspiradora */}
-      <div className="mt-4 p-4 rounded-lg bg-[var(--surface-soft)]/50 border border-[var(--border)] italic text-sm text-[var(--text-muted)]">
-        <p>
-          "La IA es una herramienta poderosa, pero tu experiencia y criterio son invaluables.
-          Úsalas juntas para tomar mejores decisiones."
-        </p>
-      </div>
     </div>
   )
 }

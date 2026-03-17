@@ -16,7 +16,13 @@ async function parseResponse<T>(response: Response, defaultMessage: string): Pro
   try {
     const payload = await response.json()
     if (payload?.detail) {
-      errorMessage = payload.detail
+      if (typeof payload.detail === 'string') {
+        errorMessage = payload.detail
+      } else if (Array.isArray(payload.detail)) {
+        errorMessage = payload.detail
+          .map((item: any) => item?.msg || JSON.stringify(item))
+          .join(' | ')
+      }
     }
   } catch {
     // noop

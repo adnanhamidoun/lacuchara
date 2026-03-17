@@ -26,6 +26,10 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
         },
+        '/upload-inscripcion-image': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
         '/get-restaurant-image': {
           target: apiTarget,
           changeOrigin: true,

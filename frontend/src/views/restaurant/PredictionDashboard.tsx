@@ -31,6 +31,19 @@ const emptyPredictions: MenuPredictionState = {
   desserts: [],
 }
 
+function formatTagLabel(value: string | null | undefined): string {
+  if (!value) return 'Sin dato'
+
+  return value
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
 export default function PredictionDashboard() {
   const { session } = useAuth() as any
   const [restaurant, setRestaurant] = useState<RestaurantDetail | null>(null)
@@ -247,11 +260,14 @@ export default function PredictionDashboard() {
             <p className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wide">Tu restaurante</p>
             <h2 className="text-2xl font-bold text-[var(--text)]">{restaurant?.name || 'Cargando...'}</h2>
             {restaurant && (
-              <p className="text-sm text-[var(--text-muted)] flex gap-2">
-                <span>{restaurant.cuisine_type}</span>
-                <span>•</span>
-                <span className="capitalize">{restaurant.restaurant_segment}</span>
-              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1 text-xs font-medium text-[var(--text-muted)]">
+                  {formatTagLabel(restaurant.cuisine_type)}
+                </span>
+                <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1 text-xs font-medium text-[var(--text-muted)]">
+                  {formatTagLabel(restaurant.restaurant_segment)}
+                </span>
+              </div>
             )}
           </div>
 
@@ -320,7 +336,7 @@ export default function PredictionDashboard() {
                 <h3 className="text-lg font-bold text-[var(--text)] flex items-center gap-2">
                   <span>💬</span> ¿Qué te parece esta predicción de demanda?
                 </h3>
-                <AIFeedbackButton type="service" />
+                <AIFeedbackButton type="service" showQuestion={false} />
               </div>
             </>
           )}
@@ -357,9 +373,6 @@ export default function PredictionDashboard() {
                     menuPredictions.starters.map((dish, idx) => (
                       <li key={idx} className="text-sm font-medium text-[var(--text)] flex items-center gap-3 before:content-[''] before:w-2 before:h-2 before:rounded-full before:bg-[#E07B54]/60">
                         {dish.name}
-                        {dish.estimated_count && (
-                          <span className="text-xs text-[var(--text-muted)]/70">({dish.estimated_count} est.)</span>
-                        )}
                       </li>
                     ))
                   ) : (
@@ -382,9 +395,6 @@ export default function PredictionDashboard() {
                     menuPredictions.mains.map((dish, idx) => (
                       <li key={idx} className="text-sm font-medium text-[var(--text)] flex items-center gap-3 before:content-[''] before:w-2 before:h-2 before:rounded-full before:bg-[#E07B54]/60">
                         {dish.name}
-                        {dish.estimated_count && (
-                          <span className="text-xs text-[var(--text-muted)]/70">({dish.estimated_count} est.)</span>
-                        )}
                       </li>
                     ))
                   ) : (
@@ -407,9 +417,6 @@ export default function PredictionDashboard() {
                     menuPredictions.desserts.map((dish, idx) => (
                       <li key={idx} className="text-sm font-medium text-[var(--text)] flex items-center gap-3 before:content-[''] before:w-2 before:h-2 before:rounded-full before:bg-[#E07B54]/60">
                         {dish.name}
-                        {dish.estimated_count && (
-                          <span className="text-xs text-[var(--text-muted)]/70">({dish.estimated_count} est.)</span>
-                        )}
                       </li>
                     ))
                   ) : (
@@ -436,9 +443,9 @@ export default function PredictionDashboard() {
           {/* Feedback Button - IA Responsable */}
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-[var(--text)] flex items-center gap-2">
-              <span>👤</span> Tu Feedback Sobre las Predicciones
+              <span>💬</span> ¿Qué te parece esta predicción de men?
             </h3>
-            <AIFeedbackButton type="menu" />
+            <AIFeedbackButton type="menu" showQuestion={false} />
           </div>
 
           {/* Control Humano Section - IA Responsable */}

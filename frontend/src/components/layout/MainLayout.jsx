@@ -184,7 +184,7 @@ export default function MainLayout({ children }) {
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="inline-flex items-center gap-2 rounded-xl border border-[#3A3037]/70 bg-[var(--surface)]/75 px-3 py-2 text-xs font-semibold text-[var(--text)] transition-all duration-200 hover:brightness-110"
+                className="inline-flex items-center gap-2 rounded-xl border border-[#3A3037]/70 bg-[var(--surface)]/75 px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:brightness-110"
               >
                 {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
                 {theme === 'light' ? 'Modo oscuro' : 'Modo claro'}

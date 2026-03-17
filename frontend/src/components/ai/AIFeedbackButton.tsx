@@ -7,12 +7,14 @@ export interface AIFeedbackButtonProps {
   predictionId?: string
   type?: 'service' | 'menu'
   onlyIcon?: boolean
+  showQuestion?: boolean
 }
 
 export default function AIFeedbackButton({
   predictionId,
   type = 'service',
   onlyIcon = false,
+  showQuestion = true,
 }: AIFeedbackButtonProps) {
   const [feedback, setFeedback] = useState<'good' | 'ok' | 'bad' | null>(null)
   const [showMessage, setShowMessage] = useState(false)
@@ -80,30 +82,29 @@ export default function AIFeedbackButton({
 
   // Versión completa
   return (
-    <div className="space-y-3 p-4 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)]/50">
+    <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <span>💬</span>
-        <p className="text-sm font-semibold text-[var(--text)]">
-          ¿Qué te parece esta predicción?
-        </p>
-      </div>
+      {showQuestion ? (
+        <div className="flex items-center gap-2">
+          <span className="text-sm">💬</span>
+          <p className="text-sm font-semibold text-[var(--text)]">
+            ¿Qué te parece esta predicción?
+          </p>
+        </div>
+      ) : null}
 
       {/* Botones de feedback */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {feedbackOptions.map((option) => (
           <button
             key={option.value}
             onClick={() => handleFeedback(option.value)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all ${
               feedback === option.value
-                ? 'border-current bg-current/10'
-                : 'border-[var(--border)] bg-transparent hover:border-current/50'
+                ? 'border-[#E07B54]/60 bg-[#E07B54]/10 text-[var(--text)]'
+                : 'border-[var(--border)] bg-[var(--surface-soft)]/40 text-[var(--text-muted)] hover:border-[#E07B54]/35 hover:text-[var(--text)]'
             }`}
-            style={{
-              borderColor: feedback === option.value ? option.color : undefined,
-              color: feedback === option.value ? option.color : 'var(--text-muted)',
-            }}
+            aria-label={option.label}
           >
             <span className="text-lg">{option.icon}</span>
             <span className="text-sm font-medium">{option.shortLabel}</span>
@@ -114,20 +115,24 @@ export default function AIFeedbackButton({
       {/* Mensaje de agradecimiento */}
       {showMessage && currentFeedback && (
         <div
-          className="p-3 rounded-lg text-sm text-white animate-pulse"
-          style={{ backgroundColor: currentFeedback.color }}
+          className="rounded-lg border p-3 text-sm"
+          style={{
+            borderColor: `${currentFeedback.color}66`,
+            backgroundColor: `${currentFeedback.color}1A`,
+            color: currentFeedback.color,
+          }}
         >
           <p className="font-medium">
             ✓ Gracias por tu feedback
           </p>
-          <p className="text-xs mt-1">
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
             Usamos tus comentarios para mejorar nuestros modelos.
           </p>
         </div>
       )}
 
       {/* Info pequeña */}
-      <p className="text-xs text-[var(--text-muted)] italic">
+      <p className="text-xs text-[var(--text-muted)]">
         Tu feedback ayuda a entrenar mejores predicciones. No se almacenan datos personales.
       </p>
     </div>

@@ -34,6 +34,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Any, Literal
+from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import holidays
@@ -3403,6 +3404,59 @@ def get_model_lazy():
 # =============================
 # ENDPOINTS PARA IMÁGENES DE RESTAURANTES
 # =============================
+
+@app.post("/upload-inscripcion-image")
+async def post_upload_inscripcion_image(
+    file: UploadFile = File(...),
+):
+    """
+    Upload image used during inscription onboarding.
+
+    Returns a public image URL that can be stored as `image_url` in dbo.inscriptions.
+    """
+    try:
+        file_content = await file.read()
+
+        if not file.content_type or "image" not in file.content_type:
+            raise HTTPException(status_code=400, detail="Tipo de archivo inválido. Solo imágenes.")
+
+        if len(file_content) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Archivo demasiado grande (máx 5MB)")
+
+        extension = Path(file.filename or "image.jpg").suffix.lower() or ".jpg"
+        if extension not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
+            raise HTTPException(status_code=400, detail="Formato no permitido. Usa JPG, PNG, WEBP o GIF.")
+
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        unique_suffix = uuid4().hex[:8]
+        blob_filename = f"ins_{timestamp}_{unique_suffix}{extension}"
+
+        blob_manager = get_blob_manager()
+        blob_name = blob_manager.upload_restaurant_image(
+            restaurant_id=0,
+            file_content=file_content,
+            filename=blob_filename,
+        )
+
+        if not blob_name:
+            raise HTTPException(status_code=500, detail="Error en la carga del archivo")
+
+        image_url = blob_manager.get_blob_sas_url(blob_name)
+        if not image_url:
+            raise HTTPException(status_code=500, detail="Error generando URL de acceso")
+
+        logger.info("✅ Imagen de inscripción subida: %s", blob_name)
+        return {
+            "success": True,
+            "image_url": image_url,
+            "message": "Imagen subida exitosamente",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error subiendo imagen de inscripción: %s", str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail="Error en la carga")
 
 @app.post("/upload-restaurant-image")
 async def post_upload_restaurant_image(

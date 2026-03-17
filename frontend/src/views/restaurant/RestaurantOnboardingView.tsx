@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { createInscripcion } from '../../services/inscripcionesService.ts'
+import { createInscripcion, uploadInscripcionImage } from '../../services/inscripcionesService.ts'
 import type { InscripcionCreatePayload } from '../../types/domain'
 import { CUISINE_META } from '../../utils/cuisine'
 
@@ -108,6 +108,8 @@ function fieldClass(hasError: boolean): string {
 export default function RestaurantOnboardingView() {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
+  const [imagePreviewUrl, setImagePreviewUrl] = useState('')
   const [errors, setErrors] = useState<Errors>({})
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
@@ -179,6 +181,12 @@ export default function RestaurantOnboardingView() {
     setErrorMessage('')
 
     try {
+      let imageUrl: string | undefined
+      if (selectedImageFile) {
+        const uploadResult = await uploadInscripcionImage(selectedImageFile)
+        imageUrl = uploadResult.image_url
+      }
+
       const payload: InscripcionCreatePayload = {
         name: form.name.trim(),
         capacity_limit: Number(form.capacity_limit),
@@ -190,7 +198,7 @@ export default function RestaurantOnboardingView() {
         menu_price: Number(form.menu_price),
         dist_office_towers: Number(form.dist_office_towers),
         google_rating: Number(form.google_rating),
-        image_url: form.image_url.trim() || undefined,
+        image_url: imageUrl || form.image_url.trim() || undefined,
         google_maps_link: form.google_maps_link.trim(),
         opens_weekends: form.opens_weekends,
         has_wifi: form.has_wifi,
@@ -201,6 +209,8 @@ export default function RestaurantOnboardingView() {
       await createInscripcion(payload)
       setSuccessMessage('Inscripción enviada correctamente para revisión del administrador.')
       setForm(INITIAL_FORM)
+      setSelectedImageFile(null)
+      setImagePreviewUrl('')
       setErrors({})
       setStep(1)
     } catch (error) {
@@ -428,31 +438,46 @@ export default function RestaurantOnboardingView() {
               <label className="text-sm font-semibold text-[var(--text)]">Imagen del restaurante (Opcional)</label>
               <input
                 type="file"
-                accept="image/*"
-                onChange={async (event) => {
-                  const file = event.target.files?.[0];
-                  if (file) {
-                    try {
-                      // Subir la imagen y guardar la ruta
-                      const formData = new FormData();
-                      formData.append("file", file);
-                      // Asumiendo que /upload-image está en la misma API base
-                      const response = await fetch("http://localhost:8000/upload-image", {
-                        method: "POST",
-                        body: formData
-                      });
-                      if (response.ok) {
-                        const data = await response.json();
-                        setField("image_url", data.image_url); // ej. /static/images/algo.jpg
-                      }
-                    } catch (e) {
-                      console.error("Error subiendo imagen", e);
-                    }
+                accept="image/jpeg,image/png,image/webp,image/jpg"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (!file) {
+                    setSelectedImageFile(null)
+                    setImagePreviewUrl('')
+                    return
                   }
+
+                  setSelectedImageFile(file)
+                  setField('image_url', '')
+
+                  const reader = new FileReader()
+                  reader.onloadend = () => {
+                    setImagePreviewUrl(reader.result as string)
+                  }
+                  reader.readAsDataURL(file)
                 }}
                 className="w-full text-sm mt-1 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#1A1A2E]/5 file:text-[#1A1A2E] hover:file:bg-[#1A1A2E]/10 cursor-pointer text-[var(--text)]"
               />
-              {form.image_url && <p className="text-xs text-green-600 mt-1">✔ Imagen subida correctamente</p>}
+              {selectedImageFile ? (
+                <p className="text-xs text-green-600 mt-1">✔ Imagen seleccionada. Se subirá al enviar la inscripción.</p>
+              ) : null}
+              {imagePreviewUrl ? (
+                <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]/40">
+                  <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
+                    <p className="text-xs font-semibold text-[var(--text)]">Vista previa</p>
+                    <p className="truncate text-xs text-[var(--text-muted)] max-w-[60%]" title={selectedImageFile?.name || ''}>
+                      {selectedImageFile?.name}
+                    </p>
+                  </div>
+                  <div className="relative flex min-h-[220px] items-center justify-center bg-gradient-to-br from-[var(--surface-soft)] to-[var(--surface)] p-3">
+                    <img
+                      src={imagePreviewUrl}
+                      alt="Vista previa"
+                      className="max-h-[320px] w-full rounded-lg object-contain"
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

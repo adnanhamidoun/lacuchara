@@ -6,6 +6,7 @@ import {
   getAllInscripciones,
   rejectInscripcion,
 } from '../../services/inscripcionesService'
+import { getRestaurantImage, uploadRestaurantImage } from '../../services/authService'
 import { deleteRestaurant } from '../../services/restaurantsService'
 import { useAuth } from '../../components/auth/AuthContext.jsx'
 import type { AuthSession, Inscripcion } from '../../types/domain'
@@ -14,6 +15,12 @@ import { getCuisineMeta } from '../../utils/cuisine'
 const ADMIN_AVATAR_SRC = '/admin-avatar.jpg'
 const APPROVAL_HISTORY_STORAGE_KEY = 'admin.approvalHistory'
 const REJECTED_HISTORY_STORAGE_KEY = 'admin.rejectedHistory'
+
+function withCacheBust(url: string, seed: number = Date.now()): string {
+  if (!url) return ''
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}t=${seed}`
+}
 
 function normalizeInscripcionStatus(status: string | null | undefined): string {
   return (status ?? '').trim().toLowerCase()
@@ -265,7 +272,6 @@ function RestaurantsList({
   onEditImage: (id: number, url: string) => void
 }) {
   const [imageUrls, setImageUrls] = useState<Record<number, string>>({})
-  const { session } = useAuth() as { session: AuthSession | null }
 
   useEffect(() => {
     console.log('[RestaurantsList] Received restaurants:', restaurants)
@@ -273,19 +279,12 @@ function RestaurantsList({
       const loadImage = async () => {
         try {
           console.log(`[RestaurantsList] Loading image for restaurant ${rest.restaurant_id}: ${rest.name}`)
-          const response = await fetch(`/get-restaurant-image/${rest.restaurant_id}`)
-          console.log(`[RestaurantsList] Response status: ${response.status}`)
-          
-          if (response.ok) {
-            const data = await response.json()
-            console.log(`[RestaurantsList] Image URL: ${data.image_url}`)
-            setImageUrls((prev) => ({
-              ...prev,
-              [rest.restaurant_id]: data.image_url,
-            }))
-          } else {
-            console.error(`[RestaurantsList] Failed: ${response.status}`)
-          }
+          const data = await getRestaurantImage(rest.restaurant_id)
+          console.log(`[RestaurantsList] Image URL: ${data.image_url}`)
+          setImageUrls((prev) => ({
+            ...prev,
+            [rest.restaurant_id]: withCacheBust(data.image_url),
+          }))
         } catch (error) {
           console.error(`[RestaurantsList] Error:`, error)
         }
@@ -303,7 +302,7 @@ function RestaurantsList({
           capacity_limit: rest.capacity_limit,
           restaurant_segment: rest.restaurant_segment,
         })
-        const imageUrl = imageUrls[rest.restaurant_id] || ''
+        const imageUrl = imageUrls[rest.restaurant_id] || rest.image_url || ''
         const initials = rest.name
           .split(' ')
           .map((word: string) => word[0])
@@ -514,34 +513,23 @@ export default function AdminDashboardView() {
       return
     }
 
-    if (!session) return
+    if (!session?.token) return
 
     try {
-      const formData = new FormData()
-      formData.append('image_file', editingImage)
+      await uploadRestaurantImage(restaurantId, editingImage, session.token)
+      const imageData = await getRestaurantImage(restaurantId)
+      const refreshedImageUrl = withCacheBust(imageData.image_url)
 
-      const response = await fetch(`/restaurants/${restaurantId}/image`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${(session as any).token}`
-        },
-        body: formData
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Error al subir la imagen')
-      }
-
-      const data = await response.json()
-      // Actualizar la imagen en la lista
       setActivos((prev) =>
         prev.map((r) =>
           r.restaurant_id === restaurantId
-            ? { ...r, image_data: data.image_base64 }
+            ? { ...r, image_url: refreshedImageUrl }
             : r
         )
       )
+
+      await refreshActiveRestaurants()
+
       // Cerrar modal
       setEditingRestaurantId(null)
       setEditingImage(null)

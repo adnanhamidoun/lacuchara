@@ -140,7 +140,7 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.5 }}
-        className="rounded-3xl border border-[#3A3037]/30 bg-[var(--surface)] p-6 shadow-lg"
+        className="rounded-3xl bg-[var(--surface)] p-6 shadow-lg"
       >
         <div className="space-y-2 text-center">
           <h3 className="text-lg font-bold uppercase tracking-wide text-[var(--text)]">Menú del día</h3>
@@ -225,7 +225,7 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.5 }}
-      className="rounded-2xl border border-[var(--border)]/50 shadow-lg bg-[var(--surface)] overflow-hidden"
+      className="rounded-2xl shadow-lg bg-[var(--surface)] overflow-hidden"
     >
       <div className="relative">
         {/* Premium dark background - integrated with page aesthetic */}
@@ -263,9 +263,6 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
               {submitError ? (
                 <p className="mt-2 text-xs font-medium text-[#E53935]">{submitError}</p>
               ) : null}
-              
-              {/* Subtle accent line */}
-              <div className="h-px w-12 bg-gradient-to-r from-[#D4AF37]/60 to-[#D4AF37]/0" />
             </div>
 
         <div className="flex flex-1 items-center py-2">
@@ -362,6 +359,8 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
           )}
         </div>
       </div>
+      </div>
+    </div>
     </motion.div>
   )
 }

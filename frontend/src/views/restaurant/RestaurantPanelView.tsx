@@ -106,20 +106,87 @@ const EMPTY_PROFILE_FORM: ProfileFormState = {
   cuisine_type: '',
 }
 
+function normalizeSegmentOption(value: string | null | undefined): SegmentOption {
+  const normalized = (value ?? '').trim().toLowerCase()
+  if (!normalized) return ''
+
+  if (normalized === 'tradicional') return 'traditional'
+  if (normalized === 'business' || normalized === 'gourmet' || normalized === 'traditional' || normalized === 'family') {
+    return normalized
+  }
+
+  return ''
+}
+
+function normalizeTerraceOption(value: string | null | undefined): TerraceOption {
+  const normalized = (value ?? '').trim().toLowerCase()
+  if (!normalized) return ''
+
+  if (
+    normalized === 'yearround' ||
+    normalized === 'year-round' ||
+    normalized === 'all_year' ||
+    normalized === 'all year' ||
+    normalized === 'todo el año' ||
+    normalized === 'todo el ano'
+  ) {
+    return 'yearround'
+  }
+
+  if (normalized === 'summer' || normalized === 'summer_only' || normalized === 'solo verano') {
+    return 'summer'
+  }
+
+  if (normalized === 'none' || normalized === 'sin terraza' || normalized === 'no tiene') {
+    return 'none'
+  }
+
+  return ''
+}
+
+function normalizeCuisineOption(value: string | null | undefined): CuisineOption {
+  const normalized = (value ?? '').trim().toLowerCase()
+  if (!normalized) return ''
+
+  if (
+    normalized === 'grill' ||
+    normalized === 'spanish' ||
+    normalized === 'mediterranean' ||
+    normalized === 'stew' ||
+    normalized === 'fried' ||
+    normalized === 'italian' ||
+    normalized === 'asian' ||
+    normalized === 'latin' ||
+    normalized === 'arabic' ||
+    normalized === 'avantgarde' ||
+    normalized === 'plantbased' ||
+    normalized === 'streetfood'
+  ) {
+    return normalized
+  }
+
+  if (normalized === 'española' || normalized === 'espanola') return 'spanish'
+  if (normalized === 'mediterránea' || normalized === 'mediterranea') return 'mediterranean'
+  if (normalized === 'árabe' || normalized === 'arabe') return 'arabic'
+  if (normalized === 'vanguardia') return 'avantgarde'
+
+  return ''
+}
+
 function mapRestaurantToForm(detail: RestaurantDetail): ProfileFormState {
   return {
     name: detail.name ?? '',
     capacity_limit: detail.capacity_limit?.toString() ?? '',
     table_count: detail.table_count?.toString() ?? '',
     min_service_duration: detail.min_service_duration?.toString() ?? '',
-    terrace_setup_type: (detail.terrace_setup_type as TerraceOption | null) ?? '',
+    terrace_setup_type: normalizeTerraceOption(detail.terrace_setup_type),
     opens_weekends: detail.opens_weekends === null ? '' : detail.opens_weekends ? 'true' : 'false',
     has_wifi: detail.has_wifi === null ? '' : detail.has_wifi ? 'true' : 'false',
-    restaurant_segment: (detail.restaurant_segment as SegmentOption | null) ?? '',
+    restaurant_segment: normalizeSegmentOption(detail.restaurant_segment),
     menu_price: detail.menu_price?.toString() ?? '',
     dist_office_towers: detail.dist_office_towers?.toString() ?? '',
     google_rating: detail.google_rating?.toString() ?? '',
-    cuisine_type: (detail.cuisine_type as CuisineOption | null) ?? '',
+    cuisine_type: normalizeCuisineOption(detail.cuisine_type),
   }
 }
 
@@ -303,14 +370,14 @@ export default function RestaurantPanelView() {
       capacity_limit: stringToNullableNumber(profileForm.capacity_limit),
       table_count: stringToNullableNumber(profileForm.table_count),
       min_service_duration: stringToNullableNumber(profileForm.min_service_duration),
-      terrace_setup_type: profileForm.terrace_setup_type || null,
+      terrace_setup_type: normalizeTerraceOption(profileForm.terrace_setup_type) || null,
       opens_weekends: stringToNullableBoolean(profileForm.opens_weekends),
       has_wifi: stringToNullableBoolean(profileForm.has_wifi),
-      restaurant_segment: profileForm.restaurant_segment || null,
+      restaurant_segment: normalizeSegmentOption(profileForm.restaurant_segment) || null,
       menu_price: stringToNullableNumber(profileForm.menu_price),
       dist_office_towers: stringToNullableNumber(profileForm.dist_office_towers),
       google_rating: stringToNullableNumber(profileForm.google_rating),
-      cuisine_type: profileForm.cuisine_type || null,
+      cuisine_type: normalizeCuisineOption(profileForm.cuisine_type) || null,
     }
 
     setProfileSaving(true)
