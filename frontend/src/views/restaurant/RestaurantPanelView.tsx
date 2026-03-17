@@ -4,8 +4,9 @@ import { uploadRestaurantImage, getRestaurantImage } from '../../services/authSe
 import { getRestaurantDetail, updateRestaurant } from '../../services/restaurantsService'
 import type { RestaurantDetail, RestaurantUpdatePayload } from '../../types/domain'
 import { CUISINE_META } from '../../utils/cuisine'
+import PredictionDashboard from './PredictionDashboard'
 
-type TabKey = 'perfil' | 'ocr'
+type TabKey = 'perfil' | 'ocr' | 'predicciones'
 type NullableBooleanValue = '' | 'true' | 'false'
 type SegmentOption = '' | 'gourmet' | 'traditional' | 'business' | 'family'
 type TerraceOption = '' | 'yearround' | 'summer' | 'none'
@@ -424,6 +425,12 @@ export default function RestaurantPanelView() {
         >
           Menú del Día (IA OCR)
         </button>
+        <button
+          onClick={() => setActiveTab('predicciones')}
+          className={`pb-2 px-4 text-sm font-semibold transition-colors ${activeTab === 'predicciones' ? 'border-b-2 border-[#E07B54] text-[#E07B54]' : 'text-[var(--text-muted)]'}`}
+        >
+          Predicciones de Menú
+        </button>
       </div>
 
       {activeTab === 'perfil' && (
@@ -776,6 +783,10 @@ export default function RestaurantPanelView() {
             </div>
           </div>
         </div>
+      )}
+
+      {activeTab === 'predicciones' && (
+        <PredictionDashboard />
       )}
     </section>
   )

@@ -88,7 +88,7 @@ export async function uploadRestaurantImage(
 export async function getRestaurantImage(
   restaurantId: number,
 ): Promise<{ image_url: string; is_default?: boolean; restaurant_id?: number }> {
-  const response = await fetch(`/restaurants/${restaurantId}/image`)
+  const response = await fetch(`/get-restaurant-image/${restaurantId}`)
   if (!response.ok) throw new Error('Sin imagen')
   return response.json()
 }
