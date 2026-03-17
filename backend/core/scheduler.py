@@ -12,7 +12,10 @@ from pathlib import Path
 from .manager import ModelProvider
 
 # Registered model names managed by this scheduler
-MANAGED_MODELS: list[str] = ["azca-menus-model", "azca-services-model"]
+MANAGED_MODELS: list[str] = [
+    "azca-menus-model",
+    "azca-services-model",
+]
 
 
 def _seconds_until_next_first_of_month_06utc() -> float:
