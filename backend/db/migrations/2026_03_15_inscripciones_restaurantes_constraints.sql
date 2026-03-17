@@ -9,16 +9,16 @@ BEGIN TRY
     BEGIN TRANSACTION;
 
     /* 1) Normalizar estado pendiente */
-    UPDATE dbo.inscripciones
+    UPDATE dbo.inscriptions
     SET estado_inscripcion = 'pendiente'
     WHERE LOWER(LTRIM(RTRIM(COALESCE(estado_inscripcion, '')))) IN ('pendiente');
 
     /* 2) Eliminar registros no pendientes de inscripciones */
-    DELETE FROM dbo.inscripciones
+    DELETE FROM dbo.inscriptions
     WHERE LOWER(LTRIM(RTRIM(COALESCE(estado_inscripcion, '')))) <> 'pendiente';
 
     /* 3) Normalizar/migrar SEGMENT */
-    UPDATE dbo.inscripciones
+    UPDATE dbo.inscriptions
     SET restaurant_segment = CASE LOWER(LTRIM(RTRIM(COALESCE(restaurant_segment, ''))))
         WHEN 'gourmet' THEN 'gourmet'
         WHEN 'traditional' THEN 'traditional'
@@ -39,7 +39,7 @@ BEGIN TRY
     END;
 
     /* 4) Normalizar/migrar TERRACE */
-    UPDATE dbo.inscripciones
+    UPDATE dbo.inscriptions
     SET terrace_setup_type = CASE LOWER(LTRIM(RTRIM(COALESCE(terrace_setup_type, ''))))
         WHEN 'todo el año' THEN 'yearround'
         WHEN 'todo el ano' THEN 'yearround'
@@ -64,7 +64,7 @@ BEGIN TRY
     END;
 
         /* 5) Normalizar/migrar CUISINE */
-        UPDATE dbo.inscripciones
+        UPDATE dbo.inscriptions
         SET cuisine_type = CASE LOWER(LTRIM(RTRIM(COALESCE(cuisine_type, ''))))
                 WHEN 'grill' THEN 'grill'
                 WHEN 'parrilla y brasa' THEN 'grill'
@@ -131,15 +131,15 @@ BEGIN TRY
         END;
 
         /* 6) Eliminar filas fuera de catálogo en inscripciones */
-        DELETE FROM dbo.inscripciones
+        DELETE FROM dbo.inscriptions
         WHERE restaurant_segment IS NOT NULL
             AND restaurant_segment NOT IN ('gourmet', 'traditional', 'business', 'family');
 
-    DELETE FROM dbo.inscripciones
+    DELETE FROM dbo.inscriptions
     WHERE terrace_setup_type IS NOT NULL
             AND terrace_setup_type NOT IN ('yearround', 'summer', 'none');
 
-    DELETE FROM dbo.inscripciones
+    DELETE FROM dbo.inscriptions
     WHERE cuisine_type IS NOT NULL
       AND cuisine_type NOT IN (
         'grill',
@@ -158,13 +158,13 @@ BEGIN TRY
 
     /* 7) Re-crear constraints con nuevo catálogo */
     IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'ck_inscripciones_estado_pendiente')
-        ALTER TABLE dbo.inscripciones DROP CONSTRAINT ck_inscripciones_estado_pendiente;
+        ALTER TABLE dbo.inscriptions DROP CONSTRAINT ck_inscripciones_estado_pendiente;
     IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'ck_inscripciones_segment')
-        ALTER TABLE dbo.inscripciones DROP CONSTRAINT ck_inscripciones_segment;
+        ALTER TABLE dbo.inscriptions DROP CONSTRAINT ck_inscripciones_segment;
     IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'ck_inscripciones_terrace')
-        ALTER TABLE dbo.inscripciones DROP CONSTRAINT ck_inscripciones_terrace;
+        ALTER TABLE dbo.inscriptions DROP CONSTRAINT ck_inscripciones_terrace;
     IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'ck_inscripciones_cuisine')
-        ALTER TABLE dbo.inscripciones DROP CONSTRAINT ck_inscripciones_cuisine;
+        ALTER TABLE dbo.inscriptions DROP CONSTRAINT ck_inscripciones_cuisine;
 
     IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'ck_dim_restaurants_segment')
         ALTER TABLE dbo.dim_restaurants DROP CONSTRAINT ck_dim_restaurants_segment;
@@ -173,19 +173,19 @@ BEGIN TRY
     IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'ck_dim_restaurants_cuisine')
         ALTER TABLE dbo.dim_restaurants DROP CONSTRAINT ck_dim_restaurants_cuisine;
 
-    ALTER TABLE dbo.inscripciones WITH CHECK
+    ALTER TABLE dbo.inscriptions WITH CHECK
     ADD CONSTRAINT ck_inscripciones_estado_pendiente
     CHECK (LOWER(LTRIM(RTRIM(COALESCE(estado_inscripcion, '')))) = 'pendiente');
 
-    ALTER TABLE dbo.inscripciones WITH CHECK
+    ALTER TABLE dbo.inscriptions WITH CHECK
     ADD CONSTRAINT ck_inscripciones_segment
     CHECK (restaurant_segment IS NULL OR restaurant_segment IN ('gourmet', 'traditional', 'business', 'family'));
 
-    ALTER TABLE dbo.inscripciones WITH CHECK
+    ALTER TABLE dbo.inscriptions WITH CHECK
     ADD CONSTRAINT ck_inscripciones_terrace
     CHECK (terrace_setup_type IS NULL OR terrace_setup_type IN ('yearround', 'summer', 'none'));
 
-    ALTER TABLE dbo.inscripciones WITH CHECK
+    ALTER TABLE dbo.inscriptions WITH CHECK
     ADD CONSTRAINT ck_inscripciones_cuisine
     CHECK (
         cuisine_type IS NULL OR cuisine_type IN (

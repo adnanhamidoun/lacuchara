@@ -669,7 +669,7 @@ class RestaurantsDetailListResponse(BaseModel):
 
 
 class InscripcionCreateRequest(BaseModel):
-    """Modelo de alta para solicitudes en dbo.inscripciones."""
+    """Modelo de alta para solicitudes en dbo.inscriptions."""
 
     name: str = Field(..., description="Nombre del restaurante", min_length=1)
     capacity_limit: int | None = Field(None, description="Límite de capacidad", ge=1)
@@ -714,7 +714,7 @@ class InscripcionCreateRequest(BaseModel):
 
 
 class InscripcionItem(BaseModel):
-    """Modelo de respuesta para una solicitud en dbo.inscripciones."""
+    """Modelo de respuesta para una solicitud en dbo.inscriptions."""
 
     inscripcion_id: int
     name: str
@@ -1051,9 +1051,9 @@ def _ensure_auth_columns_exist() -> None:
         "IF COL_LENGTH('dbo.dim_restaurants', 'login_email') IS NULL ALTER TABLE dbo.dim_restaurants ADD login_email NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.dim_restaurants', 'password_hash') IS NULL ALTER TABLE dbo.dim_restaurants ADD password_hash NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.dim_restaurants', 'image_url') IS NULL ALTER TABLE dbo.dim_restaurants ADD image_url NVARCHAR(500) NULL;",
-        "IF COL_LENGTH('dbo.inscripciones', 'login_email') IS NULL ALTER TABLE dbo.inscripciones ADD login_email NVARCHAR(255) NULL;",
-        "IF COL_LENGTH('dbo.inscripciones', 'password_hash') IS NULL ALTER TABLE dbo.inscripciones ADD password_hash NVARCHAR(255) NULL;",
-        "IF COL_LENGTH('dbo.inscripciones', 'image_url') IS NULL ALTER TABLE dbo.inscripciones ADD image_url NVARCHAR(500) NULL;",
+        "IF COL_LENGTH('dbo.inscriptions', 'login_email') IS NULL ALTER TABLE dbo.inscriptions ADD login_email NVARCHAR(255) NULL;",
+        "IF COL_LENGTH('dbo.inscriptions', 'password_hash') IS NULL ALTER TABLE dbo.inscriptions ADD password_hash NVARCHAR(255) NULL;",
+        "IF COL_LENGTH('dbo.inscriptions', 'image_url') IS NULL ALTER TABLE dbo.inscriptions ADD image_url NVARCHAR(500) NULL;",
         """
         IF COL_LENGTH('dbo.fact_menus', 'includes_drink') IS NULL
         BEGIN
@@ -1575,7 +1575,7 @@ def _capitalize_first(value: str | None) -> str | None:
     status_code=status.HTTP_201_CREATED,
 )
 async def create_inscripcion(request: InscripcionCreateRequest, db: Session = Depends(get_db)):
-    """Crea una solicitud de alta en dbo.inscripciones."""
+    """Crea una solicitud de alta en dbo.inscriptions."""
     try:
         normalized_login_email = request.login_email.strip().lower() if request.login_email else None
         normalized_password = request.password.strip() if request.password else None
@@ -1661,7 +1661,7 @@ async def create_inscripcion(request: InscripcionCreateRequest, db: Session = De
     tags=["Data"],
 )
 async def get_pending_inscripciones(db: Session = Depends(get_db)):
-    """Obtiene solicitudes pendientes desde dbo.inscripciones."""
+    """Obtiene solicitudes pendientes desde dbo.inscriptions."""
     try:
         rows = (
             db.query(Inscripcion)
@@ -1827,7 +1827,7 @@ async def delete_restaurant_endpoint(
     Elimina un restaurante de forma permanente.
 
     - Solo usuarios con rol admin pueden ejecutar esta acción.
-    - También elimina credenciales asociadas en la tabla Users.
+    - También elimina credenciales asociadas en la tabla users.
     """
     _require_admin_auth(authorization)
 
@@ -1941,7 +1941,7 @@ async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)
         db.add(restaurant)
         db.flush()
 
-        # Crear usuario en tabla Users si hay email y contraseña
+        # Crear usuario en tabla users si hay email y contraseña
         if inscripcion.login_email and inscripcion.password_hash:
             normalized_email = inscripcion.login_email.strip().lower()
             existing_user = db.query(User).filter(User.login_email == normalized_email).first()
@@ -2068,15 +2068,15 @@ async def clear_approval_history(db: Session = Depends(get_db)):
 )
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """
-    Login desde tabla Users.
+    Login desde tabla users.
     
-    - Busca el usuario en la tabla Users por email
+    - Busca el usuario en la tabla users por email
     - Verifica la contraseña con hash PBKDF2
     - Si es admin (restaurant_id=0), retorna role="admin"
     - Si es restaurante normal (restaurant_id>0), retorna role="restaurant_owner"
     - Valida que is_active=True
     """
-    # Buscar usuario en tabla Users
+    # Buscar usuario en tabla users
     user = db.query(User).filter(
         User.login_email == request.email.strip().lower()
     ).first()

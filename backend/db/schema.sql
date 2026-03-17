@@ -31,9 +31,9 @@ END
 GO
 
 -- Tabla de Usuarios (Autenticación de Restaurantes)
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Users]') AND type in (N'U'))
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND type in (N'U'))
 BEGIN
-    CREATE TABLE dbo.Users (
+    CREATE TABLE dbo.users (
         user_id INT IDENTITY(1,1) PRIMARY KEY,
         restaurant_id INT NOT NULL,
         login_email VARCHAR(255) NOT NULL UNIQUE,

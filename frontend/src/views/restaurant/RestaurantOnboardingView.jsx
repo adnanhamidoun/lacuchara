@@ -45,7 +45,7 @@ export default function RestaurantOnboardingView() {
         dist_office_towers: Number(form.dist_office_towers),
       })
 
-      setSuccessMessage('Solicitud enviada a dbo.inscripciones.')
+      setSuccessMessage('Solicitud enviada a dbo.inscriptions.')
       setForm(initialForm)
     } catch (error) {
       setErrorMessage(error.message || 'No se pudo enviar la inscripción.')
@@ -59,7 +59,7 @@ export default function RestaurantOnboardingView() {
       <div>
         <h2 className="text-2xl font-semibold">Alta de Restaurante</h2>
         <p className="text-sm text-slate-600">
-          Onboarding para crear solicitud en la tabla temporal dbo.inscripciones.
+          Onboarding para crear solicitud en la tabla temporal dbo.inscriptions.
         </p>
       </div>
 

@@ -99,12 +99,12 @@ class DailyMenu(Base):
 
 class Inscripcion(Base):
     """
-    Modelo ORM para la tabla dbo.inscripciones.
+    Modelo ORM para la tabla dbo.inscriptions.
 
     Almacena solicitudes de alta de restaurantes pendientes de revisión administrativa.
     """
 
-    __tablename__ = "inscripciones"
+    __tablename__ = "inscriptions"
     __table_args__ = (
         CheckConstraint(
             "restaurant_segment IN ('gourmet','traditional','business','family')",
@@ -460,7 +460,7 @@ class User(Base):
 
     Permite a los restaurantes iniciar sesión y gestionar sus credenciales.
     """
-    __tablename__ = "Users"
+    __tablename__ = "users"
 
     user_id = Column(Integer, primary_key=True, autoincrement=True)
     restaurant_id = Column(Integer, nullable=False)

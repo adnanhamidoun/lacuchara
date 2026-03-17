@@ -58,10 +58,10 @@ FLUJO DE REGISTRO Y APROBACIÓN:
 
 2. Admin aprueba en /admin/inscripciones
    - Mueve restaurante a dim_restaurants
-   - Crea usuario en dbo.Users con credenciales hasheadas
+    - Crea usuario en dbo.users con credenciales hasheadas
 
 3. Restaurante inicia sesión en /login
-   - Sistema busca en dbo.Users
+    - Sistema busca en dbo.users
    - Valida contraseña hasheada
    - Devuelve token con role "restaurant_owner" y restaurant_id
 
@@ -72,7 +72,7 @@ FLUJO DE REGISTRO Y APROBACIÓN:
 
 FLUJO ADMIN:
 1. Admin inicia sesión en /login
-   - Busca en dbo.Users con restaurant_id=0
+    - Busca en dbo.users con restaurant_id=0
    - Valida contraseña
    - Devuelve token con role "admin"
 

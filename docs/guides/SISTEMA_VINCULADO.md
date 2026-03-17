@@ -3,12 +3,12 @@
 ## ✅ Estado Final del Sistema
 
 ### 1. **Autenticación Unificada** 
-La tabla `dbo.Users` es la fuente única de verdad para autenticación:
+La tabla `dbo.users` es la fuente única de verdad para autenticación:
 - **Admin**: `restaurant_id = 0`, role = "admin"
 - **Restaurantes**: `restaurant_id > 0`, role = "restaurant_owner"
 
 **Endpoint**: `POST /auth/login`
-- Busca en `dbo.Users` por `login_email`
+- Busca en `dbo.users` por `login_email`
 - Valida contraseña hasheada con `verify_password()`
 - Devuelve token JWT con role, email, restaurant_id
 
@@ -18,20 +18,20 @@ La tabla `dbo.Users` es la fuente única de verdad para autenticación:
   ↓
 POST /inscripciones (crea inscripción pendiente)
   - Hashea contraseña con hash_password()
-  - Guarda en dbo.inscripciones con estado "pendiente"
+  - Guarda en dbo.inscriptions con estado "pendiente"
   ↓
 Admin aprueba desde /admin/inscripciones
   ↓
 approve_inscripcion()
   - Crea restaurante en dim_restaurants (SIN credenciales)
-  - Crea usuario en dbo.Users (CON credenciales)
+  - Crea usuario en dbo.users (CON credenciales)
   - Elimina inscripción
 ```
 
 ### 3. **Flujo de Login**
 ```
 POST /auth/login
-├─ Busca usuario en dbo.Users
+├─ Busca usuario en dbo.users
 ├─ Valida contraseña hasheada
 ├─ Si restaurant_id == 0:
 │  └─ Devuelve token con role="admin"
@@ -117,7 +117,7 @@ POST /inscripciones/{id}/reject (admin)
 
 ## 📝 Estructura de Tablas
 
-### dbo.Users (Fuente de Autenticación)
+### dbo.users (Fuente de Autenticación)
 ```
 - user_id (PK)
 - restaurant_id (0 = admin, >0 = restaurante)
@@ -138,7 +138,7 @@ POST /inscripciones/{id}/reject (admin)
 - ... (otros datos de predicción)
 ```
 
-### dbo.inscripciones (Solicitudes Pendientes)
+### dbo.inscriptions (Solicitudes Pendientes)
 ```
 - inscripcion_id (PK)
 - name

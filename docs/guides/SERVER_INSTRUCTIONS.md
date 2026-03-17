@@ -1,4 +1,4 @@
-﻿# 🚀 CÓMO EJECUTAR EL SERVIDOR
+# 🚀 CÓMO EJECUTAR EL SERVIDOR
 
 ## Forma Rápida: Ejecutar el Script Batch (RECOMENDADO)
 
@@ -201,8 +201,8 @@ Backend FastAPI
     ↓
 Azure SQL Database
     ├── dim_restaurants (con columna image_data VARBINARY)
-    ├── dbo.Users (auth)
-    └── dbo.inscripciones (pending signups)
+    ├── dbo.users (auth)
+    └── dbo.inscriptions (pending signups)
 ```
 
 ---

@@ -552,7 +552,7 @@ class RestaurantsListResponse(BaseModel):
 
 
 class InscripcionCreateRequest(BaseModel):
-    """Modelo de alta para solicitudes en dbo.inscripciones."""
+    """Modelo de alta para solicitudes en dbo.inscriptions."""
 
     name: str = Field(..., description="Nombre del restaurante", min_length=1)
     capacity_limit: int | None = Field(None, description="Límite de capacidad", ge=1)
@@ -593,7 +593,7 @@ class InscripcionCreateRequest(BaseModel):
 
 
 class InscripcionItem(BaseModel):
-    """Modelo de respuesta para una solicitud en dbo.inscripciones."""
+    """Modelo de respuesta para una solicitud en dbo.inscriptions."""
 
     inscripcion_id: int
     name: str
@@ -842,9 +842,9 @@ def _ensure_auth_columns_exist() -> None:
         "IF COL_LENGTH('dbo.dim_restaurants', 'login_email') IS NULL ALTER TABLE dbo.dim_restaurants ADD login_email NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.dim_restaurants', 'password_hash') IS NULL ALTER TABLE dbo.dim_restaurants ADD password_hash NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.dim_restaurants', 'image_url') IS NULL ALTER TABLE dbo.dim_restaurants ADD image_url NVARCHAR(500) NULL;",
-        "IF COL_LENGTH('dbo.inscripciones', 'login_email') IS NULL ALTER TABLE dbo.inscripciones ADD login_email NVARCHAR(255) NULL;",
-        "IF COL_LENGTH('dbo.inscripciones', 'password_hash') IS NULL ALTER TABLE dbo.inscripciones ADD password_hash NVARCHAR(255) NULL;",
-        "IF COL_LENGTH('dbo.inscripciones', 'image_url') IS NULL ALTER TABLE dbo.inscripciones ADD image_url NVARCHAR(500) NULL;",
+        "IF COL_LENGTH('dbo.inscriptions', 'login_email') IS NULL ALTER TABLE dbo.inscriptions ADD login_email NVARCHAR(255) NULL;",
+        "IF COL_LENGTH('dbo.inscriptions', 'password_hash') IS NULL ALTER TABLE dbo.inscriptions ADD password_hash NVARCHAR(255) NULL;",
+        "IF COL_LENGTH('dbo.inscriptions', 'image_url') IS NULL ALTER TABLE dbo.inscriptions ADD image_url NVARCHAR(500) NULL;",
     ]
     with engine.begin() as connection:
         for statement in statements:
@@ -1136,7 +1136,7 @@ def _parse_min_service_duration(min_service: str | None) -> int | None:
     status_code=status.HTTP_201_CREATED,
 )
 async def create_inscripcion(request: InscripcionCreateRequest, db: Session = Depends(get_db)):
-    """Crea una solicitud de alta en dbo.inscripciones."""
+    """Crea una solicitud de alta en dbo.inscriptions."""
     try:
         inscripcion = Inscripcion(
             name=request.name.strip(),
@@ -1178,7 +1178,7 @@ async def create_inscripcion(request: InscripcionCreateRequest, db: Session = De
     tags=["Data"],
 )
 async def get_pending_inscripciones(db: Session = Depends(get_db)):
-    """Obtiene solicitudes pendientes desde dbo.inscripciones."""
+    """Obtiene solicitudes pendientes desde dbo.inscriptions."""
     try:
         rows = (
             db.query(Inscripcion)
