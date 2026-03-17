@@ -1,0 +1,135 @@
+// Botón de feedback estético para predicciones (no funcional)
+// Demuestra "control humano" - permite que usuarios opinen sobre predicciones
+
+import { useState } from 'react'
+
+export interface AIFeedbackButtonProps {
+  predictionId?: string
+  type?: 'service' | 'menu'
+  onlyIcon?: boolean
+}
+
+export default function AIFeedbackButton({
+  predictionId,
+  type = 'service',
+  onlyIcon = false,
+}: AIFeedbackButtonProps) {
+  const [feedback, setFeedback] = useState<'good' | 'ok' | 'bad' | null>(null)
+  const [showMessage, setShowMessage] = useState(false)
+
+  const handleFeedback = (value: 'good' | 'ok' | 'bad') => {
+    setFeedback(value)
+    setShowMessage(true)
+
+    // Auto-hide message after 3 seconds
+    setTimeout(() => {
+      setShowMessage(false)
+    }, 3000)
+
+    // En el futuro, aquí iría:
+    // await api.post('/feedback', { predictionId, feedback: value })
+  }
+
+  const feedbackOptions = [
+    {
+      value: 'good' as const,
+      icon: '👍',
+      label: 'Acertada',
+      shortLabel: 'Buena',
+      color: '#4CAF50',
+    },
+    {
+      value: 'ok' as const,
+      icon: '👌',
+      label: 'Parcialmente acertada',
+      shortLabel: 'Regular',
+      color: '#FFB84D',
+    },
+    {
+      value: 'bad' as const,
+      icon: '👎',
+      label: 'No acertó nada',
+      shortLabel: 'Mala',
+      color: '#FF6B6B',
+    },
+  ]
+
+  const currentFeedback = feedbackOptions.find((opt) => opt.value === feedback)
+
+  // Versión compacta (solo iconos)
+  if (onlyIcon) {
+    return (
+      <div className="flex gap-2 items-center">
+        {feedbackOptions.map((option) => (
+          <button
+            key={option.value}
+            onClick={() => handleFeedback(option.value)}
+            className="text-2xl cursor-pointer hover:scale-125 transition-transform"
+            title={option.label}
+            style={{
+              opacity: feedback === option.value ? 1 : 0.5,
+              filter: feedback === option.value ? 'brightness(1.2)' : 'brightness(1)',
+            }}
+          >
+            {option.icon}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  // Versión completa
+  return (
+    <div className="space-y-3 p-4 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)]/50">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <span>💬</span>
+        <p className="text-sm font-semibold text-[var(--text)]">
+          ¿Qué te parece esta predicción?
+        </p>
+      </div>
+
+      {/* Botones de feedback */}
+      <div className="flex gap-2">
+        {feedbackOptions.map((option) => (
+          <button
+            key={option.value}
+            onClick={() => handleFeedback(option.value)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+              feedback === option.value
+                ? 'border-current bg-current/10'
+                : 'border-[var(--border)] bg-transparent hover:border-current/50'
+            }`}
+            style={{
+              borderColor: feedback === option.value ? option.color : undefined,
+              color: feedback === option.value ? option.color : 'var(--text-muted)',
+            }}
+          >
+            <span className="text-lg">{option.icon}</span>
+            <span className="text-sm font-medium">{option.shortLabel}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Mensaje de agradecimiento */}
+      {showMessage && currentFeedback && (
+        <div
+          className="p-3 rounded-lg text-sm text-white animate-pulse"
+          style={{ backgroundColor: currentFeedback.color }}
+        >
+          <p className="font-medium">
+            ✓ Gracias por tu feedback
+          </p>
+          <p className="text-xs mt-1">
+            Usamos tus comentarios para mejorar nuestros modelos.
+          </p>
+        </div>
+      )}
+
+      {/* Info pequeña */}
+      <p className="text-xs text-[var(--text-muted)] italic">
+        Tu feedback ayuda a entrenar mejores predicciones. No se almacenan datos personales.
+      </p>
+    </div>
+  )
+}

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../components/auth/AuthContext.jsx'
+import AIFeedbackButton from '../../components/ai/AIFeedbackButton'
+import AISupervisionSection from '../../components/ai/AISupervisionSection'
 import type { RestaurantDetail } from '../../types/domain'
 
 type PredictedDish = {
@@ -299,18 +301,28 @@ export default function PredictionDashboard() {
         <div className="space-y-8">
           {/* Expected Demand */}
           {servicePrediction !== null && (
-            <div className="rounded-2xl border-2 border-[#E07B54] bg-gradient-to-br from-[#E07B54]/10 to-[#E07B54]/5 p-8 shadow-lg">
-              <div className="flex items-end justify-between gap-6">
-                <div className="space-y-2">
-                  <p className="text-sm font-bold text-[#E07B54] uppercase tracking-widest">Demanda estimada</p>
-                  <p className="text-[#E07B54]">para el {new Date(selectedDate).toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-5xl font-black text-[#E07B54]">{servicePrediction}</p>
-                  <p className="text-sm text-[#E07B54]/80 font-semibold mt-1">servicios</p>
+            <>
+              <div className="rounded-2xl border-2 border-[#E07B54] bg-gradient-to-br from-[#E07B54]/10 to-[#E07B54]/5 p-8 shadow-lg">
+                <div className="flex items-end justify-between gap-6">
+                  <div className="space-y-2">
+                    <p className="text-sm font-bold text-[#E07B54] uppercase tracking-widest">Demanda estimada</p>
+                    <p className="text-[#E07B54]">para el {new Date(selectedDate).toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-5xl font-black text-[#E07B54]">{servicePrediction}</p>
+                    <p className="text-sm text-[#E07B54]/80 font-semibold mt-1">servicios</p>
+                  </div>
                 </div>
               </div>
-            </div>
+
+              {/* Feedback for Service Prediction */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-[var(--text)] flex items-center gap-2">
+                  <span>💬</span> ¿Qué te parece esta predicción de demanda?
+                </h3>
+                <AIFeedbackButton type="service" />
+              </div>
+            </>
           )}
 
           {/* Suggested Menu Card */}
@@ -419,6 +431,19 @@ export default function PredictionDashboard() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Feedback Button - IA Responsable */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-[var(--text)] flex items-center gap-2">
+              <span>👤</span> Tu Feedback Sobre las Predicciones
+            </h3>
+            <AIFeedbackButton type="menu" />
+          </div>
+
+          {/* Control Humano Section - IA Responsable */}
+          <div className="space-y-4">
+            <AISupervisionSection showDetails={true} />
           </div>
 
           {/* Help Section */}
