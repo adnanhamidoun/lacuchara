@@ -29,6 +29,7 @@ import logging
 import os
 import pickle
 import unicodedata
+from difflib import SequenceMatcher
 from contextlib import asynccontextmanager
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -42,7 +43,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, distinct, func, or_, text
+from sqlalchemy import Date, case, desc, distinct, func, or_, text
 from pydantic import BaseModel, Field
 
 from ..db import (
@@ -56,12 +57,14 @@ from ..db import (
     DimDish,
     DimDishes,
     MenusAzca,
+    DailyMenu,
     FactMenuItems,
     FactMenus,
     RestaurantContext,
     FactPredictionLog,
     Inscripcion,
     User,
+    DishRating,
     SEGMENT_OPTIONS,
     TERRACE_OPTIONS,
     CUISINE_OPTIONS,
@@ -776,6 +779,81 @@ class DailyMenuResponse(BaseModel):
     dessert: str | None = None
     includes_drink: bool = False
     menu_price: float | None = None
+
+
+class DishRatingCreateRequest(BaseModel):
+    restaurant_id: int
+    dish_name: str = Field(..., min_length=1, max_length=500)
+    rating: float = Field(..., ge=1, le=5)  # ✅ Float para aceptar decimales (ej: 4.5)
+    rating_date: date | None = None
+
+
+class DishRatingWriteResponse(BaseModel):
+    success: bool
+    restaurant_id: int
+    rating_date: date
+    dish_name: str
+    dish_key: str
+    rating: float  # ✅ Float para retornar decimales
+
+
+class DishRatingSummaryItem(BaseModel):
+    dish_name: str
+    dish_key: str
+    avg_rating: float
+    votes: int
+
+
+class DishRatingSummaryResponse(BaseModel):
+    restaurant_id: int
+    rating_date: date
+    items: list[DishRatingSummaryItem]
+
+
+class DishSearchRestaurantResult(BaseModel):
+    restaurant_id: int
+    best_score: float
+    matches: list[str]
+    in_today_menu: bool = False
+    last_seen: date | None = None
+    seen_count: int = 0
+
+
+class DishSearchResponse(BaseModel):
+    query: str
+    service_date: date
+    restaurants: list[DishSearchRestaurantResult]
+
+
+class RestaurantRankingItem(BaseModel):
+    restaurant_id: int
+    avg_rating: float | None = None
+    votes: int
+    trend_7d: float | None = None
+
+
+class RestaurantRankingResponse(BaseModel):
+    date_from: date
+    date_to: date
+    order_by: Literal["avg", "votes", "trend"]
+    restaurants: list[RestaurantRankingItem]
+
+
+class DishRankingItem(BaseModel):
+    dish_id: int | None = None  # ✅ Opcional: permite valoraciones sin dish_id asignado
+    dish_name: str
+    restaurant_id: int  # ✅ ID del restaurante
+    restaurant_name: str  # ✅ Nombre del restaurante
+    avg_rating: float | None = None
+    votes: int
+    trend_7d: float | None = None
+
+
+class DishRankingResponse(BaseModel):
+    date_from: date
+    date_to: date
+    order_by: Literal["avg", "votes", "trend"]
+    dishes: list[DishRankingItem]
 
 
 class LoginRequest(BaseModel):
@@ -2289,6 +2367,25 @@ def _normalize_dish_name(dish_name: str) -> str:
     return ascii_like.casefold()
 
 
+def _dish_match_score(query_key: str, dish_key: str) -> float:
+    """Devuelve un score [0..1] aproximado de similitud entre consulta y plato."""
+    query_key = (query_key or "").strip()
+    dish_key = (dish_key or "").strip()
+
+    if not query_key or not dish_key:
+        return 0.0
+    if query_key == dish_key:
+        return 1.0
+    if query_key in dish_key:
+        return 0.93
+
+    query_tokens = [token for token in query_key.split() if len(token) >= 3]
+    if query_tokens and all(token in dish_key for token in query_tokens):
+        return 0.88
+
+    return SequenceMatcher(None, query_key, dish_key).ratio()
+
+
 def _ensure_calendar_date(db: Session, service_date: date, date_id: int) -> None:
     exists = db.execute(
         text("SELECT 1 FROM dbo.dim_calendar WHERE date_id = :date_id"),
@@ -2558,6 +2655,46 @@ async def get_daily_menu(
     service_date = _current_service_date()
     date_id = int(service_date.strftime("%Y%m%d"))
 
+    # ✅ PRIMERO: Buscar en daily_menus (menú actual del día)
+    daily_menu = db.execute(
+        text(
+            """
+            SELECT menu_id, starter, main, dessert
+            FROM dbo.daily_menus
+            WHERE restaurant_id = :restaurant_id AND CAST(date AS DATE) = :target_date
+            ORDER BY created_at DESC
+            """
+        ),
+        {"restaurant_id": restaurant_id, "target_date": service_date},
+    ).first()
+
+    if daily_menu:
+        # Menú subido hoy por el restaurante
+        menu_id = int(daily_menu[0])
+        starter_str = daily_menu[1] or ""
+        main_str = daily_menu[2] or ""
+        dessert_str = daily_menu[3] or ""
+
+        grouped = {
+            "first_course": [s.strip() for s in starter_str.split(";") if s.strip()],
+            "second_course": [m.strip() for m in main_str.split(";") if m.strip()],
+            "dessert": [d.strip() for d in dessert_str.split(";") if d.strip()],
+        }
+
+        restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+
+        return DailyMenuResponse(
+            menu_id=menu_id,
+            restaurant_id=restaurant_id,
+            date=service_date,
+            starter="; ".join(grouped["first_course"]) if grouped["first_course"] else None,
+            main="; ".join(grouped["second_course"]) if grouped["second_course"] else None,
+            dessert="; ".join(grouped["dessert"]) if grouped["dessert"] else None,
+            includes_drink=False,  # daily_menus no tiene este campo; asumir False
+            menu_price=restaurant.menu_price if restaurant else None,
+        )
+
+    # ✅ FALLBACK: Buscar en fact_menus (histórico si existe)
     has_includes_drink = _fact_menus_has_includes_drink(db)
 
     if has_includes_drink:
@@ -2637,6 +2774,479 @@ async def get_daily_menu(
     )
 
 
+@app.get(
+    "/restaurants/dish-search",
+    response_model=DishSearchResponse,
+    summary="Buscar restaurantes por plato en el menú del día (incluye similares)",
+    tags=["Restaurants"],
+)
+async def search_restaurants_by_dish(
+    query: str = Query(..., min_length=2, max_length=200),
+    service_date: date | None = None,
+    limit: int = Query(70, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    target_date = service_date or _current_service_date()
+    date_id = int(target_date.strftime("%Y%m%d"))
+    query_key = _normalize_dish_name(query)
+
+    if not query_key:
+        return DishSearchResponse(query=query, service_date=target_date, restaurants=[])
+
+    query_tokens = [token for token in query_key.split() if len(token) >= 3]
+    primary_token = max(query_tokens, key=len) if query_tokens else query_key
+    like_pattern = f"%{primary_token}%"
+
+    # 1) Menú de HOY (si existe)
+    today_rows = db.execute(
+        text(
+            """
+            SELECT fm.restaurant_id, d.dish_name
+            FROM dbo.fact_menus fm
+            INNER JOIN dbo.fact_menu_items fmi ON fmi.menu_id = fm.menu_id
+            INNER JOIN dbo.dim_dishes d ON d.dish_id = fmi.dish_id
+            WHERE fm.date_id = :date_id
+            """
+        ),
+        {"date_id": date_id},
+    ).fetchall()
+
+    # 2) Histórico (fact_*): platos a lo largo del tiempo
+    historical_rows = db.execute(
+        text(
+            """
+            SELECT TOP 5000 fm.restaurant_id, d.dish_name, fm.date_id
+            FROM dbo.fact_menus fm
+            INNER JOIN dbo.fact_menu_items fmi ON fmi.menu_id = fm.menu_id
+            INNER JOIN dbo.dim_dishes d ON d.dish_id = fmi.dish_id
+            WHERE LOWER(d.dish_name) LIKE :pattern
+            ORDER BY fm.date_id DESC
+            """
+        ),
+        {"pattern": like_pattern},
+    ).fetchall()
+
+    # Agregación por restaurante
+    best_by_restaurant: dict[int, dict[str, Any]] = {}
+
+    def ensure_payload(restaurant_id: int) -> dict[str, Any]:
+        payload = best_by_restaurant.get(restaurant_id)
+        if payload is None:
+            payload = {
+                "best_score_today": 0.0,
+                "matches_today": [],
+                "best_score_hist": 0.0,
+                "matches_hist": [],
+                "seen_count": 0,
+                "last_seen": None,
+            }
+            best_by_restaurant[restaurant_id] = payload
+        return payload
+
+    for row in today_rows:
+        restaurant_id = int(row[0])
+        dish_name = " ".join(str(row[1] or "").strip().split())
+        dish_key = _normalize_dish_name(dish_name)
+        score = _dish_match_score(query_key, dish_key)
+
+        payload = ensure_payload(restaurant_id)
+        if score > float(payload["best_score_today"]):
+            payload["best_score_today"] = score
+        if score >= 0.75 and dish_name not in payload["matches_today"]:
+            payload["matches_today"].append(dish_name)
+
+    for row in historical_rows:
+        restaurant_id = int(row[0])
+
+        # row shape: (restaurant_id, dish_name, date_id)
+        dish_candidates: list[str] = []
+        dish_candidates.append(" ".join(str(row[1] or "").strip().split()))
+
+        best_local = 0.0
+        best_local_name = None
+        for candidate in dish_candidates:
+            candidate_key = _normalize_dish_name(candidate)
+            score = _dish_match_score(query_key, candidate_key)
+            if score > best_local:
+                best_local = score
+                best_local_name = candidate
+
+        if best_local <= 0:
+            continue
+
+        payload = ensure_payload(restaurant_id)
+        payload["seen_count"] += 1
+        if best_local > float(payload["best_score_hist"]):
+            payload["best_score_hist"] = best_local
+        if best_local >= 0.75 and best_local_name and best_local_name not in payload["matches_hist"]:
+            payload["matches_hist"].append(best_local_name)
+
+        row_date_id = None
+        if len(row) == 3:
+            try:
+                row_date_id = int(row[2])
+            except Exception:
+                row_date_id = None
+
+        if row_date_id:
+            try:
+                last_seen_candidate = datetime.strptime(str(row_date_id), "%Y%m%d").date()
+                current_last = payload["last_seen"]
+                if current_last is None or last_seen_candidate > current_last:
+                    payload["last_seen"] = last_seen_candidate
+            except Exception:
+                pass
+
+    scored: list[DishSearchRestaurantResult] = []
+    for restaurant_id, payload in best_by_restaurant.items():
+        best_today = float(payload["best_score_today"])
+        best_hist = float(payload["best_score_hist"])
+        best_score = max(best_today, best_hist)
+        if best_score < 0.66:
+            continue
+
+        in_today = best_today >= 0.66
+        matches = (payload["matches_today"] if in_today else payload["matches_hist"])[:3]
+        last_seen = target_date if in_today else payload["last_seen"]
+
+        scored.append(
+            DishSearchRestaurantResult(
+                restaurant_id=int(restaurant_id),
+                best_score=best_score,
+                matches=matches,
+                in_today_menu=in_today,
+                last_seen=last_seen,
+                seen_count=int(payload["seen_count"] or 0),
+            )
+        )
+
+    scored.sort(
+        key=lambda item: (
+            item.in_today_menu,
+            item.best_score,
+            item.last_seen or date.min,
+            item.seen_count,
+        ),
+        reverse=True,
+    )
+
+    return DishSearchResponse(query=query, service_date=target_date, restaurants=scored[:limit])
+
+
+@app.post(
+    "/ratings/dishes",
+    response_model=DishRatingWriteResponse,
+    summary="Valorar un plato de un restaurante",
+    tags=["Ratings"],
+)
+async def rate_dish(
+    body: DishRatingCreateRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == body.restaurant_id).first()
+        if not restaurant:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado")
+
+        rating_date = body.rating_date or _current_service_date()
+        dish_name = " ".join(body.dish_name.strip().split())
+        dish_key = _normalize_dish_name(dish_name)
+        if not dish_key:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nombre de plato inválido")
+
+        # Intentar obtener menu_id de daily_menus (opcional, puede ser None)
+        menu_id: int | None = None
+        menu_row = db.execute(
+            text(
+                """
+                SELECT TOP 1 menu_id
+                FROM dbo.daily_menus
+                WHERE restaurant_id = :restaurant_id AND CAST(date AS DATE) = :rating_date
+                ORDER BY menu_id DESC
+                """
+            ),
+            {"restaurant_id": body.restaurant_id, "rating_date": rating_date},
+        ).first()
+        if menu_row:
+            menu_id = int(menu_row[0])
+
+        # Guardar valoración anónima (con menu_id si está disponible)
+        new_rating = DishRating(
+            restaurant_id=body.restaurant_id,
+            rating_date=rating_date,
+            dish_name=dish_name,
+            dish_key=dish_key,
+            rating=float(body.rating),  # ✅ Aceptar decimales
+            menu_id=menu_id,
+            created_at=datetime.utcnow(),
+        )
+        db.add(new_rating)
+        db.flush()
+
+        # ✅ ACTUALIZAR ranking de platos: calcular media de todas las valoraciones
+        avg_rating = db.execute(
+            text(
+                """
+                SELECT AVG(CAST(rating AS FLOAT)) as avg_rating
+                FROM dbo.dish_ratings
+                WHERE restaurant_id = :restaurant_id AND dish_key = :dish_key AND rating_date = :rating_date
+                """
+            ),
+            {
+                "restaurant_id": body.restaurant_id,
+                "dish_key": dish_key,
+                "rating_date": rating_date,
+            },
+        ).scalar()
+
+        db.commit()
+        db.refresh(new_rating)
+
+        logger.info(
+            f"✅ Valoración guardada: {dish_name} (media: {avg_rating:.2f}) en {body.restaurant_id}"
+        )
+
+        return DishRatingWriteResponse(
+            success=True,
+            restaurant_id=body.restaurant_id,
+            rating_date=rating_date,
+            dish_name=dish_name,
+            dish_key=dish_key,
+            rating=float(body.rating),  # ✅ Retorna con decimales
+        )
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.error(f"❌ Error al guardar valoración: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al guardar valoración: {str(exc)}",
+        )
+
+
+@app.get(
+    "/ratings/dishes/summary",
+    response_model=DishRatingSummaryResponse,
+    summary="Resumen de valoraciones de platos por restaurante y día",
+    tags=["Ratings"],
+)
+async def get_dish_rating_summary(
+    restaurant_id: int = Query(..., ge=1),
+    rating_date: date | None = None,
+    db: Session = Depends(get_db),
+):
+    target_date = rating_date or _current_service_date()
+
+    rows = (
+        db.query(
+            func.max(DishRating.dish_name).label("dish_name"),
+            DishRating.dish_key.label("dish_key"),
+            func.avg(DishRating.rating).label("avg_rating"),
+            func.count(DishRating.rating).label("votes"),
+        )
+        .filter(
+            DishRating.restaurant_id == restaurant_id,
+            DishRating.rating_date == target_date,
+        )
+        .group_by(DishRating.dish_key)
+        .all()
+    )
+
+    items: list[DishRatingSummaryItem] = []
+    for row in rows:
+        dish_name = " ".join(str(row.dish_name or "").strip().split())
+        dish_key = str(row.dish_key or "").strip()
+        items.append(
+            DishRatingSummaryItem(
+                dish_name=dish_name,
+                dish_key=dish_key,
+                avg_rating=float(row.avg_rating or 0.0),
+                votes=int(row.votes or 0),
+            )
+        )
+
+    items.sort(key=lambda item: (item.avg_rating, item.votes), reverse=True)
+
+    return DishRatingSummaryResponse(
+        restaurant_id=restaurant_id,
+        rating_date=target_date,
+        items=items,
+    )
+
+
+@app.get(
+    "/rankings/restaurants",
+    response_model=RestaurantRankingResponse,
+    summary="Ranking de restaurantes basado en valoraciones de platos",
+    tags=["Ratings"],
+)
+async def get_restaurant_rankings(
+    order_by: Literal["avg", "votes", "trend"] = "avg",
+    date_to: date | None = None,
+    days: int = Query(14, ge=7, le=90),
+    db: Session = Depends(get_db),
+):
+    target_to = date_to or _current_service_date()
+    target_from = target_to - timedelta(days=days - 1)
+
+    last7_start = target_to - timedelta(days=6)
+    prev7_start = target_to - timedelta(days=13)
+    prev7_end = target_to - timedelta(days=7)
+
+    service_date = DishRating.rating_date
+
+    rows = (
+        db.query(
+            DishRating.restaurant_id.label("restaurant_id"),
+            func.avg(DishRating.rating).label("avg_rating"),
+            func.count(DishRating.rating).label("votes"),
+            func.avg(
+                case(
+                    (service_date >= last7_start, DishRating.rating),
+                    else_=None,
+                )
+            ).label("avg_last_7"),
+            func.avg(
+                case(
+                    (service_date.between(prev7_start, prev7_end), DishRating.rating),
+                    else_=None,
+                )
+            ).label("avg_prev_7"),
+        )
+        .filter(service_date.between(target_from, target_to))
+        .group_by(DishRating.restaurant_id)
+        .all()
+    )
+
+    items: list[RestaurantRankingItem] = []
+    for row in rows:
+        avg_rating = float(row.avg_rating) if row.avg_rating is not None else None
+        votes = int(row.votes or 0)
+
+        avg_last_7 = float(row.avg_last_7) if row.avg_last_7 is not None else None
+        avg_prev_7 = float(row.avg_prev_7) if row.avg_prev_7 is not None else None
+        trend_7d = (avg_last_7 - avg_prev_7) if (avg_last_7 is not None and avg_prev_7 is not None) else None
+
+        items.append(
+            RestaurantRankingItem(
+                restaurant_id=int(row.restaurant_id),
+                avg_rating=avg_rating,
+                votes=votes,
+                trend_7d=trend_7d,
+            )
+        )
+
+    if order_by == "votes":
+        items.sort(key=lambda item: (item.votes, item.avg_rating or 0.0), reverse=True)
+    elif order_by == "trend":
+        items.sort(key=lambda item: (item.trend_7d is not None, item.trend_7d or -999, item.avg_rating or 0.0), reverse=True)
+    else:
+        items.sort(key=lambda item: (item.avg_rating or 0.0, item.votes), reverse=True)
+
+    return RestaurantRankingResponse(
+        date_from=target_from,
+        date_to=target_to,
+        order_by=order_by,
+        restaurants=items,
+    )
+
+
+@app.get(
+    "/rankings/dishes",
+    response_model=DishRankingResponse,
+    summary="Ranking de platos basado en valoraciones",
+    tags=["Ratings"],
+)
+async def get_dish_rankings(
+    order_by: Literal["avg", "votes", "trend"] = "avg",
+    date_to: date | None = None,
+    days: int = Query(14, ge=7, le=90),
+    limit: int = Query(50, ge=1, le=500),
+    min_votes: int = Query(1, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    target_to = date_to or _current_service_date()
+    target_from = target_to - timedelta(days=days - 1)
+
+    last7_start = target_to - timedelta(days=6)
+    prev7_start = target_to - timedelta(days=13)
+    prev7_end = target_to - timedelta(days=7)
+
+    service_date = DishRating.rating_date
+
+    # ✅ CAMBIO: Agrupar por restaurant_id + dish_key para incluir valoraciones del menú diario
+    rows = (
+        db.query(
+            DishRating.restaurant_id.label("restaurant_id"),
+            func.max(Restaurant.name).label("restaurant_name"),
+            func.max(DishRating.dish_name).label("dish_name"),
+            DishRating.dish_key.label("dish_key"),
+            func.avg(DishRating.rating).label("avg_rating"),
+            func.count(DishRating.rating).label("votes"),
+            func.avg(
+                case(
+                    (service_date >= last7_start, DishRating.rating),
+                    else_=None,
+                )
+            ).label("avg_last_7"),
+            func.avg(
+                case(
+                    (service_date.between(prev7_start, prev7_end), DishRating.rating),
+                    else_=None,
+                )
+            ).label("avg_prev_7"),
+        )
+        .join(Restaurant, DishRating.restaurant_id == Restaurant.restaurant_id)
+        .filter(
+            service_date.between(target_from, target_to),
+            DishRating.dish_key.isnot(None),
+        )
+        .group_by(DishRating.restaurant_id, DishRating.dish_key)
+        .having(func.count(DishRating.rating) >= min_votes)
+        .all()
+    )
+
+    items: list[DishRankingItem] = []
+    for row in rows:
+        avg_rating = float(row.avg_rating) if row.avg_rating is not None else None
+        votes = int(row.votes or 0)
+
+        avg_last_7 = float(row.avg_last_7) if row.avg_last_7 is not None else None
+        avg_prev_7 = float(row.avg_prev_7) if row.avg_prev_7 is not None else None
+        trend_7d = (avg_last_7 - avg_prev_7) if (avg_last_7 is not None and avg_prev_7 is not None) else None
+
+        dish_name = " ".join(str(row.dish_name or "").strip().split())
+        restaurant_name = " ".join(str(row.restaurant_name or "").strip().split())
+        items.append(
+            DishRankingItem(
+                dish_id=None,  # ✅ No asignamos dish_id, usamos dish_name como identificador
+                dish_name=dish_name,
+                restaurant_id=int(row.restaurant_id),
+                restaurant_name=restaurant_name,
+                avg_rating=avg_rating,
+                votes=votes,
+                trend_7d=trend_7d,
+            )
+        )
+
+    if order_by == "votes":
+        items.sort(key=lambda item: (item.votes, item.avg_rating or 0.0), reverse=True)
+    elif order_by == "trend":
+        items.sort(key=lambda item: (item.trend_7d is not None, item.trend_7d or -999, item.avg_rating or 0.0), reverse=True)
+    else:
+        items.sort(key=lambda item: (item.avg_rating or 0.0, item.votes), reverse=True)
+
+    return DishRankingResponse(
+        date_from=target_from,
+        date_to=target_to,
+        order_by=order_by,
+        dishes=items[:limit],
+    )
+
+
 def _ensure_prediction_engine_loaded() -> bool:
     global prediction_engine
     if prediction_engine is not None:
@@ -2667,6 +3277,16 @@ def _ensure_unified_menu_model_loaded(app: FastAPI) -> bool:
     except Exception as model_error:
         logger.error("❌ Error cargando modelo de menu (lazy): %s", str(model_error), exc_info=True)
         return False
+
+
+def get_model_lazy():
+    """Compatibilidad: algunos endpoints llaman a get_model_lazy()."""
+    if not _ensure_unified_menu_model_loaded(app):
+        raise RuntimeError("Modelo de menu no disponible")
+    model = getattr(app.state, "model", None)
+    if model is None:
+        raise RuntimeError("Modelo de menu no disponible")
+    return model
 
 
 # =============================
@@ -3578,17 +4198,28 @@ async def upload_restaurant_menu(
         main = next((s[0] for s in sections.get("main", []) if s), None)
         dessert = next((s[0] for s in sections.get("dessert", []) if s), None)
         
-        # Check if already exists (simplificado para el ejemplo)
-        # Podrías querer almacenar un DailyMenu (nuevo modelo) o algo similar
-        # para mapear correctamente esto, pero te devuelvo los detalles para que
-        # al menos el front end lo reciba.
+        # ✅ GUARDAR EN daily_menus para archivado posterior a fact_menus
+        daily_menu = DailyMenu(
+            restaurant_id=restaurant_id,
+            date=today,
+            starter=starter,
+            main=main,
+            dessert=dessert,
+            created_at=datetime.now(),
+        )
+        db.add(daily_menu)
+        db.commit()
+        db.refresh(daily_menu)
+        logger.info(f"✅ Menú guardado en daily_menus (menu_id={daily_menu.menu_id}) para {restaurant_id} en {today}")
         
         extracted_menu_data = build_extracted_menu(sections)
 
         return {
             "success": True,
             "restaurant_id": restaurant_id,
-            "message": "Menú procesado exitosamente por OCR.",
+            "menu_id": daily_menu.menu_id,
+            "date": str(today),
+            "message": "Menú procesado exitosamente por OCR y guardado en daily_menus.",
             "ocr_provider": ocr_provider,
             "extracted_menu": extracted_menu_data.dict()
         }
@@ -4461,6 +5092,192 @@ async def predict_from_menu_upload(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al procesar OCR y predicción del menú.",
+        )
+
+
+# ============================================================================
+# ARCHIVADO DE MENÚS (Daily → Fact)
+# ============================================================================
+
+
+@app.post(
+    "/admin/menus/archive",
+    response_model=dict,
+    tags=["Admin"],
+    summary="Archivar menús del día anterior a fact_menus",
+)
+async def archive_daily_menus(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Archiva menús de ayer desde `daily_menus` a `fact_menus` + `fact_menu_items`.
+    
+    Solo administradores pueden ejecutar esta operación.
+    Flujo:
+    1. Encuentra todos los menús en `daily_menus` con fecha anterior a hoy
+    2. Para cada menú:
+       - Crea entrada en `fact_menus` (si no existe)
+       - Genera `fact_menu_items` basándose en `starter`, `main`, `dessert`
+       - Vincula `dish_ratings` al nuevo `menu_id` de fact_menus
+    3. Marca registros de `daily_menus` como archivados (opcional: los elimina)
+    """
+    # Validar permiso admin
+    payload = _require_auth(authorization)
+    role = payload.get("role")
+    if role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo administradores pueden archivar menús",
+        )
+
+    try:
+        today = _current_service_date()
+        yesterday = today - timedelta(days=1)
+
+        # 1. Obtener menús de ayer en daily_menus
+        daily_menus = db.execute(
+            text(
+                """
+                SELECT menu_id, restaurant_id, date, starter, main, dessert
+                FROM dbo.daily_menus
+                WHERE CAST(date AS DATE) = :target_date
+                """
+            ),
+            {"target_date": yesterday},
+        ).fetchall()
+
+        if not daily_menus:
+            return {
+                "success": True,
+                "message": f"No hay menús para archivar en {yesterday}",
+                "archived_count": 0,
+            }
+
+        archived_count = 0
+        date_id = int(yesterday.strftime("%Y%m%d"))
+
+        for daily_menu in daily_menus:
+            daily_menu_id = daily_menu[0]
+            restaurant_id = daily_menu[1]
+            starter = daily_menu[3]
+            main = daily_menu[4]
+            dessert = daily_menu[5]
+
+            # 2. Crear/obtener menú en fact_menus
+            fact_menu = db.execute(
+                text(
+                    """
+                    SELECT menu_id
+                    FROM dbo.fact_menus
+                    WHERE restaurant_id = :restaurant_id AND date_id = :date_id
+                    """
+                ),
+                {"restaurant_id": restaurant_id, "date_id": date_id},
+            ).first()
+
+            if not fact_menu:
+                # Crear nuevo menú en fact_menus
+                result = db.execute(
+                    text(
+                        """
+                        INSERT INTO dbo.fact_menus (restaurant_id, date_id, includes_drink)
+                        VALUES (:restaurant_id, :date_id, 0)
+                        """
+                    ),
+                    {"restaurant_id": restaurant_id, "date_id": date_id},
+                )
+                db.commit()
+                fact_menu_id = result.lastrowid
+            else:
+                fact_menu_id = fact_menu[0]
+
+            # 3. Crear fact_menu_items a partir de los platos
+            dishes_to_add = []
+            if starter:
+                for dish_name in starter.split(";"):
+                    dishes_to_add.append((dish_name.strip(), "first_course"))
+            if main:
+                for dish_name in main.split(";"):
+                    dishes_to_add.append((dish_name.strip(), "second_course"))
+            if dessert:
+                for dish_name in dessert.split(";"):
+                    dishes_to_add.append((dish_name.strip(), "dessert"))
+
+            for dish_name, course_type in dishes_to_add:
+                if not dish_name:
+                    continue
+
+                # Buscar o crear dish_id
+                dish_row = db.execute(
+                    text(
+                        """
+                        SELECT dish_id
+                        FROM dbo.dim_dishes
+                        WHERE dish_name = :dish_name AND course_type = :course_type
+                        LIMIT 1
+                        """
+                    ),
+                    {"dish_name": dish_name, "course_type": course_type},
+                ).first()
+
+                if dish_row:
+                    dish_id = dish_row[0]
+                else:
+                    # Crear nuevo plato
+                    result = db.execute(
+                        text(
+                            """
+                            INSERT INTO dbo.dim_dishes (dish_name, course_type)
+                            VALUES (:dish_name, :course_type)
+                            """
+                        ),
+                        {"dish_name": dish_name, "course_type": course_type},
+                    )
+                    db.commit()
+                    dish_id = result.lastrowid
+
+                # Agregar a fact_menu_items
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO dbo.fact_menu_items (menu_id, dish_id)
+                        VALUES (:menu_id, :dish_id)
+                        """
+                    ),
+                    {"menu_id": fact_menu_id, "dish_id": dish_id},
+                )
+
+            # 4. Actualizar ratings para que apunten a fact_menus menu_id
+            db.execute(
+                text(
+                    """
+                    UPDATE dbo.dish_ratings
+                    SET menu_id = :fact_menu_id
+                    WHERE menu_id = :daily_menu_id
+                    """
+                ),
+                {"fact_menu_id": fact_menu_id, "daily_menu_id": daily_menu_id},
+            )
+
+            archived_count += 1
+
+        db.commit()
+
+        return {
+            "success": True,
+            "message": f"Menús de {yesterday} archivados exitosamente",
+            "archived_count": archived_count,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.error(f"Error archivando menús: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al archivar menús: {str(exc)}",
         )
 
 

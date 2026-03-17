@@ -42,6 +42,18 @@ const SEGMENTS = [
 
 type SortOption = 'name' | 'rating' | 'price'
 
+type DishRankingOrder = 'avg' | 'votes' | 'trend'
+
+type DishRankingRow = {
+  dish_id: number | null
+  dish_name: string
+  restaurant_id: number  // ✅ Nuevo
+  restaurant_name: string  // ✅ Nuevo
+  avg_rating: number | null
+  votes: number
+  trend_7d: number | null
+}
+
 type IndexedRestaurant = {
   restaurant: RestaurantDetail
   searchableText: string
@@ -207,6 +219,12 @@ export default function CatalogView() {
   const [weekendsOnly, setWeekendsOnly] = useState(false)
   const [sortBy, setSortBy] = useState<SortOption>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [showDishRanking, setShowDishRanking] = useState(false)
+  const [dishRankingOrder, setDishRankingOrder] = useState<DishRankingOrder>('avg')
+  const [dishRankingViewType, setDishRankingViewType] = useState<'rating' | 'votes'>('rating')
+  const [dishRankingVisibleCount, setDishRankingVisibleCount] = useState(5)
+  const [dishRankingRows, setDishRankingRows] = useState<DishRankingRow[] | null>(null)
+  const [dishRankingLoading, setDishRankingLoading] = useState(false)
   const deferredSearch = useDeferredValue(search)
   const selectedCuisineCode = useMemo(
     () => (selectedCuisine === 'all' ? null : getCanonicalCuisineCode(selectedCuisine)),
@@ -217,6 +235,33 @@ export default function CatalogView() {
     const day = new Date().getDay()
     return day === 0 || day === 6
   }, [])
+
+  useEffect(() => {
+    if (!showDishRanking) return
+
+    let cancelled = false
+    setDishRankingLoading(true)
+
+    const run = async () => {
+      try {
+        const response = await fetch(
+          `/rankings/dishes?order_by=${encodeURIComponent(dishRankingOrder)}&limit=25&min_votes=1`,
+        )
+        if (!response.ok) throw new Error('dish ranking failed')
+        const payload = (await response.json()) as { dishes?: DishRankingRow[] }
+        if (!cancelled) setDishRankingRows(payload.dishes ?? [])
+      } catch {
+        if (!cancelled) setDishRankingRows([])
+      } finally {
+        if (!cancelled) setDishRankingLoading(false)
+      }
+    }
+
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [showDishRanking, dishRankingOrder])
 
   const indexedRestaurants = useMemo<IndexedRestaurant[]>(() => {
     return restaurants.map((restaurant) => {
@@ -423,25 +468,173 @@ export default function CatalogView() {
           Mostrando <span className="font-semibold text-[var(--text)]">{filteredRestaurants.length}</span> restaurante
           {filteredRestaurants.length !== 1 ? 's' : ''}
         </p>
-        <SortControl
-          options={[
-            { value: 'name', label: 'Nombre' },
-            { value: 'rating', label: 'Calificación' },
-            { value: 'price', label: 'Precio' },
-          ]}
-          currentSort={sortBy}
-          sortOrder={sortOrder}
-          onSort={(value) => {
-            if (sortBy === value) {
-              setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-            } else {
-              setSortBy(value as SortOption)
-              setSortOrder('asc')
-            }
-          }}
-          onToggleOrder={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setShowDishRanking((prev) => !prev)
+              if (!dishRankingRows) setDishRankingRows(null)
+            }}
+            className={`inline-flex items-center gap-2 rounded-full border border-[#3A3037]/50 bg-[var(--surface-soft)]/60 px-4 py-2 text-sm font-medium text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface-soft)] ${
+              showDishRanking ? 'bg-[#E07B54]/10 text-[#E07B54] border-[#E07B54]/40' : ''
+            }`}
+            title="Ver ranking de platos por valoraciones"
+          >
+            <Crown size={16} className={showDishRanking ? 'text-[#E07B54]' : 'text-[var(--text-muted)]'} />
+            Ranking platos
+          </button>
+
+          <SortControl
+            options={[
+              { value: 'name', label: 'Nombre' },
+              { value: 'rating', label: 'Calificación' },
+              { value: 'price', label: 'Precio' },
+            ]}
+            currentSort={sortBy}
+            sortOrder={sortOrder}
+            onSort={(value) => {
+              if (sortBy === value) {
+                setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+              } else {
+                setSortBy(value as SortOption)
+                setSortOrder('asc')
+              }
+            }}
+            onToggleOrder={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+          />
+        </div>
       </div>
+
+      {showDishRanking ? (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 backdrop-blur-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <h2 className="text-base font-bold text-[var(--text)]">
+                {dishRankingViewType === 'rating' ? 'Ranking de platos' : 'Votos de platos'}
+              </h2>
+              <p className="text-xs text-[var(--text-muted)]">
+                {dishRankingViewType === 'rating' ? 'Por valoración (últimos 14 días).' : 'Platos más votados (últimos 14 días).'}
+              </p>
+            </div>
+
+            <div className="inline-flex items-center gap-1 rounded-full border border-[#3A3037]/50 bg-[var(--surface-soft)]/60 p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setDishRankingViewType('rating')
+                  setDishRankingVisibleCount(5)
+                }}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200 ${
+                  dishRankingViewType === 'rating'
+                    ? 'bg-[#E07B54]/10 text-[#E07B54]'
+                    : 'text-[var(--text)] hover:bg-[var(--surface-soft)]'
+                }`}
+              >
+                ⭐ Ranking
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDishRankingViewType('votes')
+                  setDishRankingVisibleCount(5)
+                }}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200 ${
+                  dishRankingViewType === 'votes'
+                    ? 'bg-[#E07B54]/10 text-[#E07B54]'
+                    : 'text-[var(--text)] hover:bg-[var(--surface-soft)]'
+                }`}
+              >
+                🗳️ Votos
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            {dishRankingLoading ? (
+              <p className="text-sm text-[var(--text-muted)]">Cargando...</p>
+            ) : dishRankingRows && dishRankingRows.length > 0 ? (
+              <>
+                {dishRankingViewType === 'rating' ? (
+                  <div className="overflow-hidden rounded-xl border border-[var(--border)]/60 bg-[var(--surface)]">
+                    <div className="grid grid-cols-12 gap-2 border-b border-[var(--border)]/50 px-4 py-2 text-xs font-semibold text-[var(--text-muted)]">
+                      <div className="col-span-1">#</div>
+                      <div className="col-span-4">Plato</div>
+                      <div className="col-span-4">Restaurante</div>
+                      <div className="col-span-3 text-right">Media</div>
+                    </div>
+
+                    {dishRankingRows
+                      .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
+                      .slice(0, dishRankingVisibleCount)
+                      .map((row, index) => (
+                        <div
+                          key={`${row.restaurant_id}-${row.dish_name}`}
+                          className="grid grid-cols-12 gap-2 border-b border-[var(--border)]/30 px-4 py-3 text-sm text-[var(--text)] last:border-b-0"
+                        >
+                          <div className="col-span-1 font-semibold text-[var(--text-muted)]">{index + 1}</div>
+                          <div className="col-span-4 font-semibold">{row.dish_name}</div>
+                          <div className="col-span-4 text-sm text-[var(--text-muted)]">{row.restaurant_name}</div>
+                          <div className="col-span-3 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <span
+                                  key={i}
+                                  className={`text-sm ${(row.avg_rating ?? 0) > i ? 'text-[#D4AF37]' : 'text-[#D4AF37]/20'}`}
+                                >
+                                  ★
+                                </span>
+                              ))}
+                              <span className="ml-1 text-xs text-[var(--text-muted)]">{row.avg_rating?.toFixed(1)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-[var(--border)]/60 bg-[var(--surface)]">
+                    <div className="grid grid-cols-12 gap-2 border-b border-[var(--border)]/50 px-4 py-2 text-xs font-semibold text-[var(--text-muted)]">
+                      <div className="col-span-1">#</div>
+                      <div className="col-span-11 text-right">Plato – Votos</div>
+                    </div>
+
+                    {dishRankingRows
+                      .sort((a, b) => b.votes - a.votes)
+                      .slice(0, dishRankingVisibleCount)
+                      .map((row, index) => (
+                        <div
+                          key={`${row.restaurant_id}-${row.dish_name}`}
+                          className="grid grid-cols-12 gap-2 border-b border-[var(--border)]/30 px-4 py-3 text-sm text-[var(--text)] last:border-b-0"
+                        >
+                          <div className="col-span-1 font-semibold text-[var(--text-muted)]">{index + 1}</div>
+                          <div className="col-span-11 flex items-center justify-between">
+                            <span className="font-semibold">{row.dish_name}</span>
+                            <span className="text-[var(--text-muted)]">{row.votes}</span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                {dishRankingRows.length > dishRankingVisibleCount && (
+                  <div className="mt-4 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setDishRankingVisibleCount((prev) => prev + 5)}
+                      className="inline-flex items-center rounded-lg border border-[#E07B54]/50 bg-[var(--surface-soft)] px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all hover:border-[#E07B54] hover:bg-[var(--surface-soft)]/80"
+                    >
+                      ↓ Cargar más platos
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-6 text-center text-sm text-[var(--text-muted)]">
+                No hay datos disponibles.
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* Results */}
       {loading ? (

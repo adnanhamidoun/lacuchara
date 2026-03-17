@@ -48,12 +48,40 @@ type IndexedRestaurant = {
   cuisineCode: string | null
 }
 
+type RankingOrder = 'default' | 'avg' | 'votes' | 'trend'
+
+type RankingScope = 'restaurants' | 'dishes'
+
+type RestaurantRankingRow = {
+  restaurant_id: number
+  avg_rating: number | null
+  votes: number
+  trend_7d: number | null
+}
+
+type DishRankingRow = {
+  dish_id: number | null
+  dish_name: string
+  restaurant_id: number  // ✅ Nuevo
+  restaurant_name: string  // ✅ Nuevo
+  avg_rating: number | null
+  votes: number
+  trend_7d: number | null
+}
+
 function normalizeText(value: string | null | undefined): string {
   return (value ?? '')
     .toLowerCase()
     .trim()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+}
+
+function extractDishIntentQuery(raw: string): string | null {
+  const match = raw.match(/^\s*quiero\s+comer\s+(.+?)\s*$/i)
+  if (!match) return null
+  const value = match[1]?.trim()
+  return value && value.length >= 2 ? value : null
 }
 
 function normalizeSegment(segment: string | null | undefined): string {
@@ -204,6 +232,23 @@ export default function RestaurantsListView() {
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_RESTAURANTS)
   const [animatedCount, setAnimatedCount] = useState(0)
   const deferredSearch = useDeferredValue(search)
+
+  const dishQuery = useMemo(() => extractDishIntentQuery(deferredSearch), [deferredSearch])
+  const [dishSearchResult, setDishSearchResult] = useState<{
+    query: string
+    ids: Set<number>
+    order: number[]
+    inToday: Set<number>
+  } | null>(null)
+  const [dishSearchLoading, setDishSearchLoading] = useState(false)
+
+  const [rankingScope, setRankingScope] = useState<RankingScope>('restaurants')
+
+  const [rankingOrder, setRankingOrder] = useState<RankingOrder>('default')
+  const [rankingByRestaurantId, setRankingByRestaurantId] = useState<Map<number, RestaurantRankingRow> | null>(null)
+  const [dishRankingRows, setDishRankingRows] = useState<DishRankingRow[] | null>(null)
+  const [dishRankingViewType, setDishRankingViewType] = useState<'rating' | 'votes'>('votes')
+  const [dishRankingVisibleCount, setDishRankingVisibleCount] = useState(5)
   
   // Cargar parámetros de búsqueda desde la URL al montar el componente
   useEffect(() => {
@@ -233,6 +278,114 @@ export default function RestaurantsListView() {
       // setSelectedZone('azca')
     }
   }, [searchParams])
+
+  useEffect(() => {
+    if (!dishQuery) {
+      setDishSearchResult(null)
+      setDishSearchLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setDishSearchLoading(true)
+
+    const run = async () => {
+      try {
+        const response = await fetch(`/restaurants/dish-search?query=${encodeURIComponent(dishQuery)}`)
+        if (!response.ok) throw new Error('dish-search failed')
+        const payload = (await response.json()) as {
+          restaurants?: Array<{ restaurant_id: number; in_today_menu?: boolean }>
+        }
+
+        const ids = new Set<number>()
+        const order: number[] = []
+        const inToday = new Set<number>()
+
+        for (const row of payload.restaurants ?? []) {
+          if (typeof row.restaurant_id === 'number') {
+            ids.add(row.restaurant_id)
+            order.push(row.restaurant_id)
+            if (row.in_today_menu) inToday.add(row.restaurant_id)
+          }
+        }
+
+        if (!cancelled) {
+          setDishSearchResult({ query: dishQuery, ids, order, inToday })
+        }
+      } catch {
+        if (!cancelled) {
+          setDishSearchResult({ query: dishQuery, ids: new Set(), order: [], inToday: new Set() })
+        }
+      } finally {
+        if (!cancelled) setDishSearchLoading(false)
+      }
+    }
+
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [dishQuery])
+
+  useEffect(() => {
+    if (rankingScope === 'restaurants') {
+      if (rankingOrder === 'default') {
+        setRankingByRestaurantId(null)
+        return
+      }
+
+      let cancelled = false
+
+      const run = async () => {
+        try {
+          const response = await fetch(`/rankings/restaurants?order_by=${encodeURIComponent(rankingOrder)}`)
+          if (!response.ok) throw new Error('ranking failed')
+          const payload = (await response.json()) as { restaurants?: RestaurantRankingRow[] }
+          const map = new Map<number, RestaurantRankingRow>()
+
+          for (const row of payload.restaurants ?? []) {
+            if (typeof row.restaurant_id === 'number') {
+              map.set(row.restaurant_id, row)
+            }
+          }
+
+          if (!cancelled) {
+            setRankingByRestaurantId(map)
+          }
+        } catch {
+          if (!cancelled) setRankingByRestaurantId(new Map())
+        }
+      }
+
+      run()
+
+      return () => {
+        cancelled = true
+      }
+    }
+
+    // rankingScope === 'dishes'
+    {
+      let cancelled = false
+      const effectiveOrder: Exclude<RankingOrder, 'default'> = rankingOrder === 'default' ? 'avg' : rankingOrder
+
+      const run = async () => {
+        try {
+          const response = await fetch(`/rankings/dishes?order_by=${encodeURIComponent(effectiveOrder)}`)
+          if (!response.ok) throw new Error('dish ranking failed')
+          const payload = (await response.json()) as { dishes?: DishRankingRow[] }
+          if (!cancelled) setDishRankingRows(payload.dishes ?? [])
+        } catch {
+          if (!cancelled) setDishRankingRows([])
+        }
+      }
+
+      run()
+      return () => {
+        cancelled = true
+      }
+    }
+  }, [rankingOrder, rankingScope])
 
   const selectedCuisineCode = useMemo(
     () => (selectedCuisine === 'all' ? null : getCanonicalCuisineCode(selectedCuisine)),
@@ -266,9 +419,12 @@ export default function RestaurantsListView() {
   const filteredRestaurants = useMemo(() => {
     const normalizedSearch = normalizeText(deferredSearch)
 
+    const dishIds = dishQuery && dishSearchResult?.query === dishQuery ? dishSearchResult.ids : null
+
     return indexedRestaurants
       .filter(({ restaurant, searchableText, segmentCode, cuisineCode }) => {
-        const matchName = searchableText.includes(normalizedSearch)
+        const matchName = dishQuery ? true : searchableText.includes(normalizedSearch)
+        const matchDish = !dishQuery || !dishIds || dishIds.has(restaurant.restaurant_id)
         const matchCuisine = selectedCuisineCode === null || cuisineCode === selectedCuisineCode
         const matchSegment = selectedSegment === 'all' || segmentCode === selectedSegment
         const matchPrice = isInPriceRange(restaurant.menu_price, priceRange)
@@ -276,27 +432,84 @@ export default function RestaurantsListView() {
         const matchWeekend = !weekendsOnly || Boolean(restaurant.opens_weekends)
         const matchTerrace = !terraceFilterActive || (restaurant.terrace_setup_type !== null && restaurant.terrace_setup_type !== 'none')
 
-        return matchName && matchCuisine && matchSegment && matchPrice && matchWifi && matchWeekend && matchTerrace
+        return matchName && matchDish && matchCuisine && matchSegment && matchPrice && matchWifi && matchWeekend && matchTerrace
       })
       .map(({ restaurant }) => restaurant)
-  }, [indexedRestaurants, deferredSearch, selectedCuisineCode, selectedSegment, priceRange, wifiOnly, weekendsOnly, terraceFilterActive])
+  }, [indexedRestaurants, deferredSearch, dishQuery, dishSearchResult, selectedCuisineCode, selectedSegment, priceRange, wifiOnly, weekendsOnly, terraceFilterActive])
 
-  const visibleRestaurants = useMemo(
-    () => filteredRestaurants.slice(0, visibleCount),
-    [filteredRestaurants, visibleCount],
-  )
+  const sortedRestaurants = useMemo(() => {
+    if (rankingScope === 'dishes') return filteredRestaurants
+    if (rankingOrder === 'default') {
+      if (!dishQuery || !dishSearchResult || dishSearchResult.query !== dishQuery) {
+        return filteredRestaurants
+      }
 
-  const hasMoreRestaurants = visibleCount < filteredRestaurants.length
+      const position = new Map<number, number>()
+      dishSearchResult.order.forEach((id, index) => position.set(id, index))
+      const inToday = dishSearchResult.inToday
+
+      const rows = filteredRestaurants.slice()
+      rows.sort((left, right) => {
+        const leftToday = inToday.has(left.restaurant_id)
+        const rightToday = inToday.has(right.restaurant_id)
+        if (leftToday !== rightToday) return leftToday ? -1 : 1
+
+        const leftPos = position.get(left.restaurant_id)
+        const rightPos = position.get(right.restaurant_id)
+        if (leftPos !== undefined && rightPos !== undefined) return leftPos - rightPos
+        if (leftPos !== undefined) return -1
+        if (rightPos !== undefined) return 1
+
+        return left.name.localeCompare(right.name, 'es', { sensitivity: 'base' })
+      })
+
+      return rows
+    }
+
+    if (!rankingByRestaurantId) return filteredRestaurants
+    const rows = filteredRestaurants.slice()
+
+    const scoreFor = (restaurantId: number) => rankingByRestaurantId.get(restaurantId)
+
+    rows.sort((left, right) => {
+      const leftScore = scoreFor(left.restaurant_id)
+      const rightScore = scoreFor(right.restaurant_id)
+
+      if (!leftScore && !rightScore) return left.name.localeCompare(right.name, 'es', { sensitivity: 'base' })
+      if (!leftScore) return 1
+      if (!rightScore) return -1
+
+      if (rankingOrder === 'votes') {
+        return (rightScore.votes ?? 0) - (leftScore.votes ?? 0)
+      }
+
+      if (rankingOrder === 'trend') {
+        const a = leftScore.trend_7d ?? Number.NEGATIVE_INFINITY
+        const b = rightScore.trend_7d ?? Number.NEGATIVE_INFINITY
+        return b - a
+      }
+
+      const a = leftScore.avg_rating ?? Number.NEGATIVE_INFINITY
+      const b = rightScore.avg_rating ?? Number.NEGATIVE_INFINITY
+      return b - a
+    })
+
+    return rows
+  }, [filteredRestaurants, rankingOrder, rankingByRestaurantId, dishQuery, dishSearchResult])
+
+  const visibleRestaurants = useMemo(() => sortedRestaurants.slice(0, visibleCount), [sortedRestaurants, visibleCount])
+
+  const hasMoreRestaurants = visibleCount < sortedRestaurants.length
 
   useEffect(() => {
     setVisibleCount((current) => {
-      const nextBase = Math.min(INITIAL_VISIBLE_RESTAURANTS, filteredRestaurants.length)
+      const nextBase = Math.min(INITIAL_VISIBLE_RESTAURANTS, sortedRestaurants.length)
       return current === nextBase ? current : nextBase
     })
-  }, [filteredRestaurants.length])
+  }, [sortedRestaurants.length])
 
   useEffect(() => {
-    const target = filteredRestaurants.length
+    const target = sortedRestaurants.length
     const start = animatedCount
     if (target === start) return
 
@@ -316,7 +529,7 @@ export default function RestaurantsListView() {
     }, 24)
 
     return () => window.clearInterval(timer)
-  }, [filteredRestaurants.length])
+  }, [sortedRestaurants.length])
 
   return (
     <section id="inicio" className="space-y-10">
@@ -343,7 +556,7 @@ export default function RestaurantsListView() {
                 <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6B7280]" />
                 <input
                   type="search"
-                  placeholder="Buscar por nombre, zona o estilo..."
+                  placeholder="Buscar por nombre o escribe: quiero comer paella"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   className="w-full rounded-xl border border-[#D6D9E0] bg-white py-3 pl-10 pr-4 text-sm text-[#1A1A2E] outline-none transition-all duration-200 focus:border-[#E07B54] focus:ring-2 focus:ring-[#E07B54]/20"
@@ -485,13 +698,100 @@ export default function RestaurantsListView() {
             </span>
           </button>
           </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setRankingScope('restaurants')
+                setRankingOrder('default')
+                setDishRankingRows(null)
+              }}
+              className={`${chipBaseClass} ${
+                rankingScope === 'restaurants'
+                  ? `${chipSelectedClass} animate-chip-glow shadow-[0_0_8px_rgba(224,123,84,0.5)]`
+                  : 'hover:brightness-95'
+              }`}
+            >
+              Ranking: Restaurantes
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setRankingScope('dishes')
+                setRankingOrder('votes')
+                setRankingByRestaurantId(null)
+              }}
+              className={`${chipBaseClass} ${
+                rankingScope === 'dishes'
+                  ? `${chipSelectedClass} animate-chip-glow shadow-[0_0_8px_rgba(224,123,84,0.5)]`
+                  : 'hover:brightness-95'
+              }`}
+            >
+              Ranking: Platos
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRankingOrder('default')}
+              disabled={rankingScope === 'dishes'}
+              className={`${chipBaseClass} ${
+                rankingOrder === 'default'
+                  ? `${chipSelectedClass} animate-chip-glow shadow-[0_0_8px_rgba(224,123,84,0.5)]`
+                  : 'hover:brightness-95'
+              } ${rankingScope === 'dishes' ? 'opacity-40 cursor-not-allowed' : ''}`}
+            >
+              Orden: Nombre
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRankingOrder('avg')}
+              className={`${chipBaseClass} ${
+                rankingOrder === 'avg'
+                  ? `${chipSelectedClass} animate-chip-glow shadow-[0_0_8px_rgba(224,123,84,0.5)]`
+                  : 'hover:brightness-95'
+              }`}
+            >
+              ⭐ Ranking (media)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRankingOrder('votes')}
+              className={`${chipBaseClass} ${
+                rankingOrder === 'votes'
+                  ? `${chipSelectedClass} animate-chip-glow shadow-[0_0_8px_rgba(224,123,84,0.5)]`
+                  : 'hover:brightness-95'
+              }`}
+            >
+              🗳️ Más votados
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRankingOrder('trend')}
+              className={`${chipBaseClass} ${
+                rankingOrder === 'trend'
+                  ? `${chipSelectedClass} animate-chip-glow shadow-[0_0_8px_rgba(224,123,84,0.5)]`
+                  : 'hover:brightness-95'
+              }`}
+            >
+              🔥 Tendencia semanal
+            </button>
+          </div>
         </div>
       </div>
 
       {loading ? <p className="text-sm text-[var(--text-muted)]">Cargando restaurantes...</p> : null}
       {error ? <p className="rounded-lg bg-[#E53935]/10 p-3 text-sm text-[#E53935]">{error}</p> : null}
 
-      {!loading && !error && filteredRestaurants.length === 0 ? (
+      {dishQuery && dishSearchLoading ? (
+        <p className="text-sm text-[var(--text-muted)]">Buscando platos similares a “{dishQuery}”...</p>
+      ) : null}
+
+      {!loading && !error && sortedRestaurants.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-6 text-center text-sm text-[var(--text-muted)]">
           No hay restaurantes que cumplan los filtros seleccionados o no hay datos en base de datos.
         </div>
@@ -515,37 +815,168 @@ export default function RestaurantsListView() {
               <div className="flex flex-col gap-1">
                 <h3 className="inline-flex items-center gap-2 text-xl font-bold text-[var(--text)]">
                   <Crown size={16} className="text-[#E07B54]" />
-                  Restaurantes disponibles
+                  {rankingScope === 'dishes' ? 'Votos de platos' : 'Restaurantes disponibles'}
                 </h3>
-                <p className="text-xs text-[var(--text-muted)]">
-                  Mostrando {visibleRestaurants.length} de {animatedCount} resultados
-                </p>
+                {rankingScope === 'dishes' ? (
+                  <p className="text-xs text-[var(--text-muted)]">Platos más votados (últimos 14 días).</p>
+                ) : (
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Mostrando {visibleRestaurants.length} de {animatedCount} resultados
+                  </p>
+                )}
               </div>
-              <Link
-                to="/restaurantes"
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#E07B54] hover:text-[#D88B5A] transition-colors"
-              >
-                Ver todos
-                <ArrowRight size={14} />
-              </Link>
+              {rankingScope !== 'dishes' ? (
+                <Link
+                  to="/restaurantes"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#E07B54] hover:text-[#D88B5A] transition-colors"
+                >
+                  Ver todos
+                  <ArrowRight size={14} />
+                </Link>
+              ) : null}
             </div>
             <div className="h-px w-full bg-gradient-to-r from-[#E07B54] to-transparent" />
           </div>
 
           <div className="relative">
-            <div className="relative z-10 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {visibleRestaurants.map((restaurant, index) => (
-                <RestaurantCard key={restaurant.restaurant_id} restaurant={restaurant} index={index} showOpenToday={isWeekendToday} />
-              ))}
-            </div>
+            {rankingScope === 'dishes' ? (
+              <div className="relative z-10 space-y-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold text-[var(--text)]">
+                      {dishRankingViewType === 'rating' ? 'Ranking de platos' : 'Votos de platos'}
+                    </h4>
+                  </div>
+                  <div className="inline-flex items-center gap-1 rounded-full border border-[#3A3037]/50 bg-[var(--surface-soft)]/60 p-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDishRankingViewType('rating')
+                        setDishRankingVisibleCount(5)
+                      }}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors duration-200 ${
+                        dishRankingViewType === 'rating'
+                          ? 'bg-[#E07B54]/10 text-[#E07B54]'
+                          : 'text-[var(--text)] hover:bg-[var(--surface-soft)]'
+                      }`}
+                    >
+                      ⭐ Ranking
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDishRankingViewType('votes')
+                        setDishRankingVisibleCount(5)
+                      }}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors duration-200 ${
+                        dishRankingViewType === 'votes'
+                          ? 'bg-[#E07B54]/10 text-[#E07B54]'
+                          : 'text-[var(--text)] hover:bg-[var(--surface-soft)]'
+                      }`}
+                    >
+                      🗳️ Votos
+                    </button>
+                  </div>
+                </div>
 
-            {hasMoreRestaurants ? (
+                {dishRankingRows === null ? (
+                  <p className="text-sm text-[var(--text-muted)]">Cargando...</p>
+                ) : dishRankingRows.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-6 text-center text-sm text-[var(--text-muted)]">
+                    No hay datos disponibles.
+                  </div>
+                ) : (
+                  <>
+                    {dishRankingViewType === 'rating' ? (
+                      <div className="overflow-hidden rounded-2xl border border-[var(--border)]/70 bg-[var(--surface)]/70">
+                        <div className="grid grid-cols-12 gap-2 border-b border-[var(--border)]/60 px-4 py-3 text-xs font-semibold text-[var(--text-muted)]">
+                          <div className="col-span-1">#</div>
+                          <div className="col-span-4">Plato</div>
+                          <div className="col-span-4">Restaurante</div>
+                          <div className="col-span-3 text-right">Media</div>
+                        </div>
+
+                        {dishRankingRows
+                          .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
+                          .slice(0, dishRankingVisibleCount)
+                          .map((row, index) => (
+                            <div
+                              key={`${row.restaurant_id}-${row.dish_name}`}
+                              className="grid grid-cols-12 gap-2 px-4 py-3 text-sm text-[var(--text)] border-b border-[var(--border)]/40 last:border-b-0"
+                            >
+                              <div className="col-span-1 font-semibold text-[var(--text-muted)]">{index + 1}</div>
+                              <div className="col-span-4 font-semibold text-sm">{row.dish_name}</div>
+                              <div className="col-span-4 text-xs text-[var(--text-muted)]">{row.restaurant_name}</div>
+                              <div className="col-span-3 text-right">
+                                <div className="inline-flex items-center gap-1">
+                                  {Array.from({ length: 5 }).map((_, i) => (
+                                    <span
+                                      key={i}
+                                      className={`text-xs ${(row.avg_rating ?? 0) > i ? 'text-[#D4AF37]' : 'text-[#D4AF37]/20'}`}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                  <span className="ml-0.5 text-xs text-[var(--text-muted)]">{row.avg_rating?.toFixed(1)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <div className="overflow-hidden rounded-2xl border border-[var(--border)]/70 bg-[var(--surface)]/70">
+                        <div className="grid grid-cols-12 gap-2 border-b border-[var(--border)]/60 px-4 py-3 text-xs font-semibold text-[var(--text-muted)]">
+                          <div className="col-span-1">#</div>
+                          <div className="col-span-11 text-right">Plato – Votos</div>
+                        </div>
+
+                        {dishRankingRows
+                          .sort((a, b) => b.votes - a.votes)
+                          .slice(0, dishRankingVisibleCount)
+                          .map((row, index) => (
+                            <div
+                              key={`${row.restaurant_id}-${row.dish_name}`}
+                              className="grid grid-cols-12 gap-2 px-4 py-3 text-sm text-[var(--text)] border-b border-[var(--border)]/40 last:border-b-0"
+                            >
+                              <div className="col-span-1 font-semibold text-[var(--text-muted)]">{index + 1}</div>
+                              <div className="col-span-11 flex items-center justify-between">
+                                <span className="font-semibold">{row.dish_name}</span>
+                                <span className="text-[var(--text-muted)]">{row.votes}</span>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+
+                    {dishRankingRows.length > dishRankingVisibleCount && (
+                      <div className="flex justify-center">
+                        <button
+                          type="button"
+                          onClick={() => setDishRankingVisibleCount((prev) => prev + 5)}
+                          className="inline-flex items-center rounded-lg border border-[#E07B54]/50 bg-[var(--surface-soft)] px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all hover:border-[#E07B54] hover:bg-[var(--surface-soft)]/80"
+                        >
+                          ↓ Cargar más platos
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="relative z-10 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {visibleRestaurants.map((restaurant, index) => (
+                  <RestaurantCard key={restaurant.restaurant_id} restaurant={restaurant} index={index} showOpenToday={isWeekendToday} />
+                ))}
+              </div>
+            )}
+
+            {rankingScope !== 'dishes' && hasMoreRestaurants ? (
               <div className="mt-5 flex justify-center">
                 <button
                   type="button"
                   onClick={() =>
                     setVisibleCount((current) =>
-                      Math.min(current + VISIBLE_RESTAURANTS_STEP, filteredRestaurants.length),
+                      Math.min(current + VISIBLE_RESTAURANTS_STEP, sortedRestaurants.length),
                     )
                   }
                   className="inline-flex items-center justify-center rounded-xl border border-[#D88B5A]/50 bg-[var(--surface)] px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:border-[#D88B5A] hover:shadow-sm"

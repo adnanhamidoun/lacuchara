@@ -42,6 +42,14 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
         },
+        '/ratings': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        '/rankings': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
       },
     },
   }
