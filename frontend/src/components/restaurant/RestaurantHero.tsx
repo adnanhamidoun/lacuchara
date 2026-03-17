@@ -4,20 +4,11 @@ import type { RestaurantDetail } from '../../types/domain'
 interface RestaurantHeroProps {
   restaurant: RestaurantDetail
   imageUrl: string
-  onBack: () => void
 }
 
-export function RestaurantHero({ restaurant, imageUrl, onBack }: RestaurantHeroProps) {
+export function RestaurantHero({ restaurant, imageUrl }: RestaurantHeroProps) {
   return (
-    <div className="space-y-4">
-      {/* Back Button */}
-      <button
-        onClick={onBack}
-        className="inline-flex items-center gap-2 text-sm font-semibold text-[#E07B54] hover:text-[#D88B5A] transition-colors"
-      >
-        ← Volver al catálogo
-      </button>
-
+    <div>
       {/* Hero Image Container */}
       <div className="relative overflow-hidden rounded-3xl border border-[#3A3037]/30 bg-[var(--surface-soft)] shadow-lg">
         {/* Image */}

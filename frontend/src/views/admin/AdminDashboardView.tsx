@@ -8,8 +8,74 @@ import {
 } from '../../services/inscripcionesService'
 import { deleteRestaurant } from '../../services/restaurantsService'
 import { useAuth } from '../../components/auth/AuthContext.jsx'
-import type { Inscripcion } from '../../types/domain'
+import type { AuthSession, Inscripcion } from '../../types/domain'
 import { getCuisineMeta } from '../../utils/cuisine'
+
+const ADMIN_AVATAR_SRC = '/admin-avatar.jpg'
+const APPROVAL_HISTORY_STORAGE_KEY = 'admin.approvalHistory'
+const REJECTED_HISTORY_STORAGE_KEY = 'admin.rejectedHistory'
+
+function normalizeInscripcionStatus(status: string | null | undefined): string {
+  return (status ?? '').trim().toLowerCase()
+}
+
+function readStoredApprovalHistory(): Inscripcion[] {
+  try {
+    const raw = localStorage.getItem(APPROVAL_HISTORY_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as Inscripcion[]) : []
+  } catch {
+    return []
+  }
+}
+
+function writeStoredApprovalHistory(rows: Inscripcion[]): void {
+  try {
+    localStorage.setItem(APPROVAL_HISTORY_STORAGE_KEY, JSON.stringify(rows))
+  } catch {
+    // noop
+  }
+}
+
+function readStoredRejectedHistory(): Inscripcion[] {
+  try {
+    const raw = localStorage.getItem(REJECTED_HISTORY_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as Inscripcion[]) : []
+  } catch {
+    return []
+  }
+}
+
+function writeStoredRejectedHistory(rows: Inscripcion[]): void {
+  try {
+    localStorage.setItem(REJECTED_HISTORY_STORAGE_KEY, JSON.stringify(rows))
+  } catch {
+    // noop
+  }
+}
+
+function mergeApprovalHistory(primary: Inscripcion[], secondary: Inscripcion[]): Inscripcion[] {
+  const byId = new Map<number, Inscripcion>()
+
+  for (const row of primary) {
+    byId.set(row.inscripcion_id, row)
+  }
+
+  for (const row of secondary) {
+    if (!byId.has(row.inscripcion_id)) {
+      byId.set(row.inscripcion_id, row)
+    }
+  }
+
+  return Array.from(byId.values()).sort((a, b) => {
+    const left = new Date(a.fecha_solicitud || 0).getTime()
+    const right = new Date(b.fecha_solicitud || 0).getTime()
+    return right - left
+  })
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return '-'
@@ -22,6 +88,13 @@ function formatDate(iso: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function formatSentenceCase(value: string | null | undefined): string {
+  if (!value) return '-'
+  const trimmed = value.trim()
+  if (!trimmed) return '-'
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
 }
 
 function KpiCard({ label, value, color }: { label: string; value: number; color: string }) {
@@ -46,11 +119,11 @@ function EmptyState() {
 function PendingTable({
   rows,
   onApprove,
-  onReject,
+  onRequestReject,
 }: {
   rows: Inscripcion[]
   onApprove: (inscripcionId: number) => Promise<void>
-  onReject: (inscripcionId: number) => Promise<void>
+  onRequestReject: (inscripcionId: number, name: string) => void
 }) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
@@ -70,9 +143,9 @@ function PendingTable({
           {rows.map((row) => (
             <tr key={row.inscripcion_id} className="border-t border-[var(--border)]">
               <td className="px-4 py-3 font-medium text-[var(--text)]">{row.name}</td>
-              <td className="px-4 py-3 text-[var(--text-muted)]">{row.restaurant_segment ?? '-'}</td>
+              <td className="px-4 py-3 text-[var(--text-muted)]">{formatSentenceCase(row.restaurant_segment)}</td>
               <td className="px-4 py-3 text-[var(--text-muted)]">
-                {row.cuisine_type ? getCuisineMeta(row.cuisine_type).label : '-'}
+                {row.cuisine_type ? formatSentenceCase(getCuisineMeta(row.cuisine_type).label) : '-'}
               </td>
               <td className="px-4 py-3 text-[var(--text-muted)]">
                 {typeof row.google_rating === 'number' ? row.google_rating.toFixed(1) : '-'}
@@ -104,7 +177,7 @@ function PendingTable({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onReject(row.inscripcion_id)}
+                    onClick={() => onRequestReject(row.inscripcion_id, row.name)}
                     className="rounded-lg bg-[#E53935] px-3 py-1.5 font-semibold text-white transition-all duration-200 hover:brightness-95"
                   >
                     Rechazar
@@ -128,6 +201,9 @@ function ApprovalHistory({
   onClear: () => void
   loading: boolean
 }) {
+  const approvedRows = rows.filter((row) => normalizeInscripcionStatus(row.estado_inscripcion) === 'aprobada')
+  const rejectedRows = rows.filter((row) => normalizeInscripcionStatus(row.estado_inscripcion) === 'rechazada')
+
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -135,17 +211,17 @@ function ApprovalHistory({
         <button
           type="button"
           onClick={onClear}
-          disabled={loading || rows.length === 0}
+          disabled={loading || (approvedRows.length === 0 && rejectedRows.length === 0)}
           className="rounded-lg border border-[#E53935]/40 px-3 py-1.5 text-xs font-semibold text-[#E53935] transition-all duration-200 hover:bg-[#E53935]/10 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? 'Limpiando...' : 'Limpiar historial'}
         </button>
       </div>
-      {rows.length === 0 ? (
+      {approvedRows.length === 0 ? (
         <p className="mt-2 text-sm text-[var(--text-muted)]">Todavía no hay aprobaciones registradas.</p>
       ) : (
         <ul className="mt-3 space-y-2">
-          {rows.map((row) => (
+          {approvedRows.map((row) => (
             <li
               key={row.inscripcion_id}
               className="flex flex-col justify-between gap-1 rounded-lg border border-[var(--border)] p-3 text-sm md:flex-row md:items-center"
@@ -156,21 +232,40 @@ function ApprovalHistory({
           ))}
         </ul>
       )}
+
+      <div className="mt-6 border-t border-[var(--border)]/60 pt-4">
+        <h3 className="text-base font-semibold text-[var(--text)]">Solicitudes rechazadas</h3>
+        {rejectedRows.length === 0 ? (
+          <p className="mt-2 text-sm text-[var(--text-muted)]">Todavía no hay rechazos registrados.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {rejectedRows.map((row) => (
+              <li
+                key={`rechazada-${row.inscripcion_id}`}
+                className="flex flex-col justify-between gap-1 rounded-lg border border-[var(--border)] p-3 text-sm md:flex-row md:items-center"
+              >
+                <span className="font-semibold text-[var(--text)]">{row.name}</span>
+                <span className="text-[var(--text-muted)]">Rechazado · {formatDate(row.fecha_solicitud)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }
 
 function RestaurantsList({
   restaurants,
-  onDelete,
+  onRequestDelete,
   onEditImage,
 }: {
   restaurants: any[]
-  onDelete: (id: number) => Promise<void>
+  onRequestDelete: (id: number, name: string) => void
   onEditImage: (id: number, url: string) => void
 }) {
   const [imageUrls, setImageUrls] = useState<Record<number, string>>({})
-  const { session } = useAuth()
+  const { session } = useAuth() as { session: AuthSession | null }
 
   useEffect(() => {
     console.log('[RestaurantsList] Received restaurants:', restaurants)
@@ -246,7 +341,7 @@ function RestaurantsList({
               </div>
             </div>
             <button
-              onClick={() => onDelete(rest.restaurant_id)}
+              onClick={() => onRequestDelete(rest.restaurant_id, rest.name)}
               className="ml-auto flex items-center justify-center h-8 w-8 rounded-full bg-rose-100 text-rose-600 hover:bg-rose-200 flex-shrink-0"
               title="Eliminar Restaurante"
             >
@@ -260,10 +355,11 @@ function RestaurantsList({
 }
 
 export default function AdminDashboardView() {
-  const { session } = useAuth()
+  const { session } = useAuth() as { session: AuthSession | null }
   const [activeTab, setActiveTab] = useState<'pending' | 'activos' | 'history'>('activos')
   const [pending, setPending] = useState<Inscripcion[]>([])
   const [history, setHistory] = useState<Inscripcion[]>([])
+  const [approvedRowsForKpi, setApprovedRowsForKpi] = useState<Inscripcion[]>([])
   const [activos, setActivos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -272,22 +368,49 @@ export default function AdminDashboardView() {
   const [editingRestaurantId, setEditingRestaurantId] = useState<number | null>(null)
   const [editingImage, setEditingImage] = useState<File | null>(null)
   const [editingImageUrl, setEditingImageUrl] = useState<string>('')
+  const [rejectConfirmTarget, setRejectConfirmTarget] = useState<{ id: number; name: string } | null>(null)
+  const [rejectActionLoading, setRejectActionLoading] = useState(false)
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: number; name: string } | null>(null)
+  const [deleteActionLoading, setDeleteActionLoading] = useState(false)
+  const [clearHistoryConfirmOpen, setClearHistoryConfirmOpen] = useState(false)
+
+  const refreshActiveRestaurants = async () => {
+    const restResponse = await fetch('/restaurants/details')
+    if (!restResponse.ok) {
+      throw new Error('No se pudo refrescar la lista de restaurantes activos')
+    }
+    const rData = await restResponse.json()
+    console.log('[AdminDashboard] Refreshed restaurant details:', rData.restaurants)
+    setActivos(Array.isArray(rData?.restaurants) ? rData.restaurants : [])
+  }
 
   const loadData = async () => {
     try {
       setLoading(true)
       const data = await getAllInscripciones()
       const allInscripciones = Array.isArray(data) ? data : []
-      
-      setPending(allInscripciones.filter((i: Inscripcion) => i.estado_inscripcion?.toLowerCase() === 'pendiente'))
-      setHistory(allInscripciones.filter((i: Inscripcion) => i.estado_inscripcion?.toLowerCase() !== 'pendiente'))
-      
-      const restResponse = await fetch('http://localhost:8000/restaurants/details')
-      if (restResponse.ok) {
-        const rData = await restResponse.json()
-        console.log('[AdminDashboard] Fetched restaurant details:', rData.restaurants)
-        setActivos(rData.restaurants || [])
-      }
+
+      const pendingRows = allInscripciones.filter(
+        (i: Inscripcion) => normalizeInscripcionStatus(i.estado_inscripcion) === 'pendiente',
+      )
+      const approvedFromApi = allInscripciones.filter((i: Inscripcion) => {
+        const normalized = normalizeInscripcionStatus(i.estado_inscripcion)
+        return normalized === 'aprobada' || normalized === 'approved'
+      })
+      const rejectedFromApi = allInscripciones.filter((i: Inscripcion) => {
+        const normalized = normalizeInscripcionStatus(i.estado_inscripcion)
+        return normalized === 'rechazada' || normalized === 'rejected'
+      })
+      const approvedMerged = mergeApprovalHistory(approvedFromApi, readStoredApprovalHistory())
+      const rejectedMerged = mergeApprovalHistory(rejectedFromApi, readStoredRejectedHistory())
+
+      setPending(pendingRows)
+      setHistory(mergeApprovalHistory(approvedMerged, rejectedMerged))
+      setApprovedRowsForKpi(approvedFromApi)
+      writeStoredApprovalHistory(approvedMerged)
+      writeStoredRejectedHistory(rejectedMerged)
+
+      await refreshActiveRestaurants()
 
       setError('')
     } catch (err) {
@@ -305,7 +428,22 @@ export default function AdminDashboardView() {
     try {
       await approveInscripcion(id)
       setPending((prev) => prev.filter((i) => i.inscripcion_id !== id))
-      setHistory((prev) => [...prev, { ...(pending.find((i) => i.inscripcion_id === id) as Inscripcion), estado_inscripcion: 'aprobada' }])
+      const approvedRow = pending.find((i) => i.inscripcion_id === id)
+      if (approvedRow) {
+        setHistory((prev) => {
+          const merged = mergeApprovalHistory(
+            [{ ...approvedRow, estado_inscripcion: 'aprobada' }],
+            prev,
+          )
+          writeStoredApprovalHistory(merged)
+          return merged
+        })
+        setApprovedRowsForKpi((prev) =>
+          mergeApprovalHistory([{ ...approvedRow, estado_inscripcion: 'aprobada' }], prev),
+        )
+      }
+
+      await refreshActiveRestaurants()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo aprobar la inscripción.')
     }
@@ -313,16 +451,29 @@ export default function AdminDashboardView() {
 
   const handleReject = async (id: number) => {
     try {
+      setRejectActionLoading(true)
       await rejectInscripcion(id)
       setPending((prev) => prev.filter((i) => i.inscripcion_id !== id))
+
+      const rejectedRow = pending.find((i) => i.inscripcion_id === id)
+      if (rejectedRow) {
+        const nextRejected = mergeApprovalHistory(
+          [{ ...rejectedRow, estado_inscripcion: 'rechazada' }],
+          readStoredRejectedHistory(),
+        )
+        writeStoredRejectedHistory(nextRejected)
+        setHistory((prev) => mergeApprovalHistory([{ ...rejectedRow, estado_inscripcion: 'rechazada' }], prev))
+      }
+
+      setRejectConfirmTarget(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo rechazar la inscripción.')
+    } finally {
+      setRejectActionLoading(false)
     }
   }
 
   const handleClearHistory = async () => {
-    if (!window.confirm('¿ELIMINAR el historial completamente?')) return
-
     setHistoryActionLoading(true)
     setHistoryActionMessage('')
     try {
@@ -331,7 +482,10 @@ export default function AdminDashboardView() {
       setError('')
 
       // Update history state
-      setHistory((prev) => prev.filter((h) => h.estado_inscripcion?.toLowerCase() === 'pendiente'))
+      setHistory([])
+      writeStoredApprovalHistory([])
+      writeStoredRejectedHistory([])
+      setClearHistoryConfirmOpen(false)
     } catch (err) {
       setHistoryActionMessage('No se pudo limpiar el historial.')
     } finally {
@@ -340,15 +494,17 @@ export default function AdminDashboardView() {
   }
 
   const handleDeleteRestaurant = async (restaurantId: number) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar permanentemente este restaurante?')) return
-
     try {
+      setDeleteActionLoading(true)
       if (!session) throw new Error('No autorizado')
       await deleteRestaurant(restaurantId, (session as any).token)
       // Remove it from current state
       setActivos((prev) => prev.filter((r) => r.restaurant_id !== restaurantId))
+      setDeleteConfirmTarget(null)
     } catch (err: any) {
       alert(err.message || 'Error al eliminar el restaurante.')
+    } finally {
+      setDeleteActionLoading(false)
     }
   }
 
@@ -395,22 +551,27 @@ export default function AdminDashboardView() {
     }
   }
 
-  const { total, pendientes, rechazadas, aprobadas } = {
-    total: activos.length,
-    pendientes: pending.length,
-    rechazadas: history.filter((h) => h.estado_inscripcion?.toLowerCase() === 'rechazada').length,
-    aprobadas: history.filter((h) => h.estado_inscripcion?.toLowerCase() === 'aprobada').length,
-  }
+  const activeRestaurantNames = new Set(
+    activos
+      .map((rest) => String(rest?.name ?? '').trim().toLowerCase())
+      .filter(Boolean),
+  )
+
+  const approvedActiveRows = approvedRowsForKpi.filter((row) =>
+    activeRestaurantNames.has((row.name ?? '').trim().toLowerCase()),
+  )
 
   const kpis = {
     totalActivos: activos.length || 0,
     pendientes: pending.length,
-    nuevasSemana: history.filter(
+    nuevasSemana: approvedActiveRows.filter(
       (h) =>
-        h.estado_inscripcion?.toLowerCase() === 'aprobada' &&
         new Date(h.fecha_solicitud || '').getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000,
     ).length,
   }
+
+  const historyRecordsCount = history.length
+  const historyRecordsLabel = historyRecordsCount === 1 ? 'registro' : 'registros'
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -418,20 +579,18 @@ export default function AdminDashboardView() {
       <div className="mb-12 flex items-start gap-6">
         {/* Avatar Premium del Admin en lugar del Logo */}
         {session && (
-          <div className="relative h-20 w-20 flex-shrink-0">
-            {/* Avatar con efecto real y corona */}
-            <div className="h-full w-full overflow-hidden rounded-2xl border-3 border-[#E07B54] shadow-lg bg-gradient-to-br from-[#E07B54] via-[#D88B5A] to-[#D96D3D] flex items-center justify-center relative group">
-              {/* Patrón oro/textura */}
-              <div className="absolute inset-0 opacity-20" style={{
-                backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,.1) 2px, rgba(255,255,255,.1) 4px)'
-              }} />
-              
-              {/* Rey emoji */}
-              <div className="text-5xl">🤴</div>
+          <div className="group relative h-24 w-24 flex-shrink-0">
+            {/* Avatar con estilo circular */}
+            <div className="relative h-full w-full overflow-hidden rounded-full border-2 border-white/15 shadow-lg">
+              <img
+                src={ADMIN_AVATAR_SRC}
+                alt="Avatar del administrador"
+                className="h-full w-full rounded-full object-cover scale-110"
+              />
             </div>
             
             {/* Status indicator - Online */}
-            <div className="absolute bottom-0 right-0 h-5 w-5 rounded-full border-3 border-white bg-green-500 shadow-lg" />
+            <div className="absolute bottom-0 right-0 h-5 w-5 rounded-full border-[3px] border-[var(--surface)] bg-[#42C977] shadow-md" />
             
             {/* Tooltip on hover */}
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
@@ -522,7 +681,7 @@ export default function AdminDashboardView() {
           ) : (
             <RestaurantsList
               restaurants={activos}
-              onDelete={handleDeleteRestaurant}
+              onRequestDelete={(id, name) => setDeleteConfirmTarget({ id, name })}
               onEditImage={(id, currentUrl) => {
                 setEditingRestaurantId(id)
                 setEditingImage(null)
@@ -534,12 +693,166 @@ export default function AdminDashboardView() {
           pending.length === 0 ? (
             <EmptyState />
           ) : (
-            <PendingTable rows={pending} onApprove={handleApprove} onReject={handleReject} />
+            <PendingTable
+              rows={pending}
+              onApprove={handleApprove}
+              onRequestReject={(id, name) => setRejectConfirmTarget({ id, name })}
+            />
           )
         ) : activeTab === 'history' ? (
-          <ApprovalHistory rows={history} onClear={handleClearHistory} loading={historyActionLoading} />
+          <ApprovalHistory rows={history} onClear={() => setClearHistoryConfirmOpen(true)} loading={historyActionLoading} />
         ) : null}
       </div>
+
+      {rejectConfirmTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!rejectActionLoading) setRejectConfirmTarget(null)
+          }}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reject-inscripcion-dialog-title"
+            className="luxury-panel w-full max-w-md rounded-2xl border border-[#3A3037]/70 bg-[var(--surface)]/95 p-6 shadow-[0_18px_48px_rgba(0,0,0,0.45)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-400">
+              <Trash2 size={14} />
+              Confirmar acción
+            </div>
+
+            <h2 id="reject-inscripcion-dialog-title" className="text-xl font-semibold text-[var(--text)]">
+              ¿Rechazar inscripción?
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              La solicitud de <span className="font-semibold text-[var(--text)]">{rejectConfirmTarget.name}</span> será rechazada y se retirará de pendientes.
+            </p>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setRejectConfirmTarget(null)}
+                disabled={rejectActionLoading}
+                className="inline-flex items-center justify-center rounded-xl border border-[#3A3037]/70 bg-[var(--surface)]/70 px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleReject(rejectConfirmTarget.id)}
+                disabled={rejectActionLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(225,29,72,0.35)] transition-all duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 size={15} />
+                {rejectActionLoading ? 'Rechazando...' : 'Rechazar solicitud'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!deleteActionLoading) setDeleteConfirmTarget(null)
+          }}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-restaurant-dialog-title"
+            className="luxury-panel w-full max-w-md rounded-2xl border border-[#3A3037]/70 bg-[var(--surface)]/95 p-6 shadow-[0_18px_48px_rgba(0,0,0,0.45)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-400">
+              <Trash2 size={14} />
+              Confirmar acción
+            </div>
+
+            <h2 id="delete-restaurant-dialog-title" className="text-xl font-semibold text-[var(--text)]">
+              ¿Eliminar restaurante?
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Se eliminará permanentemente <span className="font-semibold text-[var(--text)]">{deleteConfirmTarget.name}</span> y no se podrá recuperar.
+            </p>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTarget(null)}
+                disabled={deleteActionLoading}
+                className="inline-flex items-center justify-center rounded-xl border border-[#3A3037]/70 bg-[var(--surface)]/70 px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteRestaurant(deleteConfirmTarget.id)}
+                disabled={deleteActionLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(225,29,72,0.35)] transition-all duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 size={15} />
+                {deleteActionLoading ? 'Eliminando...' : 'Eliminar restaurante'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {clearHistoryConfirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!historyActionLoading) setClearHistoryConfirmOpen(false)
+          }}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="clear-history-dialog-title"
+            className="luxury-panel w-full max-w-md rounded-2xl border border-[#3A3037]/70 bg-[var(--surface)]/95 p-6 shadow-[0_18px_48px_rgba(0,0,0,0.45)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-400">
+              <Trash2 size={14} />
+              Confirmar acción
+            </div>
+
+            <h2 id="clear-history-dialog-title" className="text-xl font-semibold text-[var(--text)]">
+              ¿Limpiar historial?
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Se eliminarán permanentemente {historyRecordsCount} {historyRecordsLabel} del historial (aprobaciones y rechazos).
+            </p>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setClearHistoryConfirmOpen(false)}
+                disabled={historyActionLoading}
+                className="inline-flex items-center justify-center rounded-xl border border-[#3A3037]/70 bg-[var(--surface)]/70 px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleClearHistory}
+                disabled={historyActionLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(225,29,72,0.35)] transition-all duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 size={15} />
+                {historyActionLoading ? 'Limpiando...' : 'Eliminar historial'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal para editar imagen */}
       {editingRestaurantId !== null && (

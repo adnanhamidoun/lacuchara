@@ -9,7 +9,7 @@ export default function ProtectedRoute({ children, role }) {
   }
 
   if (!session) {
-    return <Navigate to={role === 'admin' ? '/admin/login' : '/restaurante/login'} replace />
+    return <Navigate to={role === 'admin' ? '/admin/login' : '/login'} replace />
   }
 
   if (role && session.role !== role) {

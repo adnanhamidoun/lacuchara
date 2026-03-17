@@ -93,32 +93,24 @@ export default function AboutView() {
 
   return (
     <div className="min-h-screen bg-[var(--surface)] text-[var(--text)]">
-      {/* Navigation Button */}
-      <div className="sticky top-0 z-40 border-b border-[var(--border)]/30 bg-[var(--surface)]/95 backdrop-blur-sm">
-        <div className="mx-auto max-w-5xl px-6 py-4">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)]/50 bg-[var(--surface-soft)]/50 px-3 py-2 text-sm font-medium text-[var(--text-muted)] transition-all duration-200 hover:border-[var(--border)]/80 hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"
-          >
-            <ArrowLeft size={16} />
-            Volver
-          </Link>
-        </div>
-      </div>
-
       {/* Hero Section */}
-      <section className="relative overflow-hidden px-4 sm:px-6 py-12 sm:py-16 lg:py-20">
+      <section className="relative overflow-hidden px-4 pb-12 pt-6 sm:px-6 sm:pb-16 sm:pt-8 lg:pb-20 lg:pt-10">
         {/* Fondo con gradiente sutil */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#E07B54]/5 via-transparent to-transparent pointer-events-none" />
 
-        <div className="relative mx-auto max-w-7xl space-y-8">
-          {/* Eyebrow + Título */}
-          <FadeUpSection className="space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#E07B54]/30 bg-[#E07B54]/10 px-4 py-1.5">
-              <span className="h-2 w-2 rounded-full bg-[#E07B54]" />
-              <span className="text-xs font-semibold tracking-wide text-[#E07B54]">PRESTIGE RESTAURANT MANAGEMENT</span>
-            </div>
+        <div className="relative mx-auto max-w-7xl space-y-6">
+          <div className="flex items-start justify-start">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#E07B54] transition-colors hover:text-[#D88B5A]"
+            >
+              <ArrowLeft size={16} />
+              Volver a inicio
+            </Link>
+          </div>
 
+          {/* Eyebrow + Título */}
+          <FadeUpSection className="space-y-3">
             <h1 className="text-5xl sm:text-6xl font-bold leading-tight tracking-tight">
               Transformamos la <span className="bg-gradient-to-r from-[#E07B54] to-[#D88B5A] bg-clip-text text-transparent">excelencia gastronómica</span> con tecnología
             </h1>
@@ -128,22 +120,12 @@ export default function AboutView() {
             </p>
           </FadeUpSection>
 
-          {/* CTA Buttons */}
-          <FadeUpSection>
-            <div className="flex flex-wrap gap-4 pt-4">
-              <Link
-                to="/restaurante/alta"
-                className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)]/50 bg-[var(--surface-soft)]/30 px-6 py-3 font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]/60 hover:border-[var(--border)]/80"
-              >
-                Registrar restaurante
-              </Link>
-            </div>
-          </FadeUpSection>
         </div>
       </section>
 
       {/* Main Content */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-20">
+      <div className="px-4 py-8 sm:px-6">
+        <div className="mx-auto max-w-7xl space-y-20">
         {/* Sobre AML */}
         <section className="space-y-8">
           <FadeUpSection className="space-y-4">
@@ -152,7 +134,7 @@ export default function AboutView() {
           </FadeUpSection>
 
           <div className="grid gap-8 md:grid-cols-2 items-center">
-            <SlideInLeft className="space-y-6">
+            <SlideInLeft className="space-y-4">
               <p className="text-base text-[var(--text-muted)] leading-relaxed">
                 Impulsamos la gestión y el crecimiento de restaurantes de alto nivel mediante tecnología, estrategia y análisis de datos.
               </p>
@@ -161,7 +143,7 @@ export default function AboutView() {
                 En AML ayudamos a marcas gastronómicas a optimizar su operación, mejorar su propuesta de valor y tomar decisiones más inteligentes. Combinamos experiencia en hostelería, visión de negocio y soluciones digitales para transformar retos complejos en resultados medibles.
               </p>
 
-              <ul className="space-y-3 pt-4">
+              <ul className="space-y-3 pt-2">
                 {[
                   'Estrategia digital para restaurantes de prestige',
                   'Análisis de datos orientado a decisiones',
@@ -341,13 +323,14 @@ export default function AboutView() {
           <FadeUpSection className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
             <Link
               to="/restaurante/alta"
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#C9794D] to-[#E09A63] px-8 py-3 font-semibold text-white shadow-lg shadow-[#E07B54]/30 transition-all duration-200 hover:shadow-xl hover:shadow-[#E07B54]/50 hover:brightness-105"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#E07B54] px-8 py-4 font-semibold text-white transition-all duration-200 hover:brightness-95 shadow-lg hover:shadow-xl"
             >
               Registrar restaurante
-              <ArrowLeft size={16} className="rotate-180" />
+              <ArrowLeft size={20} className="rotate-180" />
             </Link>
           </FadeUpSection>
         </section>
+        </div>
       </div>
 
       {/* Footer Spacing */}

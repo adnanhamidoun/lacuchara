@@ -28,21 +28,23 @@ export function SortControl({ options, currentSort, sortOrder, onSort, onToggleO
         </button>
 
         {/* Dropdown Menu */}
-        <div className="absolute right-0 top-full hidden group-hover:block z-10 mt-2 w-40 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg p-1">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onSort(option.value)}
-              className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors duration-200 ${
-                currentSort === option.value
-                  ? 'bg-[#E07B54]/10 text-[#E07B54] font-medium'
-                  : 'text-[var(--text)] hover:bg-[var(--surface-soft)]'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="absolute right-0 top-full z-10 hidden w-40 pt-2 group-hover:block">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg p-1">
+            {options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onSort(option.value)}
+                className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors duration-200 ${
+                  currentSort === option.value
+                    ? 'bg-[#E07B54]/10 text-[#E07B54] font-medium'
+                    : 'text-[var(--text)] hover:bg-[var(--surface-soft)]'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

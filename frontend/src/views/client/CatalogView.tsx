@@ -1,5 +1,5 @@
 import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Search, Wifi, Sparkles, Building2, Briefcase, Users, ArrowLeft, Crown, Star, ChevronUp, ChevronDown } from 'lucide-react'
 import { isInPriceRange, type PriceRange, useRestaurants } from '../../hooks/useRestaurants'
 import type { RestaurantDetail } from '../../types/domain'
@@ -48,6 +48,8 @@ type IndexedRestaurant = {
   segmentCode: string
   cuisineCode: string | null
 }
+
+const AZCA_RADIUS_METERS = 800
 
 function normalizeText(value: string | null | undefined): string {
   return (value ?? '')
@@ -198,6 +200,7 @@ const RestaurantCard = memo(function RestaurantCard({
 })
 
 export default function CatalogView() {
+  const location = useLocation()
   const { restaurants, loading, error, cuisines } = useRestaurants()
   const [search, setSearch] = useState('')
   const [selectedSegment, setSelectedSegment] = useState<string>('all')
@@ -205,6 +208,8 @@ export default function CatalogView() {
   const [priceRange, setPriceRange] = useState<PriceRange>('all')
   const [wifiOnly, setWifiOnly] = useState(false)
   const [weekendsOnly, setWeekendsOnly] = useState(false)
+  const [terraceOnly, setTerraceOnly] = useState(false)
+  const [nearAzcaOnly, setNearAzcaOnly] = useState(false)
   const [sortBy, setSortBy] = useState<SortOption>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const deferredSearch = useDeferredValue(search)
@@ -212,6 +217,20 @@ export default function CatalogView() {
     () => (selectedCuisine === 'all' ? null : getCanonicalCuisineCode(selectedCuisine)),
     [selectedCuisine],
   )
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const searchQuery = (params.get('q') ?? params.get('search') ?? '').trim()
+    const segmentFromQuery = normalizeSegment(params.get('segment'))
+    const isValidSegment = SEGMENTS.some((segment) => segment.key === segmentFromQuery)
+    const terraceParam = params.get('terrace')
+    const zoneFromQuery = normalizeText(params.get('zone'))
+
+    setSearch(searchQuery)
+    setSelectedSegment(isValidSegment ? segmentFromQuery : 'all')
+    setTerraceOnly(terraceParam === 'true' || terraceParam === '1')
+    setNearAzcaOnly(zoneFromQuery === 'azca')
+  }, [location.search])
 
   const isWeekendToday = useMemo(() => {
     const day = new Date().getDay()
@@ -221,9 +240,12 @@ export default function CatalogView() {
   const indexedRestaurants = useMemo<IndexedRestaurant[]>(() => {
     return restaurants.map((restaurant) => {
       const cuisineMeta = getCuisineMeta(restaurant.cuisine_type)
+      const isNearAzca = typeof restaurant.dist_office_towers === 'number' && restaurant.dist_office_towers <= AZCA_RADIUS_METERS
       return {
         restaurant,
-        searchableText: normalizeText(`${restaurant.name} ${restaurant.restaurant_segment ?? ''} ${cuisineMeta.label}`),
+        searchableText: normalizeText(
+          `${restaurant.name} ${restaurant.restaurant_segment ?? ''} ${cuisineMeta.label} ${restaurant.terrace_setup_type ?? ''} ${isNearAzca ? 'azca cerca de azca' : ''}`,
+        ),
         segmentCode: normalizeSegment(restaurant.restaurant_segment),
         cuisineCode: getCanonicalCuisineCode(restaurant.cuisine_type),
       }
@@ -241,8 +263,12 @@ export default function CatalogView() {
         const matchPrice = isInPriceRange(restaurant.menu_price, priceRange)
         const matchWifi = !wifiOnly || Boolean(restaurant.has_wifi)
         const matchWeekend = !weekendsOnly || Boolean(restaurant.opens_weekends)
+        const matchTerrace = !terraceOnly || Boolean(restaurant.terrace_setup_type)
+        const matchNearAzca =
+          !nearAzcaOnly ||
+          (typeof restaurant.dist_office_towers === 'number' && restaurant.dist_office_towers <= AZCA_RADIUS_METERS)
 
-        return matchName && matchCuisine && matchSegment && matchPrice && matchWifi && matchWeekend
+        return matchName && matchCuisine && matchSegment && matchPrice && matchWifi && matchWeekend && matchTerrace && matchNearAzca
       })
       .map(({ restaurant }) => restaurant)
       .sort((a, b) => {
@@ -258,7 +284,7 @@ export default function CatalogView() {
 
         return sortOrder === 'asc' ? compareValue : -compareValue
       })
-  }, [indexedRestaurants, deferredSearch, selectedCuisineCode, selectedSegment, priceRange, wifiOnly, weekendsOnly, sortBy, sortOrder])
+  }, [indexedRestaurants, deferredSearch, selectedCuisineCode, selectedSegment, priceRange, wifiOnly, weekendsOnly, terraceOnly, nearAzcaOnly, sortBy, sortOrder])
 
   // Count active filters
   const activeFilterCount = useMemo(() => {
@@ -268,8 +294,10 @@ export default function CatalogView() {
     if (priceRange !== 'all') count++
     if (wifiOnly) count++
     if (weekendsOnly) count++
+    if (terraceOnly) count++
+    if (nearAzcaOnly) count++
     return count
-  }, [selectedSegment, selectedCuisine, priceRange, wifiOnly, weekendsOnly])
+  }, [selectedSegment, selectedCuisine, priceRange, wifiOnly, weekendsOnly, terraceOnly, nearAzcaOnly])
 
   // Reset all filters
   const handleClearFilters = () => {
@@ -278,6 +306,8 @@ export default function CatalogView() {
     setPriceRange('all')
     setWifiOnly(false)
     setWeekendsOnly(false)
+    setTerraceOnly(false)
+    setNearAzcaOnly(false)
   }
 
   return (
@@ -327,11 +357,7 @@ export default function CatalogView() {
         {/* Toolbar */}
         <FilterToolbar
           leftContent="Filtros"
-          centerContent={
-            filteredRestaurants.length > 0
-              ? `${filteredRestaurants.length} restaurante${filteredRestaurants.length !== 1 ? 's' : ''}`
-              : ''
-          }
+          centerContent=""
           rightContent={
             activeFilterCount > 0 ? (
               <button

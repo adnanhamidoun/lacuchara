@@ -6,8 +6,17 @@ import { useAuth } from '../auth/AuthContext.jsx'
 export default function MainLayout({ children }) {
   const [theme, setTheme] = useState('light')
   const [logoSinTexto, setLogoSinTexto] = useState(null)
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false)
   const { session, logout } = useAuth()
   const navigate = useNavigate()
+
+  const openLogoutConfirm = () => setIsLogoutConfirmOpen(true)
+  const closeLogoutConfirm = () => setIsLogoutConfirmOpen(false)
+  const confirmLogout = () => {
+    closeLogoutConfirm()
+    navigate('/', { replace: true })
+    logout()
+  }
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('aml-theme')
@@ -33,6 +42,21 @@ export default function MainLayout({ children }) {
     }
     loadLogo()
   }, [])
+
+  useEffect(() => {
+    if (!isLogoutConfirmOpen) {
+      return undefined
+    }
+
+    const handleEscKey = (event) => {
+      if (event.key === 'Escape') {
+        setIsLogoutConfirmOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleEscKey)
+    return () => window.removeEventListener('keydown', handleEscKey)
+  }, [isLogoutConfirmOpen])
 
   const toggleTheme = () => {
     const next = theme === 'light' ? 'dark' : 'light'
@@ -184,10 +208,8 @@ export default function MainLayout({ children }) {
                     </NavLink>
                   )}
                   <button
-                    onClick={() => {
-                      logout();
-                      navigate('/');
-                    }}
+                    type="button"
+                    onClick={openLogoutConfirm}
                     className="inline-flex items-center gap-2 rounded-xl bg-rose-600/10 px-4 py-2 text-sm font-semibold text-rose-500 transition-all duration-200 hover:bg-rose-600/20"
                     title="Cerrar sesión"
                   >
@@ -217,6 +239,52 @@ export default function MainLayout({ children }) {
       </header>
 
       <main className="relative z-10 mx-auto w-full max-w-[1600px] px-4 py-6">{children}</main>
+
+      {isLogoutConfirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          onClick={closeLogoutConfirm}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logout-dialog-title"
+            className="luxury-panel w-full max-w-md rounded-2xl border border-[#3A3037]/70 bg-[var(--surface)]/95 p-6 shadow-[0_18px_48px_rgba(0,0,0,0.45)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-400">
+              <LogOut size={14} />
+              Confirmar acción
+            </div>
+
+            <h2 id="logout-dialog-title" className="text-xl font-semibold text-[var(--text)]">
+              ¿Quieres cerrar sesión?
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Se cerrará tu sesión actual y volverás a la página de inicio.
+            </p>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeLogoutConfirm}
+                className="inline-flex items-center justify-center rounded-xl border border-[#3A3037]/70 bg-[var(--surface)]/70 px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all duration-200 hover:bg-[var(--surface-soft)]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmLogout}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(225,29,72,0.35)] transition-all duration-200 hover:brightness-105"
+              >
+                <LogOut size={15} />
+                Cerrar sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

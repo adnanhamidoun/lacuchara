@@ -141,10 +141,6 @@ export default function HeroSection({ search, setSearch, onSearch, onShortcutCli
         </div>
       </div>
 
-      {/* Smooth Transition Element - Theme Aware */}
-      <div className="relative z-10">
-        <div className="h-32 bg-gradient-to-b from-[#F5E6D3]/20 via-[#FFF8F0]/10 to-transparent dark:from-black/40 dark:via-black/20 dark:to-transparent" />
-      </div>
     </section>
   )
 }

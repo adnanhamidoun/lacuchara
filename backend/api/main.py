@@ -705,6 +705,8 @@ class InscripcionCreateRequest(BaseModel):
         "plantbased",
         "streetfood",
     ] | None = Field(None, description="Tipo de cocina")
+    login_email: str | None = Field(None, description="Email para acceso del restaurante")
+    password: str | None = Field(None, description="Contraseña de acceso (se almacena hasheada)")
     image_url: str | None = Field(None, description="URL inicial de imagen del restaurante")
     google_maps_link: str = Field(..., description="Link de reseñas/Google Maps (obligatorio)", min_length=5)
     image_url: str | None = Field(None, description="URL inicial de imagen del restaurante")
@@ -1555,6 +1557,16 @@ def _parse_min_service_duration(min_service: str | None) -> int | None:
         return None
 
 
+def _capitalize_first(value: str | None) -> str | None:
+    """Devuelve el texto con la primera letra en mayúscula, preservando el resto."""
+    if value is None:
+        return None
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    return trimmed[0].upper() + trimmed[1:]
+
+
 @app.post(
     "/inscripciones",
     response_model=InscripcionItem,
@@ -1565,6 +1577,31 @@ def _parse_min_service_duration(min_service: str | None) -> int | None:
 async def create_inscripcion(request: InscripcionCreateRequest, db: Session = Depends(get_db)):
     """Crea una solicitud de alta en dbo.inscripciones."""
     try:
+        normalized_login_email = request.login_email.strip().lower() if request.login_email else None
+        normalized_password = request.password.strip() if request.password else None
+
+        if bool(normalized_login_email) != bool(normalized_password):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Debes enviar email y contraseña juntos.",
+            )
+
+        if normalized_password and len(normalized_password) < 6:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="La contraseña debe tener al menos 6 caracteres.",
+            )
+
+        if normalized_login_email:
+            existing_user = db.query(User).filter(User.login_email == normalized_login_email).first()
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Ya existe un usuario registrado con ese email.",
+                )
+
+        password_hash = hash_password(normalized_password) if normalized_password else None
+
         inscripcion = Inscripcion(
             name=request.name.strip(),
             capacity_limit=request.capacity_limit,
@@ -1573,11 +1610,13 @@ async def create_inscripcion(request: InscripcionCreateRequest, db: Session = De
             terrace_setup_type=request.terrace_setup_type,
             opens_weekends=request.opens_weekends,
             has_wifi=request.has_wifi,
-            restaurant_segment=request.restaurant_segment,
+            restaurant_segment=_capitalize_first(request.restaurant_segment),
             menu_price=request.menu_price,
             dist_office_towers=request.dist_office_towers,
             google_rating=request.google_rating,
-            cuisine_type=request.cuisine_type,
+            cuisine_type=_capitalize_first(request.cuisine_type),
+            login_email=normalized_login_email,
+            password_hash=password_hash,
             image_url=request.image_url.strip() if request.image_url else None,
             google_maps_link=request.google_maps_link.strip(),
             estado_inscripcion="pendiente",
@@ -1585,10 +1624,27 @@ async def create_inscripcion(request: InscripcionCreateRequest, db: Session = De
         )
 
         db.add(inscripcion)
+        db.flush()
+
+        if normalized_login_email and password_hash:
+            provisional_restaurant_id = -inscripcion.inscripcion_id
+            db.add(
+                User(
+                    restaurant_id=provisional_restaurant_id,
+                    login_email=normalized_login_email,
+                    password_hash=password_hash,
+                    is_active=False,
+                    role="restaurant_owner",
+                )
+            )
+
         db.commit()
         db.refresh(inscripcion)
         return InscripcionItem.from_orm(inscripcion)
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"❌ Error en POST /inscripciones: {str(e)}", exc_info=True)
@@ -1757,6 +1813,50 @@ async def update_restaurant(
     return RestaurantDetailItem.from_orm(restaurant)
 
 
+@app.delete(
+    "/restaurants/{restaurant_id}",
+    summary="Eliminar restaurante",
+    tags=["Restaurantes"],
+)
+async def delete_restaurant_endpoint(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None),
+):
+    """
+    Elimina un restaurante de forma permanente.
+
+    - Solo usuarios con rol admin pueden ejecutar esta acción.
+    - También elimina credenciales asociadas en la tabla Users.
+    """
+    _require_admin_auth(authorization)
+
+    restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
+    if not restaurant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Restaurante no encontrado",
+        )
+
+    try:
+        db.query(User).filter(User.restaurant_id == restaurant_id).delete(synchronize_session=False)
+        db.delete(restaurant)
+        db.commit()
+        return {"success": True, "message": f"Restaurante {restaurant_id} eliminado correctamente."}
+    except Exception as e:
+        db.rollback()
+        logger.error(
+            "❌ Error en DELETE /restaurants/%s: %s",
+            restaurant_id,
+            str(e),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al eliminar restaurante",
+        )
+
+
 @app.get(
     "/inscripciones",
     response_model=InscripcionesListResponse,
@@ -1843,14 +1943,17 @@ async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)
 
         # Crear usuario en tabla Users si hay email y contraseña
         if inscripcion.login_email and inscripcion.password_hash:
-            # Comprobar que no exista ya un usuario con ese email
-            existing_user = db.query(User).filter(
-                User.login_email == inscripcion.login_email.strip().lower()
-            ).first()
-            if not existing_user:
+            normalized_email = inscripcion.login_email.strip().lower()
+            existing_user = db.query(User).filter(User.login_email == normalized_email).first()
+            if existing_user:
+                existing_user.restaurant_id = next_restaurant_id
+                existing_user.password_hash = inscripcion.password_hash
+                existing_user.is_active = True
+                existing_user.role = "restaurant_owner"
+            else:
                 new_user = User(
                     restaurant_id=next_restaurant_id,
-                    login_email=inscripcion.login_email.strip().lower(),
+                    login_email=normalized_email,
                     password_hash=inscripcion.password_hash,
                     is_active=True,
                     role="restaurant_owner",
@@ -1899,6 +2002,10 @@ async def reject_inscripcion(inscripcion_id: int, db: Session = Depends(get_db))
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Inscripción con ID {inscripcion_id} no encontrada",
             )
+
+        if inscripcion.login_email:
+            normalized_email = inscripcion.login_email.strip().lower()
+            db.query(User).filter(User.login_email == normalized_email).delete(synchronize_session=False)
 
         db.delete(inscripcion)
         db.commit()

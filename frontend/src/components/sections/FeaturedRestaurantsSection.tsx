@@ -60,6 +60,7 @@ const FeaturedRestaurantCard = memo(function FeaturedRestaurantCard({
   return (
     <Link
       to={`/cliente/restaurantes/${restaurant.restaurant_id}/menu`}
+      state={{ fromHomepage: true }}
       className="group relative flex flex-col overflow-hidden rounded-2xl border border-[var(--border)]/50 bg-[var(--surface)] transition-all duration-300 hover:border-[#E07B54]/50 hover:shadow-lg hover:-translate-y-1"
       style={{
         animation: `slideInUp 0.4s ease-out ${index * 100}ms backwards`,

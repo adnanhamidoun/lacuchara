@@ -229,7 +229,7 @@ function LoginCard({
       <div className="border-t border-[var(--border)]/20 pt-3">
         <p className="text-center text-xs text-[var(--text-muted)]">
           Acceso restringido a administradores de CUISINE AML.
-          <span className="text-[#E07B54]">Contacta con soporte si tienes dudas.</span>
+          <span className="text-[#E07B54]"> Contacta con soporte si tienes dudas.</span>
         </p>
       </div>
     </div>

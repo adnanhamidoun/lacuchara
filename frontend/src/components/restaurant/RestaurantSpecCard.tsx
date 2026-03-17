@@ -1,4 +1,4 @@
-import { MapPin, Users, Clock, Wifi, BarChart3, Utensils } from 'lucide-react'
+import { MapPin, Users, Clock, Wifi, BarChart3, Utensils, Star, BadgeEuro, Armchair, Umbrella, CalendarDays } from 'lucide-react'
 import type { RestaurantDetail } from '../../types/domain'
 import { formatTerraceType } from '../../utils/formatTerraceType'
 
@@ -8,8 +8,10 @@ interface RestaurantSpecCardProps {
 
 function SpecRow({ icon: Icon, label, value }: { icon: React.ComponentType<any>; label: string; value: string }) {
   return (
-    <div className="flex items-start gap-2 py-2 border-b border-[var(--border)]/30 last:border-b-0">
-      <Icon size={16} className="mt-0.5 text-[#E07B54] flex-shrink-0" />
+    <div className="flex items-start gap-3 py-2 border-b border-[var(--border)]/30 last:border-b-0">
+      <div className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center">
+        <Icon size={14} className="text-[#E07B54]" />
+      </div>
       <div className="flex-1">
         <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">{label}</p>
         <p className="mt-1 text-sm font-semibold text-[var(--text)]">{value}</p>
@@ -29,7 +31,7 @@ function SpecSection({ title, children }: { title: string; children: React.React
 
 export function RestaurantSpecCard({ restaurant }: RestaurantSpecCardProps) {
   return (
-    <div className="rounded-3xl border border-[#3A3037]/30 bg-[var(--surface)] p-4 shadow-lg">
+    <div className="h-full rounded-3xl border border-[#3A3037]/30 bg-[var(--surface)] p-4 shadow-lg">
       <h2 className="mb-4 text-lg font-bold text-[var(--text)] uppercase tracking-wide">Ficha del Restaurante</h2>
 
       <div className="space-y-5">
@@ -51,14 +53,14 @@ export function RestaurantSpecCard({ restaurant }: RestaurantSpecCardProps) {
           )}
           {restaurant.google_rating && (
             <SpecRow
-              icon={() => <span className="text-lg">⭐</span>}
+              icon={Star}
               label="Valoración"
               value={`${restaurant.google_rating.toFixed(1)} / 5.0`}
             />
           )}
           {restaurant.menu_price && (
             <SpecRow
-              icon={() => <span className="text-lg">€</span>}
+              icon={BadgeEuro}
               label="Precio medio del menú"
               value={`€${restaurant.menu_price.toFixed(2)}`}
             />
@@ -77,7 +79,7 @@ export function RestaurantSpecCard({ restaurant }: RestaurantSpecCardProps) {
             )}
             {restaurant.table_count && (
               <SpecRow
-                icon={() => <span className="text-lg">🪑</span>}
+                icon={Armchair}
                 label="Número de mesas"
                 value={`${restaurant.table_count} mesas`}
               />
@@ -104,14 +106,14 @@ export function RestaurantSpecCard({ restaurant }: RestaurantSpecCardProps) {
             )}
             {restaurant.terrace_setup_type && (
               <SpecRow
-                icon={() => <span className="text-lg">🏡</span>}
+                icon={Umbrella}
                 label="Terraza"
                 value={formatTerraceType(restaurant.terrace_setup_type)}
               />
             )}
             {restaurant.opens_weekends !== undefined && (
               <SpecRow
-                icon={MapPin}
+                icon={CalendarDays}
                 label="Abre fines de semana"
                 value={restaurant.opens_weekends ? 'Sí' : 'No'}
               />

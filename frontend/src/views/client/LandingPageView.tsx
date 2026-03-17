@@ -1,6 +1,6 @@
 import { useState, useMemo, memo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Sparkles, Building2, Briefcase, Users, Search } from 'lucide-react'
+import { ArrowRight, Sparkles, Building2, Briefcase, Users } from 'lucide-react'
 import { useRestaurants } from '../../hooks/useRestaurants'
 import type { RestaurantDetail } from '../../types/domain'
 import { getCanonicalCuisineCode, getCuisineMeta } from '../../utils/cuisine'
@@ -65,7 +65,7 @@ const SegmentCard = memo(function SegmentCard({
 
   return (
     <Link
-      to={`/restaurantes`}
+      to={`/restaurantes?segment=${segment.key}`}
       className="group luxury-panel relative flex flex-col overflow-hidden rounded-2xl border border-[#3A3037]/70 bg-gradient-to-br from-[var(--surface)] to-[var(--surface-soft)] p-6 transition-all duration-300 hover:border-[#D88B5A]/50 hover:shadow-lg hover:-translate-y-1"
     >
       <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#E07B54]/20 to-[#D88B5A]/20">
@@ -242,15 +242,6 @@ export default function LandingPageView() {
               Ver Todos los Restaurantes
               <ArrowRight size={20} />
             </Link>
-
-            <button
-              type="button"
-              onClick={handleSearch}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[#E07B54] px-8 py-4 font-semibold text-[#E07B54] transition-all duration-200 hover:bg-[#E07B54]/5"
-            >
-              <Search size={20} />
-              Buscar
-            </button>
           </div>
         </div>
       </FadeUpSection>

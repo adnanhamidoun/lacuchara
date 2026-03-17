@@ -1,4 +1,4 @@
-import { Wifi, MapPin, Wine, Star, Users, Clock, Utensils } from 'lucide-react'
+import { Wifi, MapPin, Wine, Star, Users, Clock, Utensils, Armchair, Umbrella } from 'lucide-react'
 import type { RestaurantDetail } from '../../types/domain'
 import { formatTerraceType } from '../../utils/formatTerraceType'
 
@@ -17,7 +17,7 @@ function HighlightChip({ icon: Icon, label }: { icon: React.ComponentType<any>; 
 
 function QuickFactCard({ icon: Icon, label, value }: { icon: React.ComponentType<any>; label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)]/50 bg-[var(--surface-soft)]/40 p-4 text-center">
+    <div className="rounded-2xl border border-[#3A3037]/30 bg-[var(--surface)] p-4 text-center shadow-lg">
       <Icon size={20} className="mx-auto mb-2 text-[#E07B54]" />
       <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">{label}</p>
       <p className="mt-2 text-lg font-bold text-[var(--text)]">{value}</p>
@@ -46,7 +46,7 @@ export function RestaurantOverview({ restaurant }: RestaurantOverviewProps) {
           {restaurant.has_wifi && <HighlightChip icon={Wifi} label="WiFi Disponible" />}
           {restaurant.opens_weekends && <HighlightChip icon={MapPin} label="Abierto Fines de Semana" />}
           {restaurant.terrace_setup_type && formatTerraceType(restaurant.terrace_setup_type) !== 'No disponible' && (
-            <HighlightChip icon={() => <span>🏡</span>} label="Con Terraza" />
+            <HighlightChip icon={Umbrella} label="Con Terraza" />
           )}
           {restaurant.cuisine_type && (
             <HighlightChip icon={Utensils} label={`Cocina ${restaurant.cuisine_type}`} />
@@ -79,7 +79,7 @@ export function RestaurantOverview({ restaurant }: RestaurantOverviewProps) {
             <QuickFactCard icon={Clock} label="Tiempo Mín." value={`${restaurant.min_service_duration}'`} />
           )}
           {restaurant.table_count && (
-            <QuickFactCard icon={() => <span className="text-lg">🪑</span>} label="Mesas" value={`${restaurant.table_count}`} />
+            <QuickFactCard icon={Armchair} label="Mesas" value={`${restaurant.table_count}`} />
           )}
           {restaurant.dist_office_towers && (
             <QuickFactCard icon={MapPin} label="A Oficinas" value={`${restaurant.dist_office_towers}m`} />
