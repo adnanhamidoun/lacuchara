@@ -10,24 +10,36 @@ export function formatTerraceType(terraceValue: string | null | undefined): stri
 
   // Year-round / all seasons / full availability
   if (
+    normalized === 'all_year' ||
     normalized.includes('all year') ||
     normalized.includes('todo el año') ||
     normalized.includes('year round') ||
-    normalized.includes('indoor') && normalized.includes('outdoor') ||
-    normalized.includes('both seasons') ||
     normalized.includes('full')
   ) {
     return 'Todo el año'
   }
 
   // Summer only
-  if (normalized.includes('summer') || normalized.includes('verano')) {
+  if (
+    normalized === 'summer_only' ||
+    normalized.includes('summer') ||
+    normalized.includes('verano')
+  ) {
     return 'Solo verano'
   }
 
   // Winter only
-  if (normalized.includes('winter') || normalized.includes('invierno')) {
+  if (
+    normalized === 'winter_only' ||
+    normalized.includes('winter') ||
+    normalized.includes('invierno')
+  ) {
     return 'Solo invierno'
+  }
+
+  // No terrace
+  if (normalized === 'none' || normalized === 'no') {
+    return 'No disponible'
   }
 
   // Default: unavailable

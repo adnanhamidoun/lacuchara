@@ -202,184 +202,250 @@ export default function PredictionDashboard() {
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-        <p className="text-sm text-[var(--text-muted)]">Cargando dashboard...</p>
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)]/40 p-12 text-center">
+        <div className="inline-flex items-center gap-3">
+          <svg className="w-5 h-5 animate-spin text-[#E07B54]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v16a8 8 0 01-8-8z"></path>
+          </svg>
+          <p className="text-sm font-semibold text-[var(--text)]">Cargando datos del restaurante...</p>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-        <p className="text-sm text-[#E53935]">{error}</p>
+      <div className="rounded-2xl border-2 border-[#E53935] bg-[var(--surface)] p-8">
+        <div className="flex gap-4">
+          <span className="text-3xl">⚠️</span>
+          <div>
+            <p className="text-sm font-bold text-[#E53935]">No se pudo cargar el restaurante</p>
+            <p className="text-xs text-[var(--text-muted)] mt-2">{error}</p>
+          </div>
+        </div>
       </div>
     )
   }
 
-  const suggestedStarter = menuPredictions.starters[0]?.name || '—'
-  const suggestedMain = menuPredictions.mains[0]?.name || '—'
-  const suggestedDessert = menuPredictions.desserts[0]?.name || '—'
-
   return (
-    <section className="space-y-2.5">
-      <div>
-        <h2 className="text-xl font-bold text-[var(--text)]">Menú Sugerido</h2>
-        <p className="text-xs text-[var(--text-muted)] mt-0.5">
-          Descubre la combinación de platos con más probabilidad de éxito según las condiciones del día.
+    <section className="space-y-8">
+      {/* Header */}
+      <div className="space-y-3">
+        <h1 className="text-3xl font-bold text-[var(--text)]">Predicciones de Menú</h1>
+        <p className="text-base text-[var(--text-muted)]">
+          Descubre qué platos funcionarán mejor según el día, clima y características de tu restaurante.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-sm text-[var(--text-muted)]">Mi restaurante</p>
-            <h3 className="text-lg font-bold text-[var(--text)]">{restaurant?.name}</h3>
-            <p className="text-xs text-[var(--text-muted)]">
-              {restaurant?.cuisine_type} • {restaurant?.restaurant_segment}
-            </p>
+      {/* Restaurant Info & Date Selector */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wide">Tu restaurante</p>
+            <h2 className="text-2xl font-bold text-[var(--text)]">{restaurant?.name || 'Cargando...'}</h2>
+            {restaurant && (
+              <p className="text-sm text-[var(--text-muted)] flex gap-2">
+                <span>{restaurant.cuisine_type}</span>
+                <span>•</span>
+                <span className="capitalize">{restaurant.restaurant_segment}</span>
+              </p>
+            )}
           </div>
 
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-[var(--text-muted)]">Seleccionar fecha</span>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wide">Seleccionar fecha</label>
             <input
               type="date"
               value={selectedDate}
               onChange={(event) => setSelectedDate(event.target.value)}
               min={today}
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm font-semibold text-[var(--text)] outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
             />
-          </label>
+          </div>
         </div>
       </div>
 
-      {/* Menú Completo Sugerido */}
+      {/* Status Messages */}
       {checkingTodayMenu || predictionLoading ? (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center">
-          <p className="text-sm text-[var(--text-muted)]">Calculando menú sugerido...</p>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)]/40 p-12 text-center">
+          <div className="inline-flex items-center gap-3">
+            <svg className="w-5 h-5 animate-spin text-[#E07B54]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v16a8 8 0 01-8-8z"></path>
+            </svg>
+            <p className="text-sm font-semibold text-[var(--text)]">Calculando predicciones...</p>
+          </div>
         </div>
       ) : selectedDate === today && todayMenuExists ? (
-        <div className="rounded-2xl border-2 border-[#FF9800] bg-[var(--surface)] p-6 text-center">
-          <p className="text-sm font-semibold text-[#FF9800]">📋 Menú del día ya publicado</p>
-          <p className="text-xs text-[var(--text-muted)] mt-2">
-            Ya has subido el menú de hoy. Las sugerencias de IA aparecen para días futuros.
+        <div className="rounded-2xl border-2 border-[#FF9800] bg-[var(--surface)]/50 p-8 text-center">
+          <p className="text-2xl mb-2">📋</p>
+          <p className="text-sm font-semibold text-[#FF9800]">Menú del día ya publicado</p>
+          <p className="text-xs text-[var(--text-muted)] mt-3">
+            Las predicciones de IA aparecen para días futuros. Selecciona una fecha próxima para ver sugerencias.
           </p>
         </div>
       ) : predictionError ? (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-          <p className="text-sm text-[#E53935]">{predictionError}</p>
+        <div className="rounded-2xl border-2 border-[#E53935] bg-[var(--surface)] p-8">
+          <div className="flex gap-4">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-[#E53935]">Error al calcular predicciones</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{predictionError}</p>
+            </div>
+          </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3">
-          {/* Demanda de Servicios */}
+        <div className="space-y-8">
+          {/* Expected Demand */}
           {servicePrediction !== null && (
-            <div className="rounded-2xl border-2 border-[var(--accent)] bg-[var(--surface)] p-4">
-              <p className="text-xs uppercase tracking-widest text-[var(--accent)] font-semibold">Demanda esperada</p>
-              <p className="mt-1 text-2xl font-bold text-[var(--text)]">{servicePrediction}</p>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">servicios estimados</p>
+            <div className="rounded-2xl border-2 border-[#E07B54] bg-gradient-to-br from-[#E07B54]/10 to-[#E07B54]/5 p-8 shadow-lg">
+              <div className="flex items-end justify-between gap-6">
+                <div className="space-y-2">
+                  <p className="text-sm font-bold text-[#E07B54] uppercase tracking-widest">Demanda estimada</p>
+                  <p className="text-[#E07B54]">para el {new Date(selectedDate).toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-5xl font-black text-[#E07B54]">{servicePrediction}</p>
+                  <p className="text-sm text-[#E07B54]/80 font-semibold mt-1">servicios</p>
+                </div>
+              </div>
             </div>
           )}
 
-      <div className="rounded-2xl border-2 border-[var(--accent)]/20 bg-gradient-to-br from-[var(--surface)] via-[var(--surface)] to-[var(--surface-soft)]/50 p-0 shadow-lg overflow-hidden">
+          {/* Suggested Menu Card */}
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden shadow-xl">
             {/* Header */}
-            <div className="bg-gradient-to-r from-[var(--accent)]/10 to-[var(--accent)]/5 border-b-2 border-[var(--accent)]/20 px-6 py-3">
-              <p className="text-xs uppercase tracking-[0.15em] font-bold text-[var(--accent)]">📋 Menú del Día</p>
-              <h3 className="text-lg font-bold text-[var(--text)] mt-1">Sugerencia de IA</h3>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">Basado en condiciones del restaurante y clima</p>
+            <div className="bg-gradient-to-r from-[#E07B54]/15 to-[#E07B54]/5 border-b border-[var(--border)] px-8 py-6">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-3xl">🍽️</span>
+                <div>
+                  <p className="text-sm font-bold text-[#E07B54] uppercase tracking-widest">Menú sugerido</p>
+                  <h3 className="text-xl font-bold text-[var(--text)] mt-0.5">Recomendación de IA</h3>
+                </div>
+              </div>
+              <p className="text-sm text-[var(--text-muted)]">
+                Basado en tus características, clima y predicciones de demanda
+              </p>
             </div>
 
-            <div className="px-6 py-4 space-y-4">
-              {/* Entrantes */}
-              <div className="bg-[var(--surface-soft)]/40 rounded-xl p-4 border border-[var(--border)]/50">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-2xl">🥗</span>
+            {/* Menu Items */}
+            <div className="px-8 py-8 space-y-6">
+              {/* Starters */}
+              <div className="bg-[var(--surface-soft)]/40 rounded-2xl border border-[var(--border)] p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-3xl">🥗</span>
                   <div>
-                    <p className="text-xs uppercase tracking-widest font-bold text-[var(--accent)]">Entrada</p>
-                    <p className="text-xs text-[var(--text-muted)]">Selección de apertivos</p>
+                    <p className="text-xs font-bold text-[#E07B54] uppercase tracking-widest">Entrada</p>
+                    <p className="text-sm text-[var(--text-muted)]">Para comenzar</p>
                   </div>
                 </div>
-                <ul className="space-y-1.5 pl-8">
+                <ul className="space-y-2 pl-10">
                   {menuPredictions.starters.length > 0 ? (
                     menuPredictions.starters.map((dish, idx) => (
-                      <li key={idx} className="text-xs font-medium text-[var(--text)] flex items-center gap-2">
-                        <span className="w-1 h-1 rounded-full bg-[var(--accent)] flex-shrink-0"></span>
+                      <li key={idx} className="text-sm font-medium text-[var(--text)] flex items-center gap-3 before:content-[''] before:w-2 before:h-2 before:rounded-full before:bg-[#E07B54]/60">
                         {dish.name}
+                        {dish.estimated_count && (
+                          <span className="text-xs text-[var(--text-muted)]/70">({dish.estimated_count} est.)</span>
+                        )}
                       </li>
                     ))
                   ) : (
-                    <li className="text-sm text-[var(--text-muted)] italic">Sin entrantes disponibles</li>
+                    <li className="text-sm text-[var(--text-muted)] italic">Sin sugerencias disponibles</li>
                   )}
                 </ul>
               </div>
 
-              {/* Platos Principales */}
-              <div className="bg-[var(--surface-soft)]/40 rounded-xl p-4 border border-[var(--border)]/50">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-2xl">🍖</span>
+              {/* Mains */}
+              <div className="bg-[var(--surface-soft)]/40 rounded-2xl border border-[var(--border)] p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-3xl">🍖</span>
                   <div>
-                    <p className="text-xs uppercase tracking-widest font-bold text-[var(--accent)]">Plato Principal</p>
-                    <p className="text-xs text-[var(--text-muted)]">Especialidades del chef</p>
+                    <p className="text-xs font-bold text-[#E07B54] uppercase tracking-widest">Plato Principal</p>
+                    <p className="text-sm text-[var(--text-muted)]">Especialidades del chef</p>
                   </div>
                 </div>
-                <ul className="space-y-1.5 pl-8">
+                <ul className="space-y-2 pl-10">
                   {menuPredictions.mains.length > 0 ? (
                     menuPredictions.mains.map((dish, idx) => (
-                      <li key={idx} className="text-xs font-medium text-[var(--text)] flex items-center gap-2">
-                        <span className="w-1 h-1 rounded-full bg-[var(--accent)] flex-shrink-0"></span>
+                      <li key={idx} className="text-sm font-medium text-[var(--text)] flex items-center gap-3 before:content-[''] before:w-2 before:h-2 before:rounded-full before:bg-[#E07B54]/60">
                         {dish.name}
+                        {dish.estimated_count && (
+                          <span className="text-xs text-[var(--text-muted)]/70">({dish.estimated_count} est.)</span>
+                        )}
                       </li>
                     ))
                   ) : (
-                    <li className="text-sm text-[var(--text-muted)] italic">Sin platos principales disponibles</li>
+                    <li className="text-sm text-[var(--text-muted)] italic">Sin sugerencias disponibles</li>
                   )}
                 </ul>
               </div>
 
-              {/* Postres */}
-              <div className="bg-[var(--surface-soft)]/40 rounded-xl p-4 border border-[var(--border)]/50">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-2xl">🍰</span>
+              {/* Desserts */}
+              <div className="bg-[var(--surface-soft)]/40 rounded-2xl border border-[var(--border)] p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-3xl">🍰</span>
                   <div>
-                    <p className="text-xs uppercase tracking-widest font-bold text-[var(--accent)]">Postre</p>
-                    <p className="text-xs text-[var(--text-muted)]">Dulces finales</p>
+                    <p className="text-xs font-bold text-[#E07B54] uppercase tracking-widest">Postre</p>
+                    <p className="text-sm text-[var(--text-muted)]">Dulces finales</p>
                   </div>
                 </div>
-                <ul className="space-y-1.5 pl-8">
+                <ul className="space-y-2 pl-10">
                   {menuPredictions.desserts.length > 0 ? (
                     menuPredictions.desserts.map((dish, idx) => (
-                      <li key={idx} className="text-xs font-medium text-[var(--text)] flex items-center gap-2">
-                        <span className="w-1 h-1 rounded-full bg-[var(--accent)] flex-shrink-0"></span>
+                      <li key={idx} className="text-sm font-medium text-[var(--text)] flex items-center gap-3 before:content-[''] before:w-2 before:h-2 before:rounded-full before:bg-[#E07B54]/60">
                         {dish.name}
+                        {dish.estimated_count && (
+                          <span className="text-xs text-[var(--text-muted)]/70">({dish.estimated_count} est.)</span>
+                        )}
                       </li>
                     ))
                   ) : (
-                    <li className="text-sm text-[var(--text-muted)] italic">Sin postres disponibles</li>
+                    <li className="text-sm text-[var(--text-muted)] italic">Sin sugerencias disponibles</li>
                   )}
                 </ul>
               </div>
             </div>
 
-            {/* Footer con precio */}
-            <div className="bg-gradient-to-r from-[var(--accent)]/5 to-[var(--accent)]/10 border-t-2 border-[var(--accent)]/20 px-6 py-3 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Precio del menú</p>
-                <p className="text-xs font-semibold text-[var(--text)] mt-0.5">Menú completo por persona</p>
+            {/* Footer - Menu Price */}
+            <div className="bg-gradient-to-r from-[#E07B54]/10 to-[#E07B54]/5 border-t border-[var(--border)] px-8 py-6">
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">Precio del menú</p>
+                  <p className="text-sm text-[var(--text)] mt-1">Menú completo por persona</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-black text-[#E07B54]">€{(restaurant?.menu_price ?? 20).toFixed(2)}</p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold text-[var(--accent)]">€{(restaurant?.menu_price ?? 20).toFixed(2)}</p>
+            </div>
+          </div>
+
+          {/* Help Section */}
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)]/40 p-8">
+            <div className="flex gap-4">
+              <span className="text-2xl flex-shrink-0">💡</span>
+              <div className="space-y-3">
+                <p className="text-sm font-bold text-[var(--text)]">¿Cómo funciona el sistema de predicciones?</p>
+                <ul className="space-y-2 text-sm text-[var(--text-muted)]">
+                  <li className="flex gap-3">
+                    <span className="text-[#E07B54] font-bold flex-shrink-0">•</span>
+                    <span>Las predicciones se generan basándose en características de tu restaurante, clima local y patrones históricos</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-[#E07B54] font-bold flex-shrink-0">•</span>
+                    <span>Selecciona fechas futuras para ver estimaciones de demanda durante la semana</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-[#E07B54] font-bold flex-shrink-0">•</span>
+                    <span>Usa estas recomendaciones para optimizar tu oferta y reducir desperdicios de comida</span>
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
         </div>
       )}
-
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-soft)]/30 p-4 text-xs text-[var(--text-muted)]">
-        <p className="font-semibold text-[var(--text)]">💡 ¿Cómo funciona?</p>
-        <ul className="mt-2 space-y-1 pl-4">
-          <li>• El menú sugerido se calcula basándose en condiciones del restaurante y clima del día</li>
-          <li>• Selecciona una fecha futura para ver predicciones de demanda</li>
-          <li>• Las alternativas te permiten diversificar si prefieres cambiar algunos platos</li>
-        </ul>
-      </div>
     </section>
   )
 }

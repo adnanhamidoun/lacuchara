@@ -170,7 +170,7 @@ export const heroCtaVariants = {
  * Viewport settings for scroll-triggered animations
  */
 export const scrollViewportSettings = {
-  once: true,
+  once: false,
   amount: 0.2,
 }
 
@@ -178,7 +178,7 @@ export const scrollViewportSettings = {
  * Viewport settings with higher threshold (for hero-like sections)
  */
 export const scrollViewportSettingsHigh = {
-  once: true,
+  once: false,
   amount: 0.5,
 }
 

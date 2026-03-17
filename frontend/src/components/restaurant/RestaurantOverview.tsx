@@ -1,5 +1,6 @@
 import { Wifi, MapPin, Wine, Star, Users, Clock, Utensils } from 'lucide-react'
 import type { RestaurantDetail } from '../../types/domain'
+import { formatTerraceType } from '../../utils/formatTerraceType'
 
 interface RestaurantOverviewProps {
   restaurant: RestaurantDetail
@@ -44,7 +45,9 @@ export function RestaurantOverview({ restaurant }: RestaurantOverviewProps) {
         <div className="mt-6 flex flex-wrap gap-3">
           {restaurant.has_wifi && <HighlightChip icon={Wifi} label="WiFi Disponible" />}
           {restaurant.opens_weekends && <HighlightChip icon={MapPin} label="Abierto Fines de Semana" />}
-          {restaurant.terrace_setup_type && <HighlightChip icon={() => <span>🏡</span>} label="Con Terraza" />}
+          {restaurant.terrace_setup_type && formatTerraceType(restaurant.terrace_setup_type) !== 'No disponible' && (
+            <HighlightChip icon={() => <span>🏡</span>} label="Con Terraza" />
+          )}
           {restaurant.cuisine_type && (
             <HighlightChip icon={Utensils} label={`Cocina ${restaurant.cuisine_type}`} />
           )}

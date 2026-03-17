@@ -404,382 +404,571 @@ export default function RestaurantPanelView() {
   }
 
   return (
-    <section className="space-y-5">
-      <div>
-        <h2 className="text-2xl font-bold text-[var(--text)]">Panel del restaurante</h2>
-        <p className="text-sm text-[var(--text-muted)]">
-          Gestiona tu ficha pública y el Menú del Día directamente sobre la base de datos.
+    <section className="space-y-8">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold text-[var(--text)]">Panel de Restaurante</h1>
+        <p className="text-base text-[var(--text-muted)]">
+          Gestiona tu ficha pública, menú del día y predicciones de IA.
         </p>
       </div>
 
-      <div className="flex border-b border-[var(--border)] mb-4">
+      <div className="flex gap-1 border-b border-[var(--border)]">
         <button
           onClick={() => setActiveTab('perfil')}
-          className={`pb-2 px-4 text-sm font-semibold transition-colors ${activeTab === 'perfil' ? 'border-b-2 border-[#E07B54] text-[#E07B54]' : 'text-[var(--text-muted)]'}`}
+          className={`px-6 py-3 text-sm font-semibold transition-all duration-200 relative ${
+            activeTab === 'perfil'
+              ? 'text-[#E07B54] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#E07B54]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+          }`}
         >
           Perfil e Imagen
         </button>
         <button
           onClick={() => setActiveTab('ocr')}
-          className={`pb-2 px-4 text-sm font-semibold transition-colors ${activeTab === 'ocr' ? 'border-b-2 border-[#E07B54] text-[#E07B54]' : 'text-[var(--text-muted)]'}`}
+          className={`px-6 py-3 text-sm font-semibold transition-all duration-200 relative ${
+            activeTab === 'ocr'
+              ? 'text-[#E07B54] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#E07B54]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+          }`}
         >
           Menú del Día (IA OCR)
         </button>
         <button
           onClick={() => setActiveTab('predicciones')}
-          className={`pb-2 px-4 text-sm font-semibold transition-colors ${activeTab === 'predicciones' ? 'border-b-2 border-[#E07B54] text-[#E07B54]' : 'text-[var(--text-muted)]'}`}
+          className={`px-6 py-3 text-sm font-semibold transition-all duration-200 relative ${
+            activeTab === 'predicciones'
+              ? 'text-[#E07B54] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#E07B54]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+          }`}
         >
           Predicciones de Menú
         </button>
       </div>
 
       {activeTab === 'perfil' && (
-        <div className="grid gap-5 xl:grid-cols-[1.4fr_0.9fr]">
-          <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
-            <div>
-              <h3 className="font-semibold text-[var(--text)]">Ficha del restaurante</h3>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                Los cambios se guardan en dim_restaurants. Si dejas un campo opcional vacío, se limpia en base de datos.
-              </p>
-            </div>
-
-            {profileLoading ? <p className="text-sm text-[var(--text-muted)]">Cargando datos del restaurante...</p> : null}
-            {profileMessage ? <p className="rounded-lg bg-[#4CAF50]/15 p-3 text-sm text-[#2E7D32]">{profileMessage}</p> : null}
-            {profileError ? <p className="rounded-lg bg-[#E53935]/10 p-3 text-sm text-[#E53935]">{profileError}</p> : null}
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">Nombre</label>
-                <input
-                  value={profileForm.name}
-                  onChange={(event) => setProfileField('name', event.target.value)}
-                  className={fieldClassName()}
-                  placeholder="Nombre del restaurante"
-                />
+        <div className="grid gap-8 xl:grid-cols-[1.3fr_1fr]">
+          {/* Left Column: Form */}
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-lg">
+              <div className="mb-6">
+                <h3 className="text-xl font-bold text-[var(--text)]">Ficha del restaurante</h3>
+                <p className="text-sm text-[var(--text-muted)] mt-1">
+                  Información pública de tu restaurante para los algoritmos de predicción.
+                </p>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">Capacidad</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={profileForm.capacity_limit}
-                  onChange={(event) => setProfileField('capacity_limit', event.target.value)}
-                  className={fieldClassName()}
-                  placeholder="Ej: 80"
-                />
+              {profileLoading ? (
+                <p className="text-sm text-[var(--text-muted)]">Cargando datos del restaurante...</p>
+              ) : null}
+              
+              {profileMessage ? (
+                <div className="mb-5 rounded-xl bg-[#4CAF50]/10 border border-[#4CAF50]/30 p-4 text-sm text-[#2E7D32]">
+                  <div className="flex gap-3">
+                    <span className="text-lg">✓</span>
+                    <span>{profileMessage}</span>
+                  </div>
+                </div>
+              ) : null}
+              
+              {profileError ? (
+                <div className="mb-5 rounded-xl bg-[#E53935]/10 border border-[#E53935]/30 p-4 text-sm text-[#E53935]">
+                  <div className="flex gap-3">
+                    <span className="text-lg">✕</span>
+                    <span>{profileError}</span>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="space-y-6">
+                {/* Name - Full Width */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-[var(--text)]">Nombre</label>
+                  <input
+                    value={profileForm.name}
+                    onChange={(event) => setProfileField('name', event.target.value)}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/50 outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                    placeholder="Ej: Restaurante La Cocina"
+                  />
+                </div>
+
+                {/* Grid 2 Columns */}
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[var(--text)]">Capacidad</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={profileForm.capacity_limit}
+                      onChange={(event) => setProfileField('capacity_limit', event.target.value)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/50 outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                      placeholder="Ej: 80"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[var(--text)]">Mesas</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={profileForm.table_count}
+                      onChange={(event) => setProfileField('table_count', event.target.value)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/50 outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                      placeholder="Ej: 16"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[var(--text)]">Servicio mínimo</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={profileForm.min_service_duration}
+                      onChange={(event) => setProfileField('min_service_duration', event.target.value)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/50 outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                      placeholder="Ej: 45 min"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[var(--text)]">Precio menú</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={profileForm.menu_price}
+                      onChange={(event) => setProfileField('menu_price', event.target.value)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/50 outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                      placeholder="Ej: 14.50 €"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[var(--text)]">Distancia a oficinas</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={profileForm.dist_office_towers}
+                      onChange={(event) => setProfileField('dist_office_towers', event.target.value)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/50 outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                      placeholder="Ej: 250 m"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[var(--text)]">Valoración Google</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={5}
+                      step="0.1"
+                      value={profileForm.google_rating}
+                      onChange={(event) => setProfileField('google_rating', event.target.value)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/50 outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                      placeholder="Ej: 4.3 ⭐"
+                    />
+                  </div>
+                </div>
+
+                {/* Grid 2 Columns - Selects */}
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[var(--text)]">Tipo de cocina</label>
+                    <select
+                      value={profileForm.cuisine_type}
+                      onChange={(event) => setProfileField('cuisine_type', event.target.value as CuisineOption)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                    >
+                      {CUISINE_OPTIONS.map((option) => (
+                        <option key={option.value || 'empty'} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[var(--text)]">Segmento</label>
+                    <select
+                      value={profileForm.restaurant_segment}
+                      onChange={(event) => setProfileField('restaurant_segment', event.target.value as SegmentOption)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                    >
+                      {SEGMENT_OPTIONS.map((option) => (
+                        <option key={option.value || 'empty'} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[var(--text)]">Terraza</label>
+                    <select
+                      value={profileForm.terrace_setup_type}
+                      onChange={(event) => setProfileField('terrace_setup_type', event.target.value as TerraceOption)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                    >
+                      {TERRACE_OPTIONS.map((option) => (
+                        <option key={option.value || 'empty'} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[var(--text)]">Abre fines de semana</label>
+                    <select
+                      value={profileForm.opens_weekends}
+                      onChange={(event) => setProfileField('opens_weekends', event.target.value as NullableBooleanValue)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                    >
+                      {BOOLEAN_OPTIONS.map((option) => (
+                        <option key={option.value || 'empty'} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[var(--text)]">WiFi</label>
+                    <select
+                      value={profileForm.has_wifi}
+                      onChange={(event) => setProfileField('has_wifi', event.target.value as NullableBooleanValue)}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20"
+                    >
+                      {BOOLEAN_OPTIONS.map((option) => (
+                        <option key={option.value || 'empty'} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">Mesas</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={profileForm.table_count}
-                  onChange={(event) => setProfileField('table_count', event.target.value)}
-                  className={fieldClassName()}
-                  placeholder="Ej: 16"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">Servicio mínimo (min)</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={profileForm.min_service_duration}
-                  onChange={(event) => setProfileField('min_service_duration', event.target.value)}
-                  className={fieldClassName()}
-                  placeholder="Ej: 45"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">Precio menú</label>
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={profileForm.menu_price}
-                  onChange={(event) => setProfileField('menu_price', event.target.value)}
-                  className={fieldClassName()}
-                  placeholder="Ej: 14.50"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">Distancia a oficinas (m)</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={profileForm.dist_office_towers}
-                  onChange={(event) => setProfileField('dist_office_towers', event.target.value)}
-                  className={fieldClassName()}
-                  placeholder="Ej: 250"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">Valoración Google</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={5}
-                  step="0.1"
-                  value={profileForm.google_rating}
-                  onChange={(event) => setProfileField('google_rating', event.target.value)}
-                  className={fieldClassName()}
-                  placeholder="Ej: 4.3"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">Tipo de cocina</label>
-                <select
-                  value={profileForm.cuisine_type}
-                  onChange={(event) => setProfileField('cuisine_type', event.target.value as CuisineOption)}
-                  className={fieldClassName()}
+              {/* Action Buttons */}
+              <div className="flex flex-wrap justify-end gap-3 border-t border-[var(--border)] pt-6 mt-6">
+                <button
+                  type="button"
+                  onClick={handleResetProfile}
+                  className="rounded-xl border border-[var(--border)] px-6 py-2.5 text-sm font-semibold text-[var(--text)] transition-all hover:bg-[var(--surface-soft)]"
                 >
-                  {CUISINE_OPTIONS.map((option) => (
-                    <option key={option.value || 'empty'} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">Segmento</label>
-                <select
-                  value={profileForm.restaurant_segment}
-                  onChange={(event) => setProfileField('restaurant_segment', event.target.value as SegmentOption)}
-                  className={fieldClassName()}
+                  Deshacer
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  disabled={profileLoading || profileSaving}
+                  className="rounded-xl bg-[#E07B54] px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#E07B54]/90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {SEGMENT_OPTIONS.map((option) => (
-                    <option key={option.value || 'empty'} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  {profileSaving ? 'Guardando...' : 'Guardar cambios'}
+                </button>
               </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">Terraza</label>
-                <select
-                  value={profileForm.terrace_setup_type}
-                  onChange={(event) => setProfileField('terrace_setup_type', event.target.value as TerraceOption)}
-                  className={fieldClassName()}
-                >
-                  {TERRACE_OPTIONS.map((option) => (
-                    <option key={option.value || 'empty'} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">Abre fines de semana</label>
-                <select
-                  value={profileForm.opens_weekends}
-                  onChange={(event) => setProfileField('opens_weekends', event.target.value as NullableBooleanValue)}
-                  className={fieldClassName()}
-                >
-                  {BOOLEAN_OPTIONS.map((option) => (
-                    <option key={option.value || 'empty'} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)]">WiFi</label>
-                <select
-                  value={profileForm.has_wifi}
-                  onChange={(event) => setProfileField('has_wifi', event.target.value as NullableBooleanValue)}
-                  className={fieldClassName()}
-                >
-                  {BOOLEAN_OPTIONS.map((option) => (
-                    <option key={option.value || 'empty'} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap justify-end gap-3 border-t border-[var(--border)] pt-4">
-              <button
-                type="button"
-                onClick={handleResetProfile}
-                className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-soft)]"
-              >
-                Deshacer cambios
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveProfile}
-                disabled={profileLoading || profileSaving}
-                className="rounded-lg bg-[#E07B54] px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:brightness-95 disabled:opacity-60"
-              >
-                {profileSaving ? 'Guardando ficha...' : 'Guardar ficha'}
-              </button>
             </div>
           </div>
 
-          <div className="space-y-5">
-            <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
-              <div className="space-y-1">
-                <label className="text-sm font-semibold text-[var(--text)]">Subir imagen del restaurante</label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/jpg"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0]
-                    if (file) {
-                      setSelectedFile(file)
-                      const reader = new FileReader()
-                      reader.onloadend = () => {
-                        setPreviewUrl(reader.result as string)
+          {/* Right Column: Image Upload */}
+          <div className="space-y-6">
+            {/* File Upload Card */}
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-lg">
+              <h3 className="text-lg font-bold text-[var(--text)] mb-1">Imagen del restaurante</h3>
+              <p className="text-sm text-[var(--text-muted)] mb-6">
+                Sube una foto de calidad que represente tu establecimiento.
+              </p>
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Upload Area */}
+                <label className="relative block w-full rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-soft)]/30 p-8 text-center cursor-pointer transition-all hover:border-[#E07B54] hover:bg-[var(--surface-soft)]/60 focus-within:border-[#E07B54] focus-within:ring-2 focus-within:ring-[#E07B54]/20">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/jpg"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0]
+                      if (file) {
+                        setSelectedFile(file)
+                        const reader = new FileReader()
+                        reader.onloadend = () => {
+                          setPreviewUrl(reader.result as string)
+                        }
+                        reader.readAsDataURL(file)
                       }
-                      reader.readAsDataURL(file)
-                    }
-                  }}
-                  className="w-full text-sm mt-1 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#1A1A2E]/5 file:text-[#1A1A2E] hover:file:bg-[#1A1A2E]/10 cursor-pointer text-[var(--text)]"
+                    }}
+                    className="hidden"
+                  />
+                  <div className="space-y-3">
+                    <div className="text-4xl">📸</div>
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text)]">
+                        {selectedFile ? selectedFile.name : 'Arrastra tu imagen aquí'}
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)] mt-1">
+                        {selectedFile ? 'Listo para subir' : 'o haz clic para seleccionar'}
+                      </p>
+                    </div>
+                    {!selectedFile && (
+                      <p className="text-xs text-[var(--text-muted)]/70">JPG, PNG o WebP • Max 10MB</p>
+                    )}
+                  </div>
+                </label>
+
+                {message ? (
+                  <div className="rounded-xl bg-[#4CAF50]/10 border border-[#4CAF50]/30 p-4 text-sm text-[#2E7D32]">
+                    <div className="flex gap-3">
+                      <span>✓</span>
+                      <span>{message}</span>
+                    </div>
+                  </div>
+                ) : null}
+
+                {error ? (
+                  <div className="rounded-xl bg-[#E53935]/10 border border-[#E53935]/30 p-4 text-sm text-[#E53935]">
+                    <div className="flex gap-3">
+                      <span>✕</span>
+                      <span>{error}</span>
+                    </div>
+                  </div>
+                ) : null}
+
+                <button
+                  type="submit"
+                  disabled={loading || !selectedFile}
+                  className="w-full rounded-xl bg-[#E07B54] px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-[#E07B54]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Subiendo...' : 'Confirmar imagen'}
+                </button>
+              </form>
+            </div>
+
+            {/* Preview Card */}
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg overflow-hidden">
+              <p className="text-sm font-semibold text-[var(--text)] mb-4">Vista previa</p>
+              <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--surface-soft)]">
+                <img
+                  src={previewUrl || 'https://placehold.co/400x240?text=Restaurante'}
+                  alt={restaurantDetail?.name || 'Preview'}
+                  className="w-full h-48 object-cover"
                 />
               </div>
-
-              {message ? <p className="rounded-lg bg-[#4CAF50]/15 p-3 text-sm text-[#2E7D32]">{message}</p> : null}
-              {error ? <p className="rounded-lg bg-[#E53935]/10 p-3 text-sm text-[#E53935]">{error}</p> : null}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="rounded-lg bg-[#E07B54] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:brightness-95 disabled:opacity-60"
-              >
-                {loading ? 'Guardando...' : 'Guardar imagen'}
-              </button>
-            </form>
-
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
-              <p className="mb-3 text-sm font-semibold text-[var(--text)]">Vista previa</p>
-              <img
-                src={previewUrl || 'https://placehold.co/400x240?text=Restaurante'}
-                alt={restaurantDetail?.name || 'Preview Restaurante'}
-                className="h-60 w-full rounded-xl object-cover"
-              />
+              <p className="text-xs text-[var(--text-muted)] mt-4">
+                {restaurantDetail?.name && `${restaurantDetail.name} • ${restaurantDetail.cuisine_type}`}
+              </p>
             </div>
           </div>
         </div>
       )}
 
       {activeTab === 'ocr' && (
-        <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-          <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
-            <h3 className="font-semibold text-[var(--text)] mb-2">Paso 1: Sube la foto de tu menú físico</h3>
-            {loadingTodayMenu ? <p className="text-xs text-[var(--text-muted)]">Comprobando menú actual...</p> : null}
-            {!loadingTodayMenu && hasTodayMenu ? (
-              <p className="text-xs text-[var(--text-muted)]">Ya existe un menú de hoy. Si subes OCR, reemplazará los campos para editar.</p>
-            ) : null}
-            <input
-              type="file"
-              accept="image/*,.pdf"
-              onChange={(event) => setMenuFile(event.target.files?.[0] || null)}
-              className="w-full text-sm mt-1 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#1A1A2E]/5 file:text-[#1A1A2E] hover:file:bg-[#1A1A2E]/10 cursor-pointer text-[var(--text)]"
-            />
-            <button
-              onClick={handleOcrUpload}
-              disabled={!menuFile || ocrLoading}
-              className="mt-4 rounded-lg bg-[#1A1A2E] px-4 py-2.5 w-full text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 disabled:opacity-60"
-            >
-              {ocrLoading ? 'Escaneando con IA...' : 'Escanear Platos (OCR)'}
-            </button>
-          </div>
-
-          <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
-            <h3 className="font-semibold text-[var(--text)] mb-2">Paso 2: Revisa y Publica</h3>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-[var(--text-muted)]">Entrantes detectados</label>
-              <textarea
-                value={menuData.starter}
-                onChange={(event) => setMenuData({ ...menuData, starter: event.target.value })}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[#E07B54]"
-                rows={2}
-                placeholder="Ej: Ensalada Mixta; Sopa..."
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-[var(--text-muted)]">Platos Principales detectados</label>
-              <textarea
-                value={menuData.main}
-                onChange={(event) => setMenuData({ ...menuData, main: event.target.value })}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[#E07B54]"
-                rows={2}
-                placeholder="Ej: Entrecot al horno; Paella..."
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-[var(--text-muted)]">Postres detectados</label>
-              <textarea
-                value={menuData.dessert}
-                onChange={(event) => setMenuData({ ...menuData, dessert: event.target.value })}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[#E07B54]"
-                rows={2}
-                placeholder="Ej: Tarta de Queso; Flan..."
-              />
+        <div className="grid gap-8 lg:grid-cols-2">
+          {/* Step 1: Upload */}
+          <div className="space-y-6">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#E07B54] text-white text-sm font-bold">1</span>
+                <h2 className="text-2xl font-bold text-[var(--text)]">Sube tu menú</h2>
+              </div>
+              <p className="text-base text-[var(--text-muted)] mt-2">
+                Fotografía clara de tu menú físico para escanear con IA.
+              </p>
             </div>
 
-            <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]">
-              <input
-                type="checkbox"
-                checked={menuData.includes_drink}
-                onChange={(event) => setMenuData({ ...menuData, includes_drink: event.target.checked })}
-                className="h-4 w-4 rounded border-[var(--border)] accent-[#E07B54]"
-              />
-              Incluye bebida
-            </label>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-lg">
+              {loadingTodayMenu ? (
+                <p className="text-center text-sm text-[var(--text-muted)] py-8">Comprobando menú actual...</p>
+              ) : !loadingTodayMenu && hasTodayMenu ? (
+                <div className="mb-6 rounded-xl bg-[#FF9800]/10 border border-[#FF9800]/30 p-4 text-sm text-[#FF9800]">
+                  <div className="flex gap-3">
+                    <span>ℹ️</span>
+                    <span>Ya existe un menú de hoy. Si subes uno nuevo, reemplazará los datos.</span>
+                  </div>
+                </div>
+              ) : null}
 
-            {ocrMessage ? <p className="text-sm font-semibold text-[#2E7D32] bg-[#4CAF50]/15 p-2 rounded-lg">{ocrMessage}</p> : null}
-            {ocrError ? <p className="text-sm font-semibold text-[#E53935] bg-[#E53935]/15 p-2 rounded-lg">{ocrError}</p> : null}
-            {success ? <p className="text-sm font-semibold text-[#2E7D32] bg-[#4CAF50]/15 p-2 rounded-lg">{success}</p> : null}
-            {error ? <p className="text-sm font-semibold text-[#E53935] bg-[#E53935]/15 p-2 rounded-lg">{error}</p> : null}
+              {/* Custom Upload Zone */}
+              <label className="relative block cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={(event) => setMenuFile(event.target.files?.[0] || null)}
+                  className="hidden"
+                />
+                <div className="rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-soft)]/30 p-12 text-center transition-all hover:border-[#E07B54] hover:bg-[var(--surface-soft)]/60">
+                  <div className="space-y-4">
+                    <div className="text-5xl inline-block">📸</div>
+                    <div>
+                      <p className="text-lg font-semibold text-[var(--text)]">
+                        {menuFile ? menuFile.name : 'Arrastra tu imagen aquí'}
+                      </p>
+                      <p className="text-sm text-[var(--text-muted)] mt-2">
+                        {menuFile ? 'Listo para procesar' : 'o haz clic para seleccionar'}
+                      </p>
+                    </div>
+                    {!menuFile && (
+                      <p className="text-xs text-[var(--text-muted)]/70 flex justify-center gap-2">
+                        <span>📷 JPG</span>
+                        <span>•</span>
+                        <span>🖼️ PNG</span>
+                        <span>•</span>
+                        <span>📄 PDF</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </label>
 
-            <div className="flex justify-end pt-4 space-x-4 border-t border-gray-100">
               <button
-                onClick={() => {
-                  setMenuFile(null)
-                  setMenuData({ starter: '', main: '', dessert: '', includes_drink: false })
-                }}
-                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                onClick={handleOcrUpload}
+                disabled={!menuFile || ocrLoading}
+                className="w-full mt-6 rounded-xl bg-[#E07B54] px-6 py-3.5 text-sm font-semibold text-white transition-all hover:bg-[#E07B54]/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveMenu}
-                disabled={isSaving}
-                className={`px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-2 ${
-                  isSaving ? 'opacity-70 cursor-not-allowed' : ''
-                }`}
-              >
-                {isSaving ? (
+                {ocrLoading ? (
                   <>
-                    <svg className="w-5 h-5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v16a8 8 0 01-8-8z"></path>
                     </svg>
-                    Publicando...
+                    Escaneando...
                   </>
                 ) : (
                   <>
-                    <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M12 5l7 7-7 7"></path>
-                    </svg>
-                    Publicar Menú
+                    <span>✨</span>
+                    Escanear menú (OCR)
                   </>
                 )}
               </button>
+            </div>
+          </div>
+
+          {/* Step 2: Review & Publish */}
+          <div className="space-y-6">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--border)] text-[var(--text)] text-sm font-bold">2</span>
+                <h2 className="text-2xl font-bold text-[var(--text)]">Revisa y publica</h2>
+              </div>
+              <p className="text-base text-[var(--text-muted)] mt-2">
+                Ajusta los detalles antes de publicar el menú.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-lg space-y-6">
+              {/* Starters */}
+              <div className="space-y-3">
+                <label className="block text-sm font-bold text-[var(--text)]">🥗 Entrantes</label>
+                <textarea
+                  value={menuData.starter}
+                  onChange={(event) => setMenuData({ ...menuData, starter: event.target.value })}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20 resize-none"
+                  rows={2}
+                  placeholder="Ej: Ensalada César; Tabla de quesos; Camarones al ajillo"
+                />
+              </div>
+
+              {/* Mains */}
+              <div className="space-y-3">
+                <label className="block text-sm font-bold text-[var(--text)]">🍖 Plato Principal</label>
+                <textarea
+                  value={menuData.main}
+                  onChange={(event) => setMenuData({ ...menuData, main: event.target.value })}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20 resize-none"
+                  rows={2}
+                  placeholder="Ej: Entrecot 300gr; Lubina a la sal; Sepia a la plancha"
+                />
+              </div>
+
+              {/* Desserts */}
+              <div className="space-y-3">
+                <label className="block text-sm font-bold text-[var(--text)]">🍰 Postre</label>
+                <textarea
+                  value={menuData.dessert}
+                  onChange={(event) => setMenuData({ ...menuData, dessert: event.target.value })}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--text)] outline-none transition-all focus:border-[#E07B54] focus:ring-1 focus:ring-[#E07B54]/20 resize-none"
+                  rows={2}
+                  placeholder="Ej: Tarta de queso; Crema catalana; Fruta fresca"
+                />
+              </div>
+
+              {/* Drink Checkbox */}
+              <label className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]/40 px-4 py-3 cursor-pointer hover:bg-[var(--surface-soft)]/60 transition-all">
+                <input
+                  type="checkbox"
+                  checked={menuData.includes_drink}
+                  onChange={(event) => setMenuData({ ...menuData, includes_drink: event.target.checked })}
+                  className="w-5 h-5 rounded accent-[#E07B54] cursor-pointer"
+                />
+                <span className="text-sm font-semibold text-[var(--text)]">🍷 Incluye bebida</span>
+              </label>
+
+              {/* Messages */}
+              {ocrMessage ? (
+                <div className="rounded-xl bg-[#4CAF50]/10 border border-[#4CAF50]/30 p-4 text-sm text-[#2E7D32]">
+                  <div className="flex gap-3">
+                    <span>✓</span>
+                    <span>{ocrMessage}</span>
+                  </div>
+                </div>
+              ) : null}
+
+              {ocrError ? (
+                <div className="rounded-xl bg-[#E53935]/10 border border-[#E53935]/30 p-4 text-sm text-[#E53935]">
+                  <div className="flex gap-3">
+                    <span>✕</span>
+                    <span>{ocrError}</span>
+                  </div>
+                </div>
+              ) : null}
+
+              {success ? (
+                <div className="rounded-xl bg-[#4CAF50]/10 border border-[#4CAF50]/30 p-4 text-sm text-[#2E7D32]">
+                  <div className="flex gap-3">
+                    <span>✓</span>
+                    <span>{success}</span>
+                  </div>
+                </div>
+              ) : null}
+
+              {error ? (
+                <div className="rounded-xl bg-[#E53935]/10 border border-[#E53935]/30 p-4 text-sm text-[#E53935]">
+                  <div className="flex gap-3">
+                    <span>✕</span>
+                    <span>{error}</span>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t border-[var(--border)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuFile(null)
+                    setMenuData({ starter: '', main: '', dessert: '', includes_drink: false })
+                    setOcrMessage('')
+                    setOcrError('')
+                  }}
+                  className="flex-1 rounded-xl border border-[var(--border)] px-6 py-2.5 text-sm font-semibold text-[var(--text)] transition-all hover:bg-[var(--surface-soft)]"
+                >
+                  Limpiar
+                </button>
+                <button
+                  onClick={handleSaveMenu}
+                  disabled={isSaving}
+                  className="flex-1 rounded-xl bg-[#E07B54] px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#E07B54]/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isSaving ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v16a8 8 0 01-8-8z"></path>
+                      </svg>
+                    </>
+                  ) : (
+                    <span>✓</span>
+                  )}
+                  {isSaving ? 'Publicando...' : 'Publicar menú'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

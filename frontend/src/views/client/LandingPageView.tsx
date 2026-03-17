@@ -1,5 +1,5 @@
 import { useState, useMemo, memo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Sparkles, Building2, Briefcase, Users, Search } from 'lucide-react'
 import { useRestaurants } from '../../hooks/useRestaurants'
 import type { RestaurantDetail } from '../../types/domain'
@@ -111,8 +111,25 @@ const StatsSection = memo(function StatsSection({ totalRestaurants }: { totalRes
 })
 
 export default function LandingPageView() {
+  const navigate = useNavigate()
   const { restaurants } = useRestaurants()
   const [search, setSearch] = useState('')
+
+  // Mapear labels de shortcuts a parámetros de filtro
+  const mapShortcutToParams = (shortcutLabel: string): Record<string, string> => {
+    switch (shortcutLabel) {
+      case 'Gourmet':
+        return { segment: 'gourmet' }
+      case 'Negocios':
+        return { segment: 'business' }
+      case 'Terraza':
+        return { terrace: 'true' }
+      case 'Cerca de Azca':
+        return { zone: 'azca' }
+      default:
+        return {}
+    }
+  }
 
   // Seleccionar 4 restaurantes destacados aleatoriamente
   const featuredRestaurants = useMemo(() => {
@@ -123,9 +140,22 @@ export default function LandingPageView() {
   }, [restaurants])
 
   const handleSearch = () => {
-    // El usuario será redirigido a /restaurantes con el término de búsqueda
-    // Esto se puede mejorar con URL params más adelante
-    window.location.href = `/restaurantes?search=${encodeURIComponent(search)}`
+    const params = new URLSearchParams()
+    if (search.trim()) {
+      params.append('q', search)
+    }
+    const queryString = params.toString()
+    navigate(`/restaurantes${queryString ? `?${queryString}` : ''}`)
+  }
+
+  const handleShortcutClick = (shortcutLabel: string) => {
+    const params = new URLSearchParams()
+    const shortcutParams = mapShortcutToParams(shortcutLabel)
+    Object.entries(shortcutParams).forEach(([key, value]) => {
+      params.append(key, value)
+    })
+    const queryString = params.toString()
+    navigate(`/restaurantes${queryString ? `?${queryString}` : ''}`)
   }
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -141,6 +171,7 @@ export default function LandingPageView() {
         search={search}
         setSearch={setSearch}
         onSearch={handleSearch}
+        onShortcutClick={handleShortcutClick}
         onKeyPress={handleKeyPress}
       />
 

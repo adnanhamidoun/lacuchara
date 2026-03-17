@@ -1,4 +1,4 @@
-import { Building2, Check, Clock, Trash2, Users, UtensilsCrossed, Camera } from 'lucide-react'
+import { Building2, Check, Clock, Trash2, Users, UtensilsCrossed, Camera, Shield } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   approveInscripcion,
@@ -173,25 +173,26 @@ function RestaurantsList({
   const { session } = useAuth()
 
   useEffect(() => {
+    console.log('[RestaurantsList] Received restaurants:', restaurants)
     restaurants.forEach((rest) => {
       const loadImage = async () => {
         try {
-          console.log(`[AdminDashboard] Loading image for restaurant ${rest.restaurant_id}`)
+          console.log(`[RestaurantsList] Loading image for restaurant ${rest.restaurant_id}: ${rest.name}`)
           const response = await fetch(`/get-restaurant-image/${rest.restaurant_id}`)
-          console.log(`[AdminDashboard] Response status: ${response.status}`)
+          console.log(`[RestaurantsList] Response status: ${response.status}`)
           
           if (response.ok) {
             const data = await response.json()
-            console.log(`[AdminDashboard] Image URL: ${data.image_url}`)
+            console.log(`[RestaurantsList] Image URL: ${data.image_url}`)
             setImageUrls((prev) => ({
               ...prev,
               [rest.restaurant_id]: data.image_url,
             }))
           } else {
-            console.error(`[AdminDashboard] Failed: ${response.status}`)
+            console.error(`[RestaurantsList] Failed: ${response.status}`)
           }
         } catch (error) {
-          console.error(`[AdminDashboard] Error:`, error)
+          console.error(`[RestaurantsList] Error:`, error)
         }
       }
 
@@ -202,6 +203,11 @@ function RestaurantsList({
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {restaurants.map((rest) => {
+        console.log(`[RestaurantsList Card] Rendering ${rest.name}:`, {
+          cuisine_type: rest.cuisine_type,
+          capacity_limit: rest.capacity_limit,
+          restaurant_segment: rest.restaurant_segment,
+        })
         const imageUrl = imageUrls[rest.restaurant_id] || ''
         const initials = rest.name
           .split(' ')
@@ -276,9 +282,10 @@ export default function AdminDashboardView() {
       setPending(allInscripciones.filter((i: Inscripcion) => i.estado_inscripcion?.toLowerCase() === 'pendiente'))
       setHistory(allInscripciones.filter((i: Inscripcion) => i.estado_inscripcion?.toLowerCase() !== 'pendiente'))
       
-      const restResponse = await fetch('http://localhost:8000/restaurants')
+      const restResponse = await fetch('http://localhost:8000/restaurants/details')
       if (restResponse.ok) {
         const rData = await restResponse.json()
+        console.log('[AdminDashboard] Fetched restaurant details:', rData.restaurants)
         setActivos(rData.restaurants || [])
       }
 
@@ -407,13 +414,46 @@ export default function AdminDashboardView() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <div className="mb-8 flex items-center gap-4">
-        <div className="h-16 w-16 overflow-hidden rounded-2xl border-2 border-[#E07B54] shadow-lg flex-shrink-0">
-          <img src="https://placehold.co/100x100?text=Logo" alt="Logo" className="h-full w-full object-cover" />
-        </div>
-        <div>
+      {/* Header Premium con Avatar del Admin */}
+      <div className="mb-12 flex items-start gap-6">
+        {/* Avatar Premium del Admin en lugar del Logo */}
+        {session && (
+          <div className="relative h-20 w-20 flex-shrink-0">
+            {/* Avatar con efecto real y corona */}
+            <div className="h-full w-full overflow-hidden rounded-2xl border-3 border-[#E07B54] shadow-lg bg-gradient-to-br from-[#E07B54] via-[#D88B5A] to-[#D96D3D] flex items-center justify-center relative group">
+              {/* Patrón oro/textura */}
+              <div className="absolute inset-0 opacity-20" style={{
+                backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,.1) 2px, rgba(255,255,255,.1) 4px)'
+              }} />
+              
+              {/* Rey emoji */}
+              <div className="text-5xl">🤴</div>
+            </div>
+            
+            {/* Status indicator - Online */}
+            <div className="absolute bottom-0 right-0 h-5 w-5 rounded-full border-3 border-white bg-green-500 shadow-lg" />
+            
+            {/* Tooltip on hover */}
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <div className="bg-[var(--surface)] text-[var(--text)] text-xs font-semibold px-2 py-1 rounded whitespace-nowrap border border-[var(--border)] shadow-lg">
+                Admin Royal
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Información del Dashboard */}
+        <div className="flex-1">
           <h1 className="text-3xl font-bold text-[var(--text)]">Dashboard Administrativo</h1>
           <p className="mt-2 text-[var(--text-muted)]">Control central de restaurantes y menús</p>
+          {session && (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#E07B54]/20 px-3 py-1 text-xs font-semibold text-[#E07B54]">
+                👑 {session.role === 'admin' ? 'Administrador Royal' : 'Propietario'}
+              </span>
+              <span className="text-xs text-[var(--text-muted)]">{session.email}</span>
+            </div>
+          )}
         </div>
       </div>
 
