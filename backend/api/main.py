@@ -1347,10 +1347,15 @@ async def startup_event():
             "❌ Modelo no encontrado. Rutas candidatas: %s",
             "azca-menus-model.pkl, azca-secondary-menus-model.pkl, AzcaMenuModel.pkl",
         )
-        raise
+        # No re-lanzar para permitir que el servidor inicie
+        app.state.model = None
+        logger.warning("⚠️ Servidor iniciará sin modelo de predicción")
     except Exception as model_error:
         logger.error(f"❌ Error cargando modelo: {str(model_error)}", exc_info=True)
-        raise
+        # No re-lanzar para permitir que el servidor inicie sin modelo
+        # Los endpoints de imagen no necesitan el modelo
+        app.state.model = None
+        logger.warning("⚠️ Servidor iniciará sin modelo de predicción")
     
     # 6. Inicializar caché en memoria (clima y calendario)
     # 6. Inicializar caché en memoria (clima y calendario)
@@ -1358,8 +1363,7 @@ async def startup_event():
         app.state.cache = CacheManager(ttl_minutes=20)
         logger.info(f"✅ Caché en memoria inicializado")
     except Exception as cache_error:
-        logger.error(f"❌ Error inicializando caché: {str(cache_error)}", exc_info=True)
-        raise
+        logger.warning(f"⚠️ Error inicializando caché (no crítico): {str(cache_error)}")
     
     logger.info("🎯 Aplicación lista para servir predicciones")
 
@@ -3336,9 +3340,8 @@ async def post_upload_restaurant_image(
         if len(file_content) > 5 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="Archivo demasiado grande (máx 5MB)")
         
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        ext = Path(file.filename or "photo").suffix or ".jpg"
-        blob_filename = f"photo_{timestamp}{ext}"
+        # Nombre del blob: res_{restaurant_id}.jpg
+        blob_filename = f"res_{restaurant_id}.jpg"
         
         blob_manager = get_blob_manager()
         blob_name = blob_manager.upload_restaurant_image(
