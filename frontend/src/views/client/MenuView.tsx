@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { RestaurantDetail } from '../../types/domain'
-import { RestaurantHero, RestaurantSpecCard, RestaurantOverview, RestaurantMenuPreviewCard } from '../../components/restaurant'
+import { RestaurantHero, RestaurantSpecCard, RestaurantOverview, RestaurantMenuPreviewCard, RestaurantMap } from '../../components/restaurant'
 import { FadeUpSection } from '../../components/motion'
 
 type TodayMenuResponse = {
@@ -161,7 +161,12 @@ export default function MenuView() {
             {/* Right Column: Specifications (fixed minimum width) */}
             <div>
               <FadeUpSection>
-                <RestaurantSpecCard restaurant={restaurant} />
+                <RestaurantMap restaurant={restaurant} />
+              </FadeUpSection>
+              <FadeUpSection>
+                <div className="mt-6">
+                  <RestaurantSpecCard restaurant={restaurant} />
+                </div>
               </FadeUpSection>
             </div>
           </div>

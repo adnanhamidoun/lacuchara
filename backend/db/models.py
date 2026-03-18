@@ -73,6 +73,9 @@ class Restaurant(Base):
     password_hash = Column(String(255), nullable=True)
     image_url = Column(String(500), nullable=True)
     image_data = Column(LargeBinary, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+
     def __repr__(self):
         return f"<Restaurant(id={self.restaurant_id}, name='{self.name}')>"
 
