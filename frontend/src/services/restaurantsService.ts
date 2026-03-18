@@ -59,9 +59,38 @@ export async function deleteRestaurant(restaurantId: number, token: string): Pro
     headers: authHeaders(token),
   })
 
-  if (!response.ok) {
-    throw new Error('No se pudo eliminar el restaurante.')
+  if (response.ok) {
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      return { success: true }
+    }
+
+    const contentType = response.headers.get('content-type') ?? ''
+    if (!contentType.includes('application/json')) {
+      return { success: true }
+    }
+
+    try {
+      return await response.json()
+    } catch {
+      return { success: true }
+    }
   }
 
-  return response.json()
+  let errorMessage = 'No se pudo eliminar el restaurante.'
+  try {
+    const payload = await response.json()
+    if (payload?.detail) {
+      if (typeof payload.detail === 'string') {
+        errorMessage = payload.detail
+      } else if (Array.isArray(payload.detail)) {
+        errorMessage = payload.detail
+          .map((item: any) => item?.msg || JSON.stringify(item))
+          .join(' | ')
+      }
+    }
+  } catch {
+    // noop
+  }
+
+  throw new Error(errorMessage)
 }

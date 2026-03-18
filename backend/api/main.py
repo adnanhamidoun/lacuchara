@@ -66,6 +66,7 @@ from ..db import (
     FactPredictionLog,
     Inscripcion,
     User,
+    RestaurantRating,
     DishRating,
     SEGMENT_OPTIONS,
     TERRACE_OPTIONS,
@@ -2031,6 +2032,27 @@ async def delete_restaurant_endpoint(
         )
 
     try:
+        # Limpiar datos dependientes para evitar violaciones de FK (NO_ACTION)
+        menu_ids = [
+            int(row[0])
+            for row in db.query(FactMenus.menu_id)
+            .filter(FactMenus.restaurant_id == restaurant_id)
+            .all()
+        ]
+
+        if menu_ids:
+            db.query(FactMenuItems).filter(FactMenuItems.menu_id.in_(menu_ids)).delete(synchronize_session=False)
+
+        db.query(FactMenus).filter(FactMenus.restaurant_id == restaurant_id).delete(synchronize_session=False)
+        db.query(FactServices).filter(FactServices.restaurant_id == restaurant_id).delete(synchronize_session=False)
+        db.query(RestaurantRating).filter(RestaurantRating.restaurant_id == restaurant_id).delete(synchronize_session=False)
+
+        # Limpieza adicional de tablas sin FK directa pero con datos del restaurante
+        db.query(DailyMenu).filter(DailyMenu.restaurant_id == restaurant_id).delete(synchronize_session=False)
+        db.query(DishRating).filter(DishRating.restaurant_id == restaurant_id).delete(synchronize_session=False)
+        db.query(FactPredictionLog).filter(FactPredictionLog.restaurant_id == restaurant_id).delete(synchronize_session=False)
+        db.query(MenusAzca).filter(MenusAzca.restaurant_id == restaurant_id).delete(synchronize_session=False)
+
         db.query(User).filter(User.restaurant_id == restaurant_id).delete(synchronize_session=False)
         db.delete(restaurant)
         db.commit()
