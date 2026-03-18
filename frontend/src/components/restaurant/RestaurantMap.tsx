@@ -67,7 +67,7 @@ export function RestaurantMap({ restaurant }: RestaurantMapProps) {
   return (
     <div className="rounded-3xl border border-[#3A3037]/30 bg-[var(--surface)] overflow-hidden shadow-lg">
       <h2 className="p-4 text-lg font-bold text-[var(--text)] uppercase tracking-wide border-b border-[#3A3037]/30">
-        📍 Ubicación
+        Ubicación
       </h2>
       <div
         ref={mapContainer}

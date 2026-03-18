@@ -221,6 +221,7 @@ export default function RestaurantPanelView() {
   const [profileMessage, setProfileMessage] = useState('')
   const [profileError, setProfileError] = useState('')
   const [menuFile, setMenuFile] = useState<File | null>(null)
+  const [ocrPreviewUrl, setOcrPreviewUrl] = useState('')
   const [ocrLoading, setOcrLoading] = useState(false)
   const [menuData, setMenuData] = useState({ starter: '', main: '', dessert: '', includes_drink: false })
   const [ocrMessage, setOcrMessage] = useState('')
@@ -437,6 +438,23 @@ export default function RestaurantPanelView() {
     } finally {
       setOcrLoading(false)
     }
+  }
+
+  const handleMenuFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null
+    setMenuFile(file)
+    setOcrError('')
+
+    if (!file || !file.type.startsWith('image/')) {
+      setOcrPreviewUrl('')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setOcrPreviewUrl(typeof reader.result === 'string' ? reader.result : '')
+    }
+    reader.readAsDataURL(file)
   }
 
   const handleSaveMenu = async () => {
@@ -857,7 +875,7 @@ export default function RestaurantPanelView() {
                 <input
                   type="file"
                   accept="image/*,.pdf"
-                  onChange={(event) => setMenuFile(event.target.files?.[0] || null)}
+                  onChange={handleMenuFileChange}
                   className="hidden"
                 />
                 <div className="rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-soft)]/30 p-12 text-center transition-all hover:border-[#E07B54] hover:bg-[var(--surface-soft)]/60">
@@ -883,6 +901,19 @@ export default function RestaurantPanelView() {
                   </div>
                 </div>
               </label>
+
+              {menuFile && ocrPreviewUrl ? (
+                <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)]/30 p-4">
+                  <p className="text-sm font-semibold text-[var(--text)] mb-3">Vista previa del archivo</p>
+                  <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--surface)]">
+                    <img
+                      src={ocrPreviewUrl}
+                      alt="Vista previa del menú adjunto"
+                      className="w-full max-h-72 object-contain"
+                    />
+                  </div>
+                </div>
+              ) : null}
 
               <button
                 onClick={handleOcrUpload}
@@ -1010,6 +1041,7 @@ export default function RestaurantPanelView() {
                   type="button"
                   onClick={() => {
                     setMenuFile(null)
+                    setOcrPreviewUrl('')
                     setMenuData({ starter: '', main: '', dessert: '', includes_drink: false })
                     setOcrMessage('')
                     setOcrError('')

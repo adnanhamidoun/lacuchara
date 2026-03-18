@@ -6,7 +6,18 @@ interface RestaurantHeroProps {
   imageUrl: string
 }
 
+function normalizeTagLabel(label: string | null | undefined): string {
+  if (!label) return ''
+
+  const trimmed = label.trim()
+  if (!trimmed) return ''
+
+  return `${trimmed.charAt(0).toLocaleUpperCase('es-ES')}${trimmed.slice(1)}`
+}
+
 export function RestaurantHero({ restaurant, imageUrl }: RestaurantHeroProps) {
+  const segmentTag = normalizeTagLabel(restaurant.restaurant_segment)
+
   return (
     <div>
       {/* Hero Image Container */}
@@ -38,10 +49,10 @@ export function RestaurantHero({ restaurant, imageUrl }: RestaurantHeroProps) {
           {/* Content Overlay */}
           <div className="absolute bottom-0 left-0 right-0 p-6 text-white bg-gradient-to-t from-black/60 to-transparent">
             {/* Restaurant Segment Badge */}
-            {restaurant.restaurant_segment && (
+            {segmentTag && (
               <div className="mb-3 inline-block">
                 <span className="rounded-full bg-[#E07B54]/90 px-3 py-1 text-xs font-semibold backdrop-blur">
-                  {restaurant.restaurant_segment}
+                  {segmentTag}
                 </span>
               </div>
             )}

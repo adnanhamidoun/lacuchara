@@ -147,9 +147,9 @@ export default function MenuView() {
 
           {/* Premium 2-Column Layout: Left Column (Overview + Menu) | Right Column (Specs) */}
           {/* Grid uses explicit minmax for perfect alignment: 2fr left, 320px minimum right */}
-          <div className="grid gap-8 grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] items-stretch">
+          <div className="grid gap-8 grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] items-start">
             {/* Left Column: Overview + Menu Preview (2/3 width) */}
-            <div className="flex h-full flex-col gap-6">
+            <div className="flex flex-col gap-6">
               {/* Restaurant Overview & Quick Facts */}
               <FadeUpSection>
                 <RestaurantOverview restaurant={restaurant} />
@@ -162,14 +162,12 @@ export default function MenuView() {
             </div>
 
             {/* Right Column: Specifications (fixed minimum width) */}
-            <div className="h-full">
-              <FadeUpSection className="h-full">
+            <div className="flex flex-col gap-6">
+              <FadeUpSection>
                 <RestaurantMap restaurant={restaurant} />
               </FadeUpSection>
               <FadeUpSection>
-                <div className="mt-6">
-                  <RestaurantSpecCard restaurant={restaurant} />
-                </div>
+                <RestaurantSpecCard restaurant={restaurant} />
               </FadeUpSection>
             </div>
           </div>

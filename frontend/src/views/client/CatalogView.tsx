@@ -62,6 +62,17 @@ type IndexedRestaurant = {
   cuisineCode: string | null
 }
 
+type NearbyRestaurantRow = {
+  restaurant_id: number
+  name: string
+  latitude?: number | null
+  longitude?: number | null
+  distance_km: number
+  image_url?: string | null
+  google_rating?: number | null
+  cuisine_type?: string | null
+}
+
 const AZCA_RADIUS_METERS = 800
 
 function normalizeText(value: string | null | undefined): string {
@@ -81,6 +92,53 @@ function normalizeSegment(segment: string | null | undefined): string {
   if (['familiar', 'family'].includes(normalized)) return 'family'
 
   return normalized
+}
+
+function normalizeTagLabel(value: string | null | undefined): string {
+  const trimmed = (value ?? '').trim()
+  if (!trimmed) return ''
+
+  return `${trimmed.charAt(0).toLocaleUpperCase('es-ES')}${trimmed.slice(1)}`
+}
+
+function mergeNearbyWithDetails(
+  nearbyRows: NearbyRestaurantRow[],
+  detailedRows: RestaurantDetail[],
+): Array<RestaurantDetail & { distance_km?: number }> {
+  const detailsById = new Map(detailedRows.map((row) => [row.restaurant_id, row]))
+
+  return nearbyRows.map((nearby) => {
+    const detail = detailsById.get(nearby.restaurant_id)
+
+    if (!detail) {
+      return {
+        restaurant_id: nearby.restaurant_id,
+        name: nearby.name,
+        capacity_limit: null,
+        table_count: null,
+        min_service_duration: null,
+        terrace_setup_type: null,
+        opens_weekends: null,
+        has_wifi: null,
+        restaurant_segment: null,
+        menu_price: null,
+        dist_office_towers: null,
+        google_rating: nearby.google_rating ?? null,
+        cuisine_type: nearby.cuisine_type ?? null,
+        image_url: nearby.image_url ?? null,
+        distance_km: nearby.distance_km,
+      }
+    }
+
+    return {
+      ...detail,
+      // Keep full detail fields for filters while preserving nearby ordering and distance.
+      distance_km: nearby.distance_km,
+      image_url: nearby.image_url ?? detail.image_url,
+      google_rating: nearby.google_rating ?? detail.google_rating,
+      cuisine_type: nearby.cuisine_type ?? detail.cuisine_type,
+    }
+  })
 }
 
 function priceRangeLabel(range: PriceRange): string {
@@ -134,6 +192,7 @@ const RestaurantCard = memo(function RestaurantCard({
   userLocation?: { latitude: number; longitude: number }
 }) {
   const cuisineMeta = getCuisineMeta(restaurant.cuisine_type)
+  const segmentTag = normalizeTagLabel(restaurant.restaurant_segment)
   const [imageUrl, setImageUrl] = useState<string>('https://placehold.co/400x300?text=Restaurante')
 
   // Cargar imagen desde el endpoint (igual que en RestaurantsListView)
@@ -191,9 +250,9 @@ const RestaurantCard = memo(function RestaurantCard({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {restaurant.restaurant_segment ? (
+          {segmentTag ? (
             <span className="inline-block rounded-full bg-[#E07B54]/10 px-2.5 py-0.5 text-xs font-medium text-[#E07B54]">
-              {restaurant.restaurant_segment}
+              {segmentTag}
             </span>
           ) : null}
         </div>
@@ -240,24 +299,34 @@ export default function CatalogView() {
       return
     }
 
+    const currentLocation = userLocation as { latitude: number; longitude: number }
+
     const loadNearby = async () => {
       setLoading(true)
       try {
         const params = new URLSearchParams({
-          user_latitude: userLocation.latitude.toString(),
-          user_longitude: userLocation.longitude.toString(),
+          user_latitude: currentLocation.latitude.toString(),
+          user_longitude: currentLocation.longitude.toString(),
         })
         const response = await fetch(`/restaurants/nearby?${params}`)
         if (!response.ok) {
           throw new Error('Failed to fetch nearby restaurants')
         }
         const data = await response.json()
-        setRestaurants(data.restaurants || [])
-        setError(null)
+        const nearbyRows = Array.isArray(data?.restaurants) ? (data.restaurants as NearbyRestaurantRow[]) : []
+
+        if (nearbyRows.length === 0) {
+          setRestaurants(restaurantsFromHook)
+          setError('')
+          return
+        }
+
+        setRestaurants(mergeNearbyWithDetails(nearbyRows, restaurantsFromHook))
+        setError('')
       } catch (err) {
         console.error('Error loading nearby restaurants:', err)
         setRestaurants(restaurantsFromHook)
-        setError(null) // No mostrar error, usar fallback
+        setError('') // No mostrar error, usar fallback
       } finally {
         setLoading(false)
       }

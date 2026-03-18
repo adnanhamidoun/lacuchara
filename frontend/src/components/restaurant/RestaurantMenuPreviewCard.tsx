@@ -66,7 +66,7 @@ function DishStars({
   const safeValue = value ? Math.max(1, Math.min(5, value)) : null
 
   return (
-    <div className="inline-flex items-center gap-0.5">
+    <div className="inline-flex w-[96px] items-center justify-between">
       {Array.from({ length: 5 }).map((_, index) => {
         const starValue = index + 1
         const active = safeValue !== null && starValue <= safeValue
@@ -296,7 +296,7 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
                           duration: 0.3,
                           delay: categoryIndex * 0.1 + itemIndex * 0.03,
                         }}
-                        className="flex items-start justify-between gap-3"
+                          className="grid grid-cols-[minmax(0,1fr)_140px] items-start gap-3"
                       >
                         <div className="flex min-w-0 items-start gap-2">
                           <span className="mt-1 h-1 w-1 rounded-full bg-[#D4AF37]/60 flex-shrink-0" />
@@ -305,7 +305,7 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
                           </p>
                         </div>
 
-                        <div className="flex flex-shrink-0 items-center gap-2">
+                          <div className="w-[140px]">
                           {(() => {
                             const dishKey = normalizeDishName(item)
                             const summary = summaryByKey[dishKey]
@@ -325,9 +325,9 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
                             }
 
                             return (
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center justify-end gap-2">
                                 <DishStars value={myValue} onChange={onRate} disabled={disabled} />
-                                <span className="text-[11px] text-[var(--text-muted)]">
+                                <span className="w-10 text-right text-[11px] tabular-nums text-[var(--text-muted)]">
                                   {summary && summary.votes > 0 ? `${summary.avg_rating.toFixed(1)} (${summary.votes})` : '—'}
                                 </span>
                               </div>
