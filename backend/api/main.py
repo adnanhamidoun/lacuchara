@@ -1130,6 +1130,7 @@ def _ensure_auth_columns_exist() -> None:
         "IF COL_LENGTH('dbo.dim_restaurants', 'login_email') IS NULL ALTER TABLE dbo.dim_restaurants ADD login_email NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.dim_restaurants', 'password_hash') IS NULL ALTER TABLE dbo.dim_restaurants ADD password_hash NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.dim_restaurants', 'image_url') IS NULL ALTER TABLE dbo.dim_restaurants ADD image_url NVARCHAR(500) NULL;",
+        "IF COL_LENGTH('dbo.dim_restaurants', 'image_data') IS NULL ALTER TABLE dbo.dim_restaurants ADD image_data VARBINARY(MAX) NULL;",
         "IF COL_LENGTH('dbo.inscriptions', 'login_email') IS NULL ALTER TABLE dbo.inscriptions ADD login_email NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.inscriptions', 'password_hash') IS NULL ALTER TABLE dbo.inscriptions ADD password_hash NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.inscriptions', 'image_url') IS NULL ALTER TABLE dbo.inscriptions ADD image_url NVARCHAR(500) NULL;",
