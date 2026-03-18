@@ -29,6 +29,7 @@ import logging
 import os
 import pickle
 import unicodedata
+import math
 from difflib import SequenceMatcher
 from contextlib import asynccontextmanager
 from datetime import datetime, date, timedelta
@@ -587,10 +588,12 @@ class HealthResponse(BaseModel):
 class RestaurantItem(BaseModel):
     """
     Modelo de respuesta para un restaurante individual (lista).
-    Solo incluye ID y nombre para la lista.
+    Incluye información básica y ubicación para calcular distancias.
     """
     restaurant_id: int = Field(..., description="ID único del restaurante")
     name: str = Field(..., description="Nombre del restaurante")
+    latitude: float | None = Field(None, description="Latitud del restaurante")
+    longitude: float | None = Field(None, description="Longitud del restaurante")
 
     class Config:
         from_attributes = True
@@ -615,9 +618,38 @@ class RestaurantDetailItem(BaseModel):
     google_rating: float | None = Field(None, description="Calificación Google")
     cuisine_type: str | None = Field(None, description="Tipo de cocina")
     image_url: str | None = Field(None, description="URL de imagen pública del restaurante")
+    latitude: float | None = Field(None, description="Latitud del restaurante")
+    longitude: float | None = Field(None, description="Longitud del restaurante")
 
     class Config:
         from_attributes = True
+
+
+class RestaurantWithDistance(BaseModel):
+    """
+    Modelo de respuesta para restaurante con distancia calculada desde ubicación del usuario.
+    """
+    restaurant_id: int = Field(..., description="ID único del restaurante")
+    name: str = Field(..., description="Nombre del restaurante")
+    latitude: float | None = Field(None, description="Latitud del restaurante")
+    longitude: float | None = Field(None, description="Longitud del restaurante")
+    distance_km: float = Field(..., description="Distancia desde el usuario en km")
+    image_url: str | None = Field(None, description="URL de imagen del restaurante")
+    google_rating: float | None = Field(None, description="Calificación Google")
+    cuisine_type: str | None = Field(None, description="Tipo de cocina")
+
+    class Config:
+        from_attributes = True
+
+
+class RestaurantNearbyResponse(BaseModel):
+    """
+    Respuesta para búsqueda de restaurantes nearby con distancias calculadas.
+    """
+    count: int = Field(..., description="Cantidad de restaurantes")
+    user_latitude: float = Field(..., description="Latitud del usuario")
+    user_longitude: float = Field(..., description="Longitud del usuario")
+    restaurants: list[RestaurantWithDistance] = Field(..., description="Restaurantes ordenados por distancia")
 
 
 class RestaurantUpdateRequest(BaseModel):
@@ -1125,11 +1157,13 @@ class CacheManager:
 
 
 def _ensure_auth_columns_exist() -> None:
-    """Crea columnas de auth/imagen en las tablas si la BD aún no fue migrada. Idempotente."""
+    """Crea columnas de auth/imagen/geolocalización en las tablas si la BD aún no fue migrada. Idempotente."""
     statements = [
         "IF COL_LENGTH('dbo.dim_restaurants', 'login_email') IS NULL ALTER TABLE dbo.dim_restaurants ADD login_email NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.dim_restaurants', 'password_hash') IS NULL ALTER TABLE dbo.dim_restaurants ADD password_hash NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.dim_restaurants', 'image_url') IS NULL ALTER TABLE dbo.dim_restaurants ADD image_url NVARCHAR(500) NULL;",
+        "IF COL_LENGTH('dbo.dim_restaurants', 'latitude') IS NULL ALTER TABLE dbo.dim_restaurants ADD latitude FLOAT NULL;",
+        "IF COL_LENGTH('dbo.dim_restaurants', 'longitude') IS NULL ALTER TABLE dbo.dim_restaurants ADD longitude FLOAT NULL;",
         "IF COL_LENGTH('dbo.inscriptions', 'login_email') IS NULL ALTER TABLE dbo.inscriptions ADD login_email NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.inscriptions', 'password_hash') IS NULL ALTER TABLE dbo.inscriptions ADD password_hash NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.inscriptions', 'image_url') IS NULL ALTER TABLE dbo.inscriptions ADD image_url NVARCHAR(500) NULL;",
@@ -1429,7 +1463,9 @@ async def get_restaurants(db: Session = Depends(get_db)):
             restaurants=[
                 RestaurantItem(
                     restaurant_id=r.restaurant_id,
-                    name=r.name
+                    name=r.name,
+                    latitude=r.latitude,
+                    longitude=r.longitude
                 )
                 for r in restaurants
             ]
@@ -1441,6 +1477,78 @@ async def get_restaurants(db: Session = Depends(get_db)):
         # Devolver lista vacía en lugar de 500 para mantener la UI funcional.
         # Esto ayuda cuando la DB no está disponible o falta configuración.
         return RestaurantsListResponse(count=0, restaurants=[])
+
+
+@app.get(
+    "/restaurants/nearby",
+    response_model=RestaurantNearbyResponse,
+    summary="Obtener Restaurantes Cercanos",
+    tags=["Data"],
+)
+async def get_restaurants_nearby(
+    user_latitude: float = Query(..., description="Latitud del usuario"),
+    user_longitude: float = Query(..., description="Longitud del usuario"),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene todos los restaurantes ordenados por distancia desde la ubicación del usuario.
+    
+    Args:
+        user_latitude: Latitud de la ubicación del usuario
+        user_longitude: Longitud de la ubicación del usuario
+        
+    Returns:
+        RestaurantNearbyResponse: Lista de restaurantes con distancias calculadas, ordenados por proximidad
+    """
+    try:
+        restaurants = db.query(Restaurant).all()
+        
+        restaurants_with_distance = []
+        
+        for restaurant in restaurants:
+            # Si el restaurante tiene coordenadas, calcular distancia
+            if restaurant.latitude and restaurant.longitude:
+                distance = calculate_distance_haversine(
+                    user_latitude,
+                    user_longitude,
+                    restaurant.latitude,
+                    restaurant.longitude
+                )
+            else:
+                # Si no tiene coordenadas, asignar distancia muy grande para ordenar al final
+                distance = 9999.0
+            
+            restaurants_with_distance.append(
+                RestaurantWithDistance(
+                    restaurant_id=restaurant.restaurant_id,
+                    name=restaurant.name,
+                    latitude=restaurant.latitude,
+                    longitude=restaurant.longitude,
+                    distance_km=round(distance, 2),
+                    image_url=restaurant.image_url,
+                    google_rating=restaurant.google_rating,
+                    cuisine_type=restaurant.cuisine_type
+                )
+            )
+        
+        # Ordenar por distancia
+        restaurants_with_distance.sort(key=lambda x: x.distance_km)
+        
+        response = RestaurantNearbyResponse(
+            count=len(restaurants_with_distance),
+            user_latitude=user_latitude,
+            user_longitude=user_longitude,
+            restaurants=restaurants_with_distance
+        )
+        
+        return response
+    except Exception as e:
+        logger.error(f"❌ Error en GET /restaurants/nearby: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener restaurantes cercanos: {str(e)}"
+        )
+
 
 
 @app.get(
@@ -3668,6 +3776,33 @@ async def update_restaurant_image(
 # ============================================================================
 # FUNCIONES AUXILIARES PARA CÁLCULO AUTOMÁTICO
 # ============================================================================
+
+def calculate_distance_haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calcula la distancia en kilómetros entre dos puntos geográficos usando la fórmula de Haversine.
+    
+    Args:
+        lat1, lon1: Coordenadas del user (latitud, longitud en grados)
+        lat2, lon2: Coordenadas del restaurante (latitud, longitud en grados)
+        
+    Returns:
+        float: Distancia en kilómetros
+    """
+    R = 6371  # Radio de la Tierra en km
+    
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+    
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+    c = 2 * math.asin(math.sqrt(a))
+    
+    return R * c
+
 
 def get_weather_data(service_date: date) -> dict:
     """
