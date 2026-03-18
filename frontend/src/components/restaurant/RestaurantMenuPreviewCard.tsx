@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Star } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { CalendarDays, CookingPot, Dessert, GlassWater, Salad } from 'lucide-react'
+import { CookingPot, Dessert, GlassWater, Salad } from 'lucide-react'
 import type { RestaurantDetail } from '../../types/domain'
 
 interface MenuCategoryItem {
@@ -52,6 +52,38 @@ type DishSummaryResponse = {
   restaurant_id: number
   rating_date: string
   items: DishSummaryItem[]
+}
+
+async function extractApiErrorDetail(response: Response): Promise<string> {
+  try {
+    const contentType = response.headers.get('content-type') ?? ''
+
+    if (contentType.includes('application/json')) {
+      const payload = (await response.json()) as {
+        detail?: string | Array<{ msg?: string }>
+      }
+
+      if (typeof payload.detail === 'string' && payload.detail.trim().length > 0) {
+        return payload.detail
+      }
+
+      if (Array.isArray(payload.detail) && payload.detail.length > 0) {
+        const first = payload.detail[0]
+        if (first && typeof first.msg === 'string' && first.msg.trim().length > 0) {
+          return first.msg
+        }
+      }
+    } else {
+      const raw = (await response.text()).trim()
+      if (raw.length > 0) {
+        return raw.slice(0, 160)
+      }
+    }
+  } catch {
+    // ignore parse errors and fallback to HTTP status
+  }
+
+  return `HTTP ${response.status}`
 }
 
 function DishStars({
@@ -189,8 +221,10 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
 
     try {
       const entries = Object.entries(pendingRatings)
+      const successfulKeys: string[] = []
+      const failedMessages: string[] = []
 
-      for (const [, payload] of entries) {
+      for (const [dishKey, payload] of entries) {
         const response = await fetch('/ratings/dishes', {
           method: 'POST',
           headers: {
@@ -205,13 +239,33 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
         })
 
         if (!response.ok) {
-          throw new Error(`No se pudo enviar la valoración de ${payload.dish_name}`)
+          const detail = await extractApiErrorDetail(response)
+          failedMessages.push(`${payload.dish_name}: ${detail}`)
+          continue
         }
-
+        successfulKeys.push(dishKey)
       }
 
-      setPendingRatings({})
-      await refreshSummary()
+      if (successfulKeys.length > 0) {
+        setPendingRatings((prev) => {
+          const next = { ...prev }
+          for (const key of successfulKeys) {
+            delete next[key]
+          }
+          return next
+        })
+        await refreshSummary()
+      }
+
+      if (failedMessages.length > 0) {
+        const preview = failedMessages.slice(0, 2).join(' | ')
+        const remaining = failedMessages.length - 2
+        const suffix = remaining > 0 ? ` (+${remaining} más)` : ''
+        setSubmitError(`No se pudieron enviar algunas valoraciones. ${preview}${suffix}`)
+        return
+      }
+
+      setSubmitError(null)
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'No se pudieron enviar las valoraciones.')
     } finally {
@@ -225,18 +279,18 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.5 }}
-      className="rounded-2xl shadow-lg bg-[var(--surface)] overflow-hidden"
+      className="h-full overflow-hidden rounded-2xl bg-[var(--surface)] shadow-lg"
     >
-      <div className="relative">
+      <div className="relative h-full">
         {/* Premium dark background - integrated with page aesthetic */}
-        <div className="bg-[var(--surface)] transition-colors duration-300">
+        <div className="h-full bg-[var(--surface)] transition-colors duration-300">
           {/* Subtle texture overlay - very minimal */}
           <div className="absolute inset-0 opacity-30 dark:opacity-10 bg-[radial-gradient(ellipse_at_20%_50%,rgba(200,150,100,.05),transparent_50%)]" />
 
-          <div className="relative z-10 p-8">
+          <div className="relative z-10 flex h-full flex-col p-5 sm:p-6">
             {/* Header Section */}
-            <div className="mb-10 pb-8 border-b border-[var(--border)]/40">
-              <div className="flex items-center justify-between mb-4">
+            <div className="mb-6 border-b border-[var(--border)]/40 pb-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-lg font-bold uppercase tracking-wide text-[var(--text)]">
                   Menú del día
                 </h3>
@@ -265,102 +319,100 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
               ) : null}
             </div>
 
-        <div className="flex flex-1 items-center py-2">
-          <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-3">
-            {menuCategories.map((category, categoryIndex) => {
-              const CategoryIcon = category.icon
-              return (
-                <motion.div
-                  key={category.title}
-                  initial={{ opacity: 0, y: 12 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.4, delay: categoryIndex * 0.1 }}
-                  className="space-y-3"
-                >
-                  <div className="flex items-center gap-2">
-                    <CategoryIcon size={16} className="text-[#E07B54]" />
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text)]">
-                      {category.title}
-                    </h4>
-                  </div>
+            <div className="min-h-0 flex-1 space-y-4 py-1">
+              {menuCategories.map((category, categoryIndex) => {
+                const CategoryIcon = category.icon
+                return (
+                  <motion.div
+                    key={category.title}
+                    initial={{ opacity: 0, y: 12 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.35, delay: categoryIndex * 0.08 }}
+                    className="space-y-2.5 rounded-xl border border-[var(--border)]/30 bg-[var(--surface)]/60 p-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <CategoryIcon size={15} className="text-[#E07B54]" />
+                      <h4 className="text-[11px] font-bold uppercase tracking-widest text-[var(--text)]">
+                        {category.title}
+                      </h4>
+                    </div>
 
-                  <div className="space-y-2 pl-1">
-                    {category.items.map((item, itemIndex) => (
-                      <motion.div
-                        key={`${category.title}-${itemIndex}`}
-                        initial={{ opacity: 0, x: -8 }}
-                        whileInView={{ opacity: 1, x: 0 }}
-                        viewport={{ once: true }}
-                        transition={{
-                          duration: 0.3,
-                          delay: categoryIndex * 0.1 + itemIndex * 0.03,
-                        }}
-                          className="grid grid-cols-[minmax(0,1fr)_140px] items-start gap-3"
-                      >
-                        <div className="flex min-w-0 items-start gap-2">
-                          <span className="mt-1 h-1 w-1 rounded-full bg-[#D4AF37]/60 flex-shrink-0" />
-                          <p className="min-w-0 text-xs leading-tight text-[var(--text)]">
-                            {item}
-                          </p>
-                        </div>
+                    <div className="space-y-1.5 pl-1">
+                      {category.items.map((item, itemIndex) => (
+                        <motion.div
+                          key={`${category.title}-${itemIndex}`}
+                          initial={{ opacity: 0, x: -8 }}
+                          whileInView={{ opacity: 1, x: 0 }}
+                          viewport={{ once: true }}
+                          transition={{
+                            duration: 0.25,
+                            delay: categoryIndex * 0.08 + itemIndex * 0.025,
+                          }}
+                          className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_136px] sm:items-start"
+                        >
+                          <div className="flex min-w-0 items-start gap-2">
+                            <span className="mt-1 h-1 w-1 flex-shrink-0 rounded-full bg-[#D4AF37]/60" />
+                            <p className="min-w-0 text-[12px] leading-snug text-[var(--text)]">
+                              {item}
+                            </p>
+                          </div>
 
-                          <div className="w-[140px]">
-                          {(() => {
-                            const dishKey = normalizeDishName(item)
-                            const summary = summaryByKey[dishKey]
-                            const myValue = myRatings[dishKey] ?? null
-                            const disabled = isSubmitting
+                          <div className="sm:w-[136px]">
+                            {(() => {
+                              const dishKey = normalizeDishName(item)
+                              const summary = summaryByKey[dishKey]
+                              const myValue = myRatings[dishKey] ?? null
+                              const disabled = isSubmitting
 
-                            const onRate = (nextValue: number) => {
-                              setSubmitError(null)
-                              setMyRatings((prev) => ({ ...prev, [dishKey]: nextValue }))
-                              setPendingRatings((prev) => ({
-                                ...prev,
-                                [dishKey]: {
-                                  dish_name: item,
-                                  rating: nextValue,
-                                },
-                              }))
-                            }
+                              const onRate = (nextValue: number) => {
+                                setSubmitError(null)
+                                setMyRatings((prev) => ({ ...prev, [dishKey]: nextValue }))
+                                setPendingRatings((prev) => ({
+                                  ...prev,
+                                  [dishKey]: {
+                                    dish_name: item,
+                                    rating: nextValue,
+                                  },
+                                }))
+                              }
 
-                            return (
-                              <div className="flex items-center justify-end gap-2">
-                                <DishStars value={myValue} onChange={onRate} disabled={disabled} />
-                                <span className="w-10 text-right text-[11px] tabular-nums text-[var(--text-muted)]">
-                                  {summary && summary.votes > 0 ? `${summary.avg_rating.toFixed(1)} (${summary.votes})` : '—'}
-                                </span>
-                              </div>
-                            )
-                          })()}
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </motion.div>
-              )
-            })}
+                              return (
+                                <div className="flex items-center gap-2 sm:justify-end">
+                                  <DishStars value={myValue} onChange={onRate} disabled={disabled} />
+                                  <span className="w-10 text-right text-[11px] tabular-nums text-[var(--text-muted)]">
+                                    {summary && summary.votes > 0 ? `${summary.avg_rating.toFixed(1)} (${summary.votes})` : '—'}
+                                  </span>
+                                </div>
+                              )
+                            })()}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 border-t border-[var(--border)]/40 pt-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+                  Precio del menú
+                </p>
+                <p className="text-2xl font-bold text-[#E07B54]">€{finalPrice.toFixed(2)}</p>
+              </div>
+
+              {menuData.includes_drink && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E07B54]/30 bg-[#E07B54]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#E07B54]">
+                  <GlassWater size={13} />
+                  Incluye bebida
+                </span>
+              )}
+            </div>
           </div>
         </div>
-
-        <div className="mt-4 flex flex-col gap-3 border-t border-[var(--border)]/40 pt-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--text-muted)]">
-              Precio del menú
-            </p>
-            <p className="text-3xl font-bold text-[#E07B54]">€{finalPrice.toFixed(2)}</p>
-          </div>
-
-          {menuData.includes_drink && (
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#E07B54]/30 bg-[#E07B54]/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#E07B54]">
-              <GlassWater size={14} />
-              Incluye bebida
-            </span>
-          )}
-        </div>
       </div>
-      </div>
-    </div>
     </motion.div>
   )
 }
