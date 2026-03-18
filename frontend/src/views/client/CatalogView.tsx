@@ -1,6 +1,7 @@
 import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Search, Wifi, Sparkles, Building2, Briefcase, Users, ArrowLeft, Crown, Star, ChevronUp, ChevronDown } from 'lucide-react'
+import { Search, Wifi, Sparkles, Building2, Briefcase, Users, ArrowLeft, Crown, Star, ChevronUp, ChevronDown, Navigation } from 'lucide-react'
+import { useUserLocation } from '../../context/LocationContext'
 import { isInPriceRange, type PriceRange, useRestaurants } from '../../hooks/useRestaurants'
 import type { RestaurantDetail } from '../../types/domain'
 import { getCanonicalCuisineCode, getCuisineMeta } from '../../utils/cuisine'
@@ -125,10 +126,12 @@ const RestaurantCard = memo(function RestaurantCard({
   restaurant,
   index,
   showOpenToday,
+  userLocation,
 }: {
-  restaurant: RestaurantDetail
+  restaurant: RestaurantDetail & { distance_km?: number }
   index: number
   showOpenToday: boolean
+  userLocation?: { latitude: number; longitude: number }
 }) {
   const cuisineMeta = getCuisineMeta(restaurant.cuisine_type)
   const [imageUrl, setImageUrl] = useState<string>('https://placehold.co/400x300?text=Restaurante')
@@ -195,16 +198,24 @@ const RestaurantCard = memo(function RestaurantCard({
           ) : null}
         </div>
 
-        <div className="mt-auto flex items-center justify-between border-t border-[var(--border)]/50 pt-3">
-          <span className="text-xs font-semibold text-[var(--text-muted)]">
-            {restaurant.has_wifi && <span className="inline-flex items-center gap-1">
-              <Wifi size={12} />
-              WiFi
-            </span>}
-          </span>
-          <span className="text-xs font-semibold text-[#E07B54]">
-            {restaurant.menu_price ? `€${restaurant.menu_price}` : '-'}
-          </span>
+        <div className="mt-auto space-y-2 border-t border-[var(--border)]/50 pt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[var(--text-muted)]">
+              {restaurant.has_wifi && <span className="inline-flex items-center gap-1">
+                <Wifi size={12} />
+                WiFi
+              </span>}
+            </span>
+            <span className="text-xs font-semibold text-[#E07B54]">
+              {restaurant.menu_price ? `€${restaurant.menu_price}` : '-'}
+            </span>
+          </div>
+          {userLocation && restaurant.distance_km !== undefined && (
+            <div className="flex items-center gap-1 text-blue-600 font-medium text-sm">
+              <Navigation size={14} />
+              <span>{restaurant.distance_km >= 1 ? `${restaurant.distance_km.toFixed(1)} km` : `${(restaurant.distance_km * 1000).toFixed(0)} m`}</span>
+            </div>
+          )}
         </div>
       </div>
     </Link>
@@ -212,9 +223,48 @@ const RestaurantCard = memo(function RestaurantCard({
 })
 
 export default function CatalogView() {
+  const { userLocation } = useUserLocation()
   const location = useLocation()
-  const { restaurants, loading, error, cuisines } = useRestaurants()
+  const { restaurants: restaurantsFromHook, loading: hookLoading, error: hookError, cuisines } = useRestaurants()
+  const [restaurants, setRestaurants] = useState(restaurantsFromHook)
+  const [loading, setLoading] = useState(hookLoading)
+  const [error, setError] = useState(hookError)
   const [search, setSearch] = useState('')
+
+  // Si hay ubicación, cargar restaurantes cercanos con distancias
+  useEffect(() => {
+    if (!userLocation) {
+      setRestaurants(restaurantsFromHook)
+      setLoading(hookLoading)
+      setError(hookError)
+      return
+    }
+
+    const loadNearby = async () => {
+      setLoading(true)
+      try {
+        const params = new URLSearchParams({
+          user_latitude: userLocation.latitude.toString(),
+          user_longitude: userLocation.longitude.toString(),
+        })
+        const response = await fetch(`/restaurants/nearby?${params}`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch nearby restaurants')
+        }
+        const data = await response.json()
+        setRestaurants(data.restaurants || [])
+        setError(null)
+      } catch (err) {
+        console.error('Error loading nearby restaurants:', err)
+        setRestaurants(restaurantsFromHook)
+        setError(null) // No mostrar error, usar fallback
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadNearby()
+  }, [userLocation, restaurantsFromHook, hookLoading, hookError])
   const [selectedSegment, setSelectedSegment] = useState<string>('all')
   const [selectedCuisine, setSelectedCuisine] = useState('all')
   const [priceRange, setPriceRange] = useState<PriceRange>('all')
@@ -675,7 +725,7 @@ export default function CatalogView() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredRestaurants.map((restaurant, index) => (
-              <RestaurantCard key={restaurant.restaurant_id} restaurant={restaurant} index={index} showOpenToday={isWeekendToday} />
+              <RestaurantCard key={restaurant.restaurant_id} restaurant={restaurant} index={index} showOpenToday={isWeekendToday} userLocation={userLocation} />
             ))}
           </div>
         </div>

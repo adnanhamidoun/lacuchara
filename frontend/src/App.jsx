@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom'
 import MainLayout from './components/layout/MainLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute.jsx'
+import GeolocationPrompt from './components/GeolocationPrompt'
+import { LocationProvider, useUserLocation } from './context/LocationContext'
 import AdminDashboardView from './views/admin/AdminDashboardView.tsx'
 import LoginView from './views/auth/LoginView.tsx'
 import MenuView from './views/client/MenuView.tsx'
@@ -21,54 +24,82 @@ function NotFoundView() {
   )
 }
 
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPageView />} />
+      <Route path="/restaurantes" element={<CatalogView />} />
+      <Route path="/sobre-nosotros" element={<AboutView />} />
+
+      <Route path="/cliente/restaurantes" element={<Navigate to="/" replace />} />
+      <Route
+        path="/cliente/restaurantes/:restaurantId/menu"
+        element={<MenuView />}
+      />
+
+      <Route path="/restaurante/alta" element={<RestaurantOnboardingView />} />
+      <Route
+        path="/restaurante/panel"
+        element={
+          <ProtectedRoute role="restaurant_owner">
+            <RestaurantPanelView />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Auth Compartido */}
+      <Route path="/login" element={<LoginView />} />
+      <Route path="/admin/login" element={<LoginView />} />
+
+      {/* Admin Routes */}
+      <Route
+        path="/admin/inscripciones"
+        element={
+          <ProtectedRoute role="admin">
+            <AdminDashboardView />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/administrador"
+        element={
+          <ProtectedRoute role="admin">
+            <AdminDashboardView />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route path="*" element={<NotFoundView />} />
+    </Routes>
+  );
+}
+
+function AppContent() {
+  const { userLocation, updateLocation } = useUserLocation();
+  const [showGeoPrompt, setShowGeoPrompt] = useState(true);
+
+  return (
+    <>
+      {showGeoPrompt && !userLocation && (
+        <GeolocationPrompt
+          onLocationReceived={(location) => {
+            updateLocation(location);
+            setShowGeoPrompt(false);
+          }}
+          onDismiss={() => setShowGeoPrompt(false)}
+        />
+      )}
+      <MainLayout>
+        <AppRoutes />
+      </MainLayout>
+    </>
+  );
+}
+
 export default function App() {
   return (
-    <MainLayout>
-      <Routes>
-        <Route path="/" element={<LandingPageView />} />
-        <Route path="/restaurantes" element={<CatalogView />} />
-        <Route path="/sobre-nosotros" element={<AboutView />} />
-
-        <Route path="/cliente/restaurantes" element={<Navigate to="/" replace />} />
-        <Route
-          path="/cliente/restaurantes/:restaurantId/menu"
-          element={<MenuView />}
-        />
-
-        <Route path="/restaurante/alta" element={<RestaurantOnboardingView />} />
-        <Route
-          path="/restaurante/panel"
-          element={
-            <ProtectedRoute role="restaurant_owner">
-              <RestaurantPanelView />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Auth Compartido */}
-        <Route path="/login" element={<LoginView />} />
-        <Route path="/admin/login" element={<LoginView />} />
-
-        {/* Admin Routes */}
-        <Route
-          path="/admin/inscripciones"
-          element={
-            <ProtectedRoute role="admin">
-              <AdminDashboardView />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/administrador"
-          element={
-            <ProtectedRoute role="admin">
-              <AdminDashboardView />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route path="*" element={<NotFoundView />} />
-      </Routes>
-    </MainLayout>
-  )
+    <LocationProvider>
+      <AppContent />
+    </LocationProvider>
+  );
 }
