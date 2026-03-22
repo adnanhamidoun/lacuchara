@@ -1,172 +1,148 @@
-"""
-Script de prueba para validar la API y la integración con base de datos.
+"""Validation script for API and database integration checks.
 
-Ejecuta con:
-    python azca/tests/test_integration.py
+Run with:
+    python backend/tests/test_validation.py
 """
 
 import sys
 from pathlib import Path
 
-# Agregar el root del proyecto al path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 print("\n" + "=" * 80)
-print("🧪 PRUEBA DE INTEGRACIÓN - AZCA Prediction API")
+print("INTEGRATION VALIDATION - AZCA Prediction API")
 print("=" * 80 + "\n")
 
-# ============================================================================
-# Test 1: Verificar imports básicos
-# ============================================================================
-print("✓ Test 1: Importar módulos básicos")
+print("Test 1: Import base modules")
 try:
     from dotenv import load_dotenv
-    print("  ✅ dotenv importado")
+
+    print("  dotenv imported")
     load_dotenv(project_root / ".env")
-    print("  ✅ Variables de entorno cargadas")
-except Exception as e:
-    print(f"  ❌ Error: {e}")
+    print("  Environment variables loaded")
+except Exception as exc:
+    print(f"  Error: {exc}")
     sys.exit(1)
 
-# ============================================================================
-# Test 2: Verificar configuración de BD
-# ============================================================================
-print("\n✓ Test 2: Configuración de base de datos")
+print("\nTest 2: Validate DB configuration")
 try:
     import os
+
     db_server = os.getenv("DB_SERVER")
     db_name = os.getenv("DB_NAME")
     db_user = os.getenv("DB_USER")
-    
+
     if db_server and db_name and db_user:
-        print(f"  ✅ DB_SERVER: {db_server}")
-        print(f"  ✅ DB_NAME: {db_name}")
-        print(f"  ✅ DB_USER: {db_user}")
+        print(f"  DB_SERVER: {db_server}")
+        print(f"  DB_NAME: {db_name}")
+        print(f"  DB_USER: {db_user}")
     else:
-        print("  ⚠️  Algunas variables de BD están vacías (normal en primer test)")
-except Exception as e:
-    print(f"  ❌ Error: {e}")
+        print("  Some DB variables are empty (normal on first local run)")
+except Exception as exc:
+    print(f"  Error: {exc}")
 
-# ============================================================================
-# Test 3: Importar módulos de BD
-# ============================================================================
-print("\n✓ Test 3: Importar módulos de base de datos")
+print("\nTest 3: Import DB modules")
 try:
-    from azca.db.database import engine, Base, SessionLocal
-    print("  ✅ database.py importado correctamente")
-    from azca.db.models import PredictionLog
-    print("  ✅ models.py importado correctamente")
-    from azca.db import get_db, init_db
-    print("  ✅ Funciones de BD importadas")
-except Exception as e:
-    print(f"  ❌ Error: {e}")
+    from backend.db.database import engine
+
+    print("  database.py imported")
+    from backend.db.models import PredictionLog
+
+    print("  models.py imported")
+    from backend.db import get_db, init_db
+
+    print("  DB helper functions imported")
+except Exception as exc:
+    print(f"  Error: {exc}")
     sys.exit(1)
 
-# ============================================================================
-# Test 4: Importar motor de predicción
-# ============================================================================
-print("\n✓ Test 4: Importar motor de predicción")
+print("\nTest 4: Import prediction engine")
 try:
-    from azca.core import PredictionEngine
-    print("  ✅ PredictionEngine importado")
-except Exception as e:
-    print(f"  ❌ Error: {e}")
+    from backend.core import PredictionEngine
+
+    print("  PredictionEngine imported")
+except Exception as exc:
+    print(f"  Error: {exc}")
     sys.exit(1)
 
-# ============================================================================
-# Test 5: Importar API FastAPI
-# ============================================================================
-print("\n✓ Test 5: Importar API FastAPI")
+print("\nTest 5: Import FastAPI app")
 try:
-    from azca.api.main import app, PredictionRequest, PredictionResponse
-    print("  ✅ FastAPI app importado")
-    print("  ✅ Modelos Pydantic importados")
-except Exception as e:
-    print(f"  ❌ Error: {e}")
+    from backend.api.main import app, PredictionRequest, PredictionResponse
+
+    print("  FastAPI app imported")
+    print("  Pydantic models imported")
+except Exception as exc:
+    print(f"  Error: {exc}")
     sys.exit(1)
 
-# ============================================================================
-# Test 6: Validar esquema Pydantic
-# ============================================================================
-print("\n✓ Test 6: Validar esquema Pydantic")
+print("\nTest 6: Validate Pydantic schema")
 try:
     from datetime import date
-    
+
     request_data = {
         "service_date": date(2026, 3, 15),
         "max_temp_c": 28.5,
         "precipitation_mm": 0.0,
         "is_stadium_event": False,
         "is_payday_week": True,
+        "restaurant_id": 1,
     }
-    
-    # Intentar crear una instancia
+
     prediction_request = PredictionRequest(**request_data)
-    print(f"  ✅ PredictionRequest válido: {prediction_request}")
-    
-except Exception as e:
-    print(f"  ❌ Error en validación: {e}")
+    print(f"  PredictionRequest valid: {prediction_request}")
+except Exception as exc:
+    print(f"  Validation error: {exc}")
     sys.exit(1)
 
-# ============================================================================
-# Test 7: Verificar endpoints
-# ============================================================================
-print("\n✓ Test 7: Verificar endpoints FastAPI")
+print("\nTest 7: Verify FastAPI endpoints")
 try:
     routes = [route.path for route in app.routes]
-    expected_routes = ["/health", "/predict", "/"]
-    
+    expected_routes = ["/health", "/predict"]
+
     for route in expected_routes:
         if any(route in r for r in routes):
-            print(f"  ✅ Endpoint {route} registrado")
+            print(f"  Endpoint {route} registered")
         else:
-            print(f"  ⚠️  Endpoint {route} no encontrado")
-            
-except Exception as e:
-    print(f"  ❌ Error: {e}")
+            print(f"  Endpoint {route} not found")
+except Exception as exc:
+    print(f"  Error: {exc}")
 
-# ============================================================================
-# Test 8: Probar conexión a BD (opcional)
-# ============================================================================
-print("\n✓ Test 8: Probar conexión a base de datos")
+print("\nTest 8: Optional DB connectivity check")
 try:
-    db_server = os.getenv("DB_SERVER")
+    import os
+
+    db_server = os.getenv("DB_SERVER") or ""
     if "your_server" in db_server or not db_server:
-        print("  ⚠️  Credenciales de BD no configuradas (usar .env real)")
+        print("  DB credentials not configured (use real .env values)")
     else:
-        print("  🔄 Intentando conectar...")
+        print("  Attempting DB connection...")
         try:
             with engine.connect() as conn:
-                result = conn.execute("SELECT 1")
-                print("  ✅ Conexión exitosa a Azure SQL")
+                conn.execute("SELECT 1")
+                print("  Connection successful")
         except Exception as db_error:
-            print(f"  ⚠️  No se pudo conectar: {str(db_error)[:100]}")
-            print("     (Esto es normal si las credenciales no son válidas)")
-except Exception as e:
-    print(f"  ❌ Error: {e}")
+            print(f"  Could not connect: {str(db_error)[:100]}")
+            print("  (This can be normal if credentials are invalid)")
+except Exception as exc:
+    print(f"  Error: {exc}")
 
-# ============================================================================
-# RESUMEN
-# ============================================================================
 print("\n" + "=" * 80)
-print("✅ PRUEBAS COMPLETADAS")
+print("VALIDATION COMPLETE")
 print("=" * 80)
-print("""
-📋 Próximos pasos:
-
-1. Configurar el archivo .env real con tus credenciales de Azure SQL
-2. Ejecutar la API:
-   uvicorn azca.api.main:app --reload
-
-3. Probar los endpoints:
+print(
+    """
+Next steps:
+1. Configure a real .env with Azure SQL credentials.
+2. Run API:
+   uvicorn backend.api.main:app --reload
+3. Try endpoints:
    GET  http://localhost:8000/health
    POST http://localhost:8000/predict
-
-4. Ver documentación interactiva:
+4. Open API docs:
    http://localhost:8000/docs
-
-5. Ejecutar tests unitarios:
-   pytest azca/tests/
-""")
+5. Run tests:
+   pytest backend/tests/
+"""
+)
 print("=" * 80 + "\n")

@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import pickle
 import shutil
@@ -59,7 +59,7 @@ class ModelProvider:
                 # Load config
                 config_path = Path(__file__).parent.parent.parent / ".azureml" / "config.json"
                 if not config_path.exists():
-                    print(f"⚠️ Azure ML config not found at {config_path}")
+                    print(f"Azure ML config not found at {config_path}")
                     return
                 
                 with open(config_path, "r") as f:
@@ -71,7 +71,7 @@ class ModelProvider:
                 client_secret = os.getenv('AZURE_CLIENT_SECRET')
                 
                 if not all([tenant_id, client_id, client_secret]):
-                    print("⚠️ Azure ML service principal not configured.")
+                    print("Azure ML service principal not configured.")
                     print("Set environment variables: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET")
                     print("Falling back to local model loading.")
                     return
@@ -89,10 +89,10 @@ class ModelProvider:
                     workspace_name=config['workspace_name'],
                     auth=auth
                 )
-                print("✅ Azure ML workspace initialized with service principal")
+                print("Azure ML workspace initialized with service principal")
                 
             except Exception as e:
-                print(f"❌ Error initializing Azure ML workspace: {e}")
+                print(f"Error initializing Azure ML workspace: {e}")
                 print("Falling back to local model loading.")
 
     @staticmethod
@@ -128,14 +128,14 @@ class ModelProvider:
             return self._workspace
 
         if self._workspace_bootstrap_error is not None:
-            raise RuntimeError("Azure ML workspace no disponible") from self._workspace_bootstrap_error
+            raise RuntimeError("Azure ML workspace is not available") from self._workspace_bootstrap_error
 
         try:
             from azureml.core import Workspace
         except ImportError as exc:
             self._workspace_bootstrap_error = exc
             raise RuntimeError(
-                "Falta dependencia 'azureml-core'. Instalala para cargar modelos desde Azure ML."
+                "Missing dependency 'azureml-core'. Install it to load models from Azure ML."
             ) from exc
 
         # Build service-principal auth if env vars are present (avoids browser login)
@@ -174,9 +174,9 @@ class ModelProvider:
         except Exception as exc:
             self._workspace_bootstrap_error = exc
             raise RuntimeError(
-                "No se pudo inicializar Azure ML Workspace. "
-                "Configura AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET "
-                "y un config.json valido (AZUREML_CONFIG_PATH o .azureml/config.json)."
+                "Could not initialize Azure ML Workspace. "
+                "Configure AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET "
+                "and a valid config.json (AZUREML_CONFIG_PATH or .azureml/config.json)."
             ) from exc
 
         return self._workspace
@@ -197,14 +197,14 @@ class ModelProvider:
             from azureml.core.model import Model
         except ImportError as exc:
             raise RuntimeError(
-                "Falta dependencia 'azureml-core'. Instalala para consultar modelos registrados."
+                "Missing dependency 'azureml-core'. Install it to query registered models."
             ) from exc
 
         workspace = self._get_workspace()
         models = Model.list(workspace=workspace, name=registered_name)
         if not models:
             raise FileNotFoundError(
-                f"No se encontro el modelo registrado '{registered_name}' en Azure ML."
+                f"Registered model '{registered_name}' was not found in Azure ML."
             )
 
         latest_model = max(models, key=self._model_sort_key)
@@ -237,7 +237,7 @@ class ModelProvider:
         pickles = sorted(artifact_root.rglob("*.pkl"))
         if not pickles:
             raise FileNotFoundError(
-                f"No hay archivos .pkl en artefactos descargados para '{registered_name}' ({artifact_root})."
+                f"There are no archivos .pkl en artefactos descargados para '{registered_name}' ({artifact_root})."
             )
 
         exact_match = next((p for p in pickles if p.name == expected_filename), None)
@@ -355,7 +355,7 @@ class ModelProvider:
         self._registered_artifact_cache.pop(registered_name, None)
         self._registered_version_cache.pop(registered_name, None)
 
-        print(f"✅ Model '{registered_name}' saved to {dest_pkl_path}")
+        print(f"Model '{registered_name}' saved to {dest_pkl_path}")
         return dest_pkl_path
 
     def ensure_models_in_artifacts(
@@ -366,7 +366,7 @@ class ModelProvider:
         """
         For each name in *registered_names*, download from Azure ML if the
         expected ``{name}.pkl`` is absent in the artifacts folder or *force* is
-        True.  Returns a mapping registered_name → destination path for every
+        True.  Returns a mapping registered_name -> destination path for every
         successfully prepared model.
         """
         results: dict[str, Path] = {}
@@ -374,16 +374,16 @@ class ModelProvider:
             dest = self.artifacts_path / f"{name}.pkl"
             if force or not dest.exists():
                 action = "Refreshing" if dest.exists() else "Downloading"
-                print(f"🔄 {action} model '{name}' from Azure ML…")
+                print(f"{action} model '{name}' from Azure ML")
                 try:
                     results[name] = self.download_model_to_artifacts(registered_name=name)
                 except Exception as exc:
-                    print(f"❌ Failed to download '{name}': {exc}")
+                    print(f"Failed to download '{name}': {exc}")
                     if dest.exists():
                         print(f"   Keeping existing local copy.")
                         results[name] = dest
             else:
-                print(f"✓ Model '{name}' already present at {dest}")
+                print(f"Model '{name}' already present at {dest}")
                 results[name] = dest
         return results
 
@@ -408,24 +408,29 @@ class ModelProvider:
             try:
                 loaded_model = self._load_model_from_azure(name)
                 self._cache[name] = loaded_model
-                print(f"✅ Model loaded from Azure ML: {type(loaded_model).__name__}")
+                print(f"Model loaded from Azure ML: {type(loaded_model).__name__}")
                 return loaded_model
             except Exception as e:
                 azure_error = e
-                print(f"❌ Error downloading model from Azure ML: {e}")
+                print(f"Error downloading model from Azure ML: {e}")
                 print("Falling back to local loading")
         
         # Fallback to local loading
         try:
             model = self._load_model_from_local_artifacts(name)
             self._cache[name] = model
-            print(f"Modelo cargado correctamente: {type(model).__name__}")
+            print(f"Model loaded successfully: {type(model).__name__}")
             return model
         except Exception as local_error:
             if azure_error is not None:
                 raise RuntimeError(
-                    "Error cargando modelo desde Azure ML y desde artifacts locales. "
+                    "Error loading model from both Azure ML and local artifacts. "
                     f"Azure: {type(azure_error).__name__}: {azure_error}. "
                     f"Local: {type(local_error).__name__}: {local_error}"
                 ) from local_error
             raise
+
+
+
+
+

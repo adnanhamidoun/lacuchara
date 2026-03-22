@@ -1,4 +1,4 @@
-// Componente de transparencia específico para predicciones de servicios
+﻿// Componente de transparencia específico para predicciones de servicios
 
 import AITransparencyCard from './AITransparencyCard'
 
@@ -28,3 +28,4 @@ export default function ServicePredictionTransparency() {
     />
   )
 }
+

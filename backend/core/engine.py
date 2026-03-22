@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 from pathlib import Path
 from typing import Any
@@ -50,11 +50,11 @@ class CloudInferenceClient:
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
-            print(f"⚠️ Variable {name} no es JSON valido. Se ignora.")
+            print(f"Variable {name} is not valid JSON. Ignoring.")
             return {}
 
         if not isinstance(parsed, dict):
-            print(f"⚠️ Variable {name} debe ser un objeto JSON. Se ignora.")
+            print(f"Variable {name} must be a JSON object. Ignoring.")
             return {}
 
         normalized: dict[str, str] = {}
@@ -87,7 +87,7 @@ class CloudInferenceClient:
 
         if requested and not has_target:
             print(
-                "⚠️ AZCA_CLOUD_INFERENCE_ENABLED=1, pero no hay endpoint definido "
+                "AZCA_CLOUD_INFERENCE_ENABLED=1, but no endpoint is configured "
                 "(AZCA_CLOUD_ENDPOINT_URL o AZCA_CLOUD_MODEL_ENDPOINTS)."
             )
 
@@ -106,7 +106,7 @@ class CloudInferenceClient:
     def _resolve_target(self, model_name: str) -> tuple[str, dict[str, str]]:
         url = self.model_endpoint_map.get(model_name) or self.endpoint_url
         if not url:
-            raise RuntimeError(f"No hay endpoint cloud configurado para modelo '{model_name}'.")
+            raise RuntimeError(f"No cloud endpoint configured for model '{model_name}'.")
 
         token = self.bearer_token
         key = self.model_key_map.get(model_name) or self.api_key
@@ -174,8 +174,8 @@ class CloudInferenceClient:
                 last_error = exc
 
         raise RuntimeError(
-            f"Fallo invocacion cloud para '{model_name}' con formatos conocidos. "
-            f"Ultimo error: {type(last_error).__name__}: {last_error}"
+            f"Cloud invocation failed for '{model_name}' con formatos conocidos. "
+            f"Last error: {type(last_error).__name__}: {last_error}"
         ) from last_error
 
     @classmethod
@@ -211,7 +211,7 @@ class CloudInferenceClient:
                 if isinstance(value, (int, float)):
                     return float(value)
 
-        raise ValueError(f"Respuesta cloud no contiene prediccion numerica valida: {data}")
+        raise ValueError(f"Cloud response does not contain a valid numeric prediction: {data}")
 
     @classmethod
     def _extract_ranked_predictions(cls, result: Any, top_k: int = 3) -> list[tuple[str, float]]:
@@ -338,31 +338,31 @@ class PredictionEngine:
 
         if self.cloud_client.enabled:
             try:
-                print(f"☁️ Realizando prediccion cloud con modelo: {model_name}")
+                print(f"Running cloud prediction with model: {model_name}")
                 prediction = self.cloud_client.predict_scalar(model_name, cloud_df_features)
-                print(f"✅ Prediccion cloud exitosa: {prediction}")
+                print(f"Cloud prediction succeeded: {prediction}")
                 return prediction
             except Exception as cloud_error:
                 if self.cloud_only:
                     raise RuntimeError(
-                        "Cloud inference habilitado en modo estricto (AZCA_CLOUD_ONLY=1) y "
-                        "la invocacion cloud fallo. No se permite fallback local."
+                        "Cloud inference is enabled in strict mode (AZCA_CLOUD_ONLY=1) and "
+                        "cloud invocation failed. Local fallback is not allowed."
                     ) from cloud_error
-                print(f"⚠️ Error cloud, fallback a local: {type(cloud_error).__name__}: {cloud_error}")
+                print(f"Cloud error, falling back to local: {type(cloud_error).__name__}: {cloud_error}")
 
         try:
             model = self.model_provider.get_model(model_name)
             expected_columns = self._extract_service_model_columns(model)
             df_features = self.pipeline.build_features(data, expected_columns=expected_columns)
             if expected_columns:
-                print(f"🧩 Esquema de features servicios usado: {list(df_features.columns)}")
+                print(f"Used services feature schema: {list(df_features.columns)}")
 
-            print(f"🔮 Realizando predicción con modelo: {type(model).__name__}")
+            print(f"Running prediction with model: {type(model).__name__}")
             prediction = model.predict(df_features)
-            print(f"✅ Predicción exitosa: {prediction}")
+            print(f"Prediction succeeded: {prediction}")
             return int(prediction[0])
         except Exception as e:
-            print(f"❌ Error en predicción: {type(e).__name__}: {str(e)}")
+            print(f"Prediction error: {type(e).__name__}: {str(e)}")
             import traceback
             traceback.print_exc()
             raise
@@ -387,25 +387,25 @@ class PredictionEngine:
 
         if self.cloud_client.enabled:
             try:
-                print(f"☁️ Realizando prediccion TOP 3 cloud con modelo: {model_name}")
+                print(f"Running TOP 3 cloud prediction with model: {model_name}")
                 top_3_dishes = self.cloud_client.predict_top_k(model_name, cloud_df_features, top_k=3)
-                print(f"✅ Top 3 predicciones cloud exitosas: {top_3_dishes}")
+                print(f"Top 3 cloud predictions succeeded: {top_3_dishes}")
                 return top_3_dishes
             except Exception as cloud_error:
                 if self.cloud_only:
                     raise RuntimeError(
-                        "Cloud inference habilitado en modo estricto (AZCA_CLOUD_ONLY=1) y "
-                        "la invocacion cloud fallo. No se permite fallback local."
+                        "Cloud inference is enabled in strict mode (AZCA_CLOUD_ONLY=1) and "
+                        "cloud invocation failed. Local fallback is not allowed."
                     ) from cloud_error
-                print(f"⚠️ Error cloud, fallback a local: {type(cloud_error).__name__}: {cloud_error}")
+                print(f"Cloud error, falling back to local: {type(cloud_error).__name__}: {cloud_error}")
 
         try:
             model = self.model_provider.get_model(model_name)
-            print(f"🔮 Realizando predicción de top 3 con modelo: {type(model).__name__}")
+            print(f"Running top-3 prediction with model: {type(model).__name__}")
 
             if not hasattr(model, "predict_proba"):
                 raise AttributeError(
-                    f"Modelo {model_name} no tiene predict_proba. Solo acepta modelos de clasificación."
+                    f"Model {model_name} has no predict_proba. Only classification models are supported."
                 )
 
             expected_columns = getattr(model, "feature_names_in_", None)
@@ -446,11 +446,11 @@ class PredictionEngine:
 
             if probabilities is None:
                 raise RuntimeError(
-                    "No se pudo alinear el esquema de features del modelo de menu con el input recibido. "
-                    f"Ultimo error: {type(last_error).__name__}: {last_error}"
+                    "Could not align menu-model feature schema with received input. "
+                    f"Last error: {type(last_error).__name__}: {last_error}"
                 ) from last_error
 
-            print(f"🧩 Esquema de features menu usado: {used_columns}")
+            print(f"Used menu feature schema: {used_columns}")
             classes = model.classes_
 
             import pandas as pd
@@ -465,10 +465,10 @@ class PredictionEngine:
                 for idx in top_3_indices
             ]
 
-            print(f"✅ Top 3 predicciones exitosas: {top_3_dishes}")
+            print(f"Top 3 predictions succeeded: {top_3_dishes}")
             return top_3_dishes
         except Exception as e:
-            print(f"❌ Error en predicción de menú: {type(e).__name__}: {str(e)}")
+            print(f"Menu prediction error: {type(e).__name__}: {str(e)}")
             import traceback
             traceback.print_exc()
             raise
@@ -488,67 +488,73 @@ class PredictionEngine:
             Exception if model doesn't have predict_proba or returns invalid format
         """
         try:
-            print(f"\n🔍 INICIO predict_unified_menu() con modelo: {model_name}")
+            print(f"\nSTART predict_unified_menu() with model: {model_name}")
 
-            print("🔨 Construyendo 15 features...")
+            print("Building 15 features...")
             df_features = self.pipeline.build_unified_menu_features(data)
-            print(f"✅ DataFrame con shape {df_features.shape} construido")
+            print(f"Built DataFrame with shape {df_features.shape}")
 
             if self.cloud_client.enabled:
                 try:
-                    print(f"☁️ Realizando prediccion TOP 3 cloud con modelo: {model_name}")
+                    print(f"Running TOP 3 cloud prediction with model: {model_name}")
                     top_3_dishes = self.cloud_client.predict_top_k(model_name, df_features, top_k=3)
-                    print(f"✅ Top 3 predicciones cloud exitosas: {top_3_dishes}")
-                    print("✅ FIN predict_unified_menu()\n")
+                    print(f"Top 3 cloud predictions succeeded: {top_3_dishes}")
+                    print("END predict_unified_menu()\n")
                     return top_3_dishes
                 except Exception as cloud_error:
                     if self.cloud_only:
                         raise RuntimeError(
-                            "Cloud inference habilitado en modo estricto (AZCA_CLOUD_ONLY=1) y "
-                            "la invocacion cloud fallo. No se permite fallback local."
+                            "Cloud inference is enabled in strict mode (AZCA_CLOUD_ONLY=1) and "
+                            "cloud invocation failed. Local fallback is not allowed."
                         ) from cloud_error
-                    print(f"⚠️ Error cloud, fallback a local: {type(cloud_error).__name__}: {cloud_error}")
+                    print(f"Cloud error, falling back to local: {type(cloud_error).__name__}: {cloud_error}")
 
-            print(f"📦 Cargando modelo: {model_name}")
+            print(f"Loading model: {model_name}")
             model = self.model_provider.get_model(model_name)
-            print(f"✅ Modelo cargado: {type(model).__name__}")
+            print(f"Model loaded: {type(model).__name__}")
 
-            print(f"🔮 Realizando predicción de top 3 con modelo unificado: {type(model).__name__}")
+            print(f"Running top-3 prediction with unified model: {type(model).__name__}")
 
             if not hasattr(model, "predict_proba"):
                 raise AttributeError(
-                    f"Modelo {model_name} no tiene predict_proba. Solo acepta modelos de clasificación."
+                    f"Model {model_name} has no predict_proba. Only classification models are supported."
                 )
 
-            print("📊 Llamando a predict_proba()...")
+            print("Calling predict_proba()...")
             probabilities = model.predict_proba(df_features)
             classes = model.classes_
             print(
-                f"✅ predict_proba() retornó resultado de tipo {type(probabilities).__name__} "
-                f"con shape {probabilities.shape if hasattr(probabilities, 'shape') else 'N/A'}"
+                f"predict_proba() returned value of type {type(probabilities).__name__} "
+                f"with shape {probabilities.shape if hasattr(probabilities, 'shape') else 'N/A'}"
             )
-            print(f"📝 Classes ({len(classes)} total): {classes[:5]}... (primeras 5)")
+            print(f"Classes ({len(classes)} total): {classes[:5]}... (first 5)")
 
             import pandas as pd
             if isinstance(probabilities, pd.DataFrame):
-                print("🔄 Convirtiendo probabilities de DataFrame a numpy array")
+                print("Converting probabilities from DataFrame to numpy array")
                 probabilities = probabilities.values
 
             probs_row = probabilities[0]
-            print(f"📊 Probabilidades (primeras 10): {probs_row[:10]}")
+            print(f"Probabilities (first 10): {probs_row[:10]}")
             top_3_indices = (-probs_row).argsort()[:3]
-            print(f"✅ Top 3 indices: {top_3_indices}")
+            print(f"Top 3 indices: {top_3_indices}")
 
             top_3_dishes = [
                 (classes[idx], float(probs_row[idx]))
                 for idx in top_3_indices
             ]
 
-            print(f"✅ Top 3 predicciones exitosas: {top_3_dishes}")
-            print("✅ FIN predict_unified_menu()\n")
+            print(f"Top 3 predictions succeeded: {top_3_dishes}")
+            print("END predict_unified_menu()\n")
             return top_3_dishes
         except Exception as e:
-            print(f"❌ Error en predicción de menú unificado: {type(e).__name__}: {str(e)}")
+            print(f"Unified menu prediction error: {type(e).__name__}: {str(e)}")
             import traceback
             traceback.print_exc()
             raise
+
+
+
+
+
+

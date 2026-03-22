@@ -12,16 +12,16 @@ except ImportError:
 
 
 DEFAULT_CUISINE_IMAGES = {
-    "grill": "https://placehold.co/800x480?text=Parrilla",
-    "spanish": "https://placehold.co/800x480?text=Cocina+Espanola",
-    "mediterranean": "https://placehold.co/800x480?text=Mediterranea",
-    "stew": "https://placehold.co/800x480?text=Guisos",
-    "fried": "https://placehold.co/800x480?text=Fritura",
-    "italian": "https://placehold.co/800x480?text=Italiana",
-    "asian": "https://placehold.co/800x480?text=Asiatica",
-    "latin": "https://placehold.co/800x480?text=Latina",
-    "arabic": "https://placehold.co/800x480?text=Arabe",
-    "avantgarde": "https://placehold.co/800x480?text=Vanguardia",
+    "grill": "https://placehold.co/800x480?text=Grill",
+    "spanish": "https://placehold.co/800x480?text=Spanish+Cuisine",
+    "mediterranean": "https://placehold.co/800x480?text=Mediterranean",
+    "stew": "https://placehold.co/800x480?text=Stews",
+    "fried": "https://placehold.co/800x480?text=Fried+Food",
+    "italian": "https://placehold.co/800x480?text=Italian",
+    "asian": "https://placehold.co/800x480?text=Asian",
+    "latin": "https://placehold.co/800x480?text=Latin",
+    "arabic": "https://placehold.co/800x480?text=Arabic",
+    "avantgarde": "https://placehold.co/800x480?text=Avant-garde",
     "plantbased": "https://placehold.co/800x480?text=Plant+Based",
     "streetfood": "https://placehold.co/800x480?text=Street+Food",
 }
@@ -29,7 +29,7 @@ DEFAULT_CUISINE_IMAGES = {
 
 def get_default_image_url(cuisine_type: str | None) -> str:
     normalized = (cuisine_type or "").strip().lower()
-    return DEFAULT_CUISINE_IMAGES.get(normalized, "https://placehold.co/800x480?text=Restaurante")
+    return DEFAULT_CUISINE_IMAGES.get(normalized, "https://placehold.co/800x480?text=Restaurant")
 
 
 @dataclass
@@ -52,7 +52,7 @@ class BlobManager:
         return self._blob_service_client is not None
 
     def upload_restaurant_image(self, restaurant_id: int, file_content: bytes, filename: str) -> str | None:
-        # Usar solo el nombre del archivo, sin subcarpetas: res_1.jpg, res_2.jpg, etc.
+        # Keep only the file name, without subfolders: res_1.jpg, res_2.jpg, etc.
         blob_name = filename
 
         if self.use_azure:

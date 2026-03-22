@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   Inscripcion,
   InscripcionCreatePayload,
   InscripcionesListResponse,
@@ -99,3 +99,4 @@ export async function clearApprovalHistory(): Promise<ClearHistoryResponse> {
 
   return parseResponse<ClearHistoryResponse>(response, 'No se pudo limpiar el historial de aprobaciones.')
 }
+

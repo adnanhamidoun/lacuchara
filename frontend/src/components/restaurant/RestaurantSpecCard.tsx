@@ -1,4 +1,4 @@
-import { MapPin, Users, Clock, Wifi, BarChart3, Utensils, Star, BadgeEuro, Armchair, Umbrella, CalendarDays } from 'lucide-react'
+﻿import { MapPin, Users, Clock, Wifi, BarChart3, Utensils, Star, BadgeEuro, Armchair, Umbrella, CalendarDays } from 'lucide-react'
 import type { RestaurantDetail } from '../../types/domain'
 import { formatTerraceType } from '../../utils/formatTerraceType'
 
@@ -62,7 +62,7 @@ export function RestaurantSpecCard({ restaurant }: RestaurantSpecCardProps) {
             <SpecRow
               icon={BadgeEuro}
               label="Precio medio del menú"
-              value={`€${restaurant.menu_price.toFixed(2)}`}
+              value={`�,�${restaurant.menu_price.toFixed(2)}`}
             />
           )}
         </SpecSection>
@@ -135,3 +135,4 @@ export function RestaurantSpecCard({ restaurant }: RestaurantSpecCardProps) {
     </div>
   )
 }
+

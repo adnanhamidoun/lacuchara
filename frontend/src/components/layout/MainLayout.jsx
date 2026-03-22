@@ -1,4 +1,4 @@
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+﻿import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { Sun, Moon, Crown, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -229,7 +229,7 @@ export default function MainLayout({ children }) {
                     to="/restaurante/alta"
                     className="inline-flex items-center rounded-xl bg-gradient-to-r from-[#C9794D] to-[#E09A63] px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(201,121,77,0.35)] transition-all duration-200 hover:brightness-105"
                   >
-                    Únete como Restaurante
+                    �snete como Restaurante
                   </NavLink>
                 </>
               )}
@@ -288,3 +288,4 @@ export default function MainLayout({ children }) {
     </div>
   )
 }
+

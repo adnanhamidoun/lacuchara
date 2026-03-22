@@ -1,4 +1,4 @@
-// Página de Model Cards - Documentación completa de los modelos IA utilizados
+﻿// Página de Model Cards - Documentación completa de los modelos IA utilizados
 
 import AITransparencyCard from '../components/ai/AITransparencyCard'
 import AIDisclaimer from '../components/ai/AIDisclaimer'
@@ -10,7 +10,7 @@ export default function AIModelCardsPage() {
         {/* Encabezado */}
         <div className="space-y-4">
           <h1 className="text-4xl font-bold text-[var(--text)]">
-            🤖 Estándares de IA Responsable
+            �Y�- Estándares de IA Responsable
           </h1>
           <p className="text-lg text-[var(--text-muted)] max-w-2xl">
             En AZCA creemos en la transparencia y la responsabilidad en el uso de inteligencia artificial.
@@ -40,7 +40,7 @@ export default function AIModelCardsPage() {
               '📊 Historial de ventas: servicios de los últimos 28 días',
               '🏢 Capacidad del restaurante: mesas, límite de capacidad, servicio mínimo',
               '📅 Calendario inteligente: festivos, puentes, ciclos de pago, día de semana',
-              '🌤️ Meteorología: temperatura máxima y precipitación (Open-Meteo)',
+              '🌡️ Meteorología: temperatura máxima y precipitación (Open-Meteo)',
               '📍 Ubicación: distancia a torres de oficina, zona de influencia',
               '⭐ Reputación: valoración en Google, tipo de cocina, segmento',
             ]}
@@ -73,16 +73,16 @@ export default function AIModelCardsPage() {
             dataUsed={[
               '📋 Órdenes históricas: qué platos se ordenaron en fechas similares (últimos 90 días)',
               '🍽️ Tipo de cocina: española, italiana, asiática, etc.',
-              '👥 Segmento de restaurante: gourmet, familiar, casual, business',
+              '⭐ Segmento de restaurante: gourmet, familiar, casual, business',
               '📆 Estacionalidad: mes, día de la semana, festividades',
               '🌡️ Meteorología: platos ligeros en verano, pesados en invierno',
               '⭐ Correlaciones: platos que se piden juntos (starter + main)',
             ]}
             limitations={[
-              '❌ Evitamos "alucinaciones": pero a veces predice platos que no están en tu menú actual.',
-              '📈 Los platos nuevos sin historial tendrán predicciones pobres inicialmente.',
-              '🔄 Cambios de receta o nombre no se detectan automáticamente.',
-              '🎯 Funciona mejor con al menos 1 mes de historial de órdenes.',
+              '⚡ Evitamos "alucinaciones": pero a veces predice platos que no están en tu menú actual.',
+              '🍳 Los platos nuevos sin historial tendrán predicciones pobres inicialmente.',
+              '✏️ Cambios de receta o nombre no se detectan automáticamente.',
+              '⏱️ Funciona mejor con al menos 1 mes de historial de órdenes.',
               '⚠️ A veces sobra o falta precisión: no es ciencia exacta.',
               '🚫 No considera cambios de ingredientes, costo o disponibilidad estacional.',
             ]}
@@ -98,18 +98,18 @@ export default function AIModelCardsPage() {
 
         {/* Cómo mejoramos */}
         <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8">
-          <h2 className="text-2xl font-bold text-[var(--text)]">🔬 Cómo Mejoramos Nuestros Modelos</h2>
+          <h2 className="text-2xl font-bold text-[var(--text)]">🔧 Cómo Mejoramos Nuestros Modelos</h2>
           
           <div className="space-y-4">
             <div>
-              <h3 className="font-semibold text-[var(--text)] mb-2">📊 Reentrenamiento</h3>
+              <h3 className="font-semibold text-[var(--text)] mb-2">🔄 Reentrenamiento</h3>
               <p className="text-[var(--text-muted)] text-sm">
                 Los modelos se reentrenan cada mes con los últimos datos históricos para mantenerse precisos.
               </p>
             </div>
 
             <div>
-              <h3 className="font-semibold text-[var(--text)] mb-2">🧪 Pruebas de Sesgo</h3>
+              <h3 className="font-semibold text-[var(--text)] mb-2">🔍 Pruebas de Sesgo</h3>
               <p className="text-[var(--text-muted)] text-sm">
                 Evaluated periodically para asegurar que no discriminan restaurantes pequeños ni aquellos en 
                 zonas específicas.
@@ -117,14 +117,14 @@ export default function AIModelCardsPage() {
             </div>
 
             <div>
-              <h3 className="font-semibold text-[var(--text)] mb-2">💬 Feedback de Usuarios</h3>
+              <h3 className="font-semibold text-[var(--text)] mb-2">�Y'� Feedback de Usuarios</h3>
               <p className="text-[var(--text-muted)] text-sm">
                 Tu feedback anónimo nos ayuda a mejorar. Si una predicción fue muy incorrecta, nos ayuda registrarlo.
               </p>
             </div>
 
             <div>
-              <h3 className="font-semibold text-[var(--text)] mb-2">🔐 Privacidad</h3>
+              <h3 className="font-semibold text-[var(--text)] mb-2">�Y"� Privacidad</h3>
               <p className="text-[var(--text-muted)] text-sm">
                 No compartimos datos individuales con terceros. Solo métricas agregadas para mejorar el servicio.
               </p>
@@ -134,12 +134,12 @@ export default function AIModelCardsPage() {
 
         {/* Preguntas frecuentes */}
         <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8">
-          <h2 className="text-2xl font-bold text-[var(--text)]">❓ Preguntas Frecuentes</h2>
+          <h2 className="text-2xl font-bold text-[var(--text)]">�" Preguntas Frecuentes</h2>
           
           <details className="group rounded-lg border border-[var(--border)] p-4 cursor-pointer">
             <summary className="font-semibold text-[var(--text)] flex justify-between items-center">
               ¿Qué pasa si la predicción es completamente incorrecta?
-              <span className="text-[var(--text-muted)]">→</span>
+              <span className="text-[var(--text-muted)]">�?'</span>
             </summary>
             <p className="text-sm text-[var(--text-muted)] mt-3">
               Es posible, especialmente en eventos no previstos. Por eso siempre debes combinar las predicciones 
@@ -151,7 +151,7 @@ export default function AIModelCardsPage() {
           <details className="group rounded-lg border border-[var(--border)] p-4 cursor-pointer">
             <summary className="font-semibold text-[var(--text)] flex justify-between items-center">
               ¿Usáis datos de mis clientes individuales?
-              <span className="text-[var(--text-muted)]">→</span>
+              <span className="text-[var(--text-muted)]">�?'</span>
             </summary>
             <p className="text-sm text-[var(--text-muted)] mt-3">
               No. Solo usamos números agregados: "cuántos servicios", "qué platos en total". Nunca datos 
@@ -162,7 +162,7 @@ export default function AIModelCardsPage() {
           <details className="group rounded-lg border border-[var(--border)] p-4 cursor-pointer">
             <summary className="font-semibold text-[var(--text)] flex justify-between items-center">
               ¿Qué es una "alucinación" de IA?
-              <span className="text-[var(--text-muted)]">→</span>
+              <span className="text-[var(--text-muted)]">�?'</span>
             </summary>
             <p className="text-sm text-[var(--text-muted)] mt-3">
               A veces el modelo "alucina" y predice un plato que no existe en tu menú actual. Es raro pero 
@@ -173,7 +173,7 @@ export default function AIModelCardsPage() {
           <details className="group rounded-lg border border-[var(--border)] p-4 cursor-pointer">
             <summary className="font-semibold text-[var(--text)] flex justify-between items-center">
               ¿Con qué frecuencia se actualizan los modelos?
-              <span className="text-[var(--text-muted)]">→</span>
+              <span className="text-[var(--text-muted)]">�?'</span>
             </summary>
             <p className="text-sm text-[var(--text-muted)] mt-3">
               Mensualmente reentrenamos los modelos con los últimos datos. Actualizaciones críticas de seguridad 
@@ -185,7 +185,7 @@ export default function AIModelCardsPage() {
         {/* Footer */}
         <div className="text-center py-8 border-t border-[var(--border)]">
           <p className="text-sm text-[var(--text-muted)]">
-            💡 Versión: AZCA AI 1.0 | Última actualización: Marzo 2026
+            �Y'� Versión: AZCA AI 1.0 | �sltima actualización: Marzo 2026
           </p>
           <p className="text-xs text-[var(--text-muted)] mt-2">
             Para preguntas sobre nuestras prácticas de IA responsable, contáctanos.
@@ -195,3 +195,4 @@ export default function AIModelCardsPage() {
     </div>
   )
 }
+

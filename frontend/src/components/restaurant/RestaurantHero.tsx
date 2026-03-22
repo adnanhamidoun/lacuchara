@@ -1,22 +1,32 @@
-import { Star, MapPin, Clock, Users, Wifi, Utensils, Wine, CalendarDays, TrendingUp } from 'lucide-react'
-import type { RestaurantDetail } from '../../types/domain'
+﻿import {
+  Star,
+  MapPin,
+  Clock,
+  Users,
+  Wifi,
+  Utensils,
+  Wine,
+  CalendarDays,
+  TrendingUp,
+} from "lucide-react";
+import type { RestaurantDetail } from "../../types/domain";
 
 interface RestaurantHeroProps {
-  restaurant: RestaurantDetail
-  imageUrl: string
+  restaurant: RestaurantDetail;
+  imageUrl: string;
 }
 
 function normalizeTagLabel(label: string | null | undefined): string {
-  if (!label) return ''
+  if (!label) return "";
 
-  const trimmed = label.trim()
-  if (!trimmed) return ''
+  const trimmed = label.trim();
+  if (!trimmed) return "";
 
-  return `${trimmed.charAt(0).toLocaleUpperCase('es-ES')}${trimmed.slice(1)}`
+  return `${trimmed.charAt(0).toLocaleUpperCase("es-ES")}${trimmed.slice(1)}`;
 }
 
 export function RestaurantHero({ restaurant, imageUrl }: RestaurantHeroProps) {
-  const segmentTag = normalizeTagLabel(restaurant.restaurant_segment)
+  const segmentTag = normalizeTagLabel(restaurant.restaurant_segment);
 
   return (
     <div>
@@ -40,8 +50,10 @@ export function RestaurantHero({ restaurant, imageUrl }: RestaurantHeroProps) {
             /* Fallback when no image */
             <div className="h-full w-full bg-gradient-to-br from-[#3A3037] via-[#2D2823] to-[#1F1B16] flex items-center justify-center">
               <div className="text-center">
-                <div className="text-5xl mb-3">🏢</div>
-                <p className="text-[var(--text-muted)] text-sm">Imagen no disponible</p>
+                <div className="text-5xl mb-3">📷</div>
+                <p className="text-[var(--text-muted)] text-sm">
+                  Imagen no disponible
+                </p>
               </div>
             </div>
           )}
@@ -68,7 +80,9 @@ export function RestaurantHero({ restaurant, imageUrl }: RestaurantHeroProps) {
               {restaurant.cuisine_type && (
                 <div className="flex items-center gap-1.5">
                   <Utensils size={16} className="text-[#E8C07D]" />
-                  <span className="text-sm font-medium">{restaurant.cuisine_type}</span>
+                  <span className="text-sm font-medium">
+                    {restaurant.cuisine_type}
+                  </span>
                 </div>
               )}
 
@@ -77,7 +91,9 @@ export function RestaurantHero({ restaurant, imageUrl }: RestaurantHeroProps) {
                 <div className="flex items-center gap-1.5">
                   <div className="flex items-center gap-0.5">
                     <Star size={16} className="fill-[#E8C07D] text-[#E8C07D]" />
-                    <span className="text-sm font-semibold">{restaurant.google_rating.toFixed(1)}</span>
+                    <span className="text-sm font-semibold">
+                      {restaurant.google_rating.toFixed(1)}
+                    </span>
                   </div>
                 </div>
               )}
@@ -86,7 +102,9 @@ export function RestaurantHero({ restaurant, imageUrl }: RestaurantHeroProps) {
               {restaurant.menu_price && (
                 <div className="flex items-center gap-1.5">
                   <Wine size={16} className="text-[#E8C07D]" />
-                  <span className="text-sm font-medium">€{restaurant.menu_price.toFixed(2)} menú</span>
+                  <span className="text-sm font-medium">
+                    €{restaurant.menu_price.toFixed(2)} menú
+                  </span>
                 </div>
               )}
             </div>
@@ -94,5 +112,5 @@ export function RestaurantHero({ restaurant, imageUrl }: RestaurantHeroProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }

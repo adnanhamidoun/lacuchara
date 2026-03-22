@@ -1,4 +1,4 @@
-import { Linkedin, ArrowLeft, Sparkles, Target, Users, Shield, Zap } from 'lucide-react'
+﻿import { Linkedin, ArrowLeft, Sparkles, Target, Users, Shield, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { FadeUpSection, ScaleInCard, SlideInLeft } from '../../components/motion/MotionWrappers'
@@ -316,7 +316,7 @@ export default function AboutView() {
               ¿Tienes un restaurante y quieres llevarlo al siguiente nivel?
             </h2>
             <p className="text-base text-[var(--text-muted)] leading-relaxed">
-              Únete a CUISINE AML y descubre cómo la inteligencia artificial puede ayudarte a mejorar tu visibilidad, optimizar tu oferta y conectar con el cliente adecuado.
+              �snete a CUISINE AML y descubre cómo la inteligencia artificial puede ayudarte a mejorar tu visibilidad, optimizar tu oferta y conectar con el cliente adecuado.
             </p>
           </FadeUpSection>
 
@@ -338,3 +338,4 @@ export default function AboutView() {
     </div>
   )
 }
+

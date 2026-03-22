@@ -1,4 +1,4 @@
-import importlib
+﻿import importlib
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
@@ -19,7 +19,7 @@ class MenuSections:
 
 
 class DocumentIntelligenceOCR:
-    """Cliente OCR para Azure Document Intelligence."""
+    """OCR client for Azure Document Intelligence."""
 
     def __init__(self, endpoint: str, key: str, model_id: str = "prebuilt-layout") -> None:
         self.endpoint = endpoint
@@ -138,7 +138,7 @@ class DocumentIntelligenceOCR:
             key_cls = getattr(core_module, "AzureKeyCredential")
         except ImportError as exc:
             raise RuntimeError(
-                "Falta dependencia 'azure-ai-documentintelligence'. Instálala para usar OCR."
+                "Missing dependency 'azure-ai-documentintelligence'. Install it to use OCR."
             ) from exc
 
         client = client_cls(endpoint=self.endpoint, credential=key_cls(self.key))
@@ -172,7 +172,7 @@ class DocumentIntelligenceOCR:
 
 
 class MenuSectionExtractor:
-    """Extractor de platos con estrategia header-first."""
+    """Dish extractor with a header-first strategy."""
 
     HEADER_CHOICE_SUFFIX = r"(?:\s+(?:a|1a|1ª|1\s*a|la|l\s*a)\s+elegir(?:\s+(?:uno|una|1))?)?"
     HEADER_CHOICE_ONLY_PATTERN = re.compile(
@@ -184,19 +184,19 @@ class MenuSectionExtractor:
         "starter": re.compile(
             r"^\s*(?:entrantes?|primer(?:o|os|a|as)|primer(?:os?)?\s+platos?|para\s+empezar|para\s+picar|picar|inicios?)"
             + HEADER_CHOICE_SUFFIX +
-            r"\s*[:\-–—]?\s*$",
+            r"\s*[:\-\"']?\s*$",
             re.IGNORECASE,
         ),
         "main": re.compile(
             r"^\s*(?:principal(?:es)?|segund(?:o|os|a|as)|segund(?:os?)?\s+platos?|plato\s+principal|carnes\s+y\s+pescados|carnes|pescados)"
             + HEADER_CHOICE_SUFFIX +
-            r"\s*[:\-–—]?\s*$",
+            r"\s*[:\-\"']?\s*$",
             re.IGNORECASE,
         ),
         "dessert": re.compile(
             r"^\s*(?:postres?\s+o\s+caf[eé]|postres?|dulces?|para\s+terminar|postre\s+del\s+d[ií]a)"
             + HEADER_CHOICE_SUFFIX +
-            r"\s*[:\-–—]?\s*$",
+            r"\s*[:\-\"']?\s*$",
             re.IGNORECASE,
         ),
     }
@@ -204,25 +204,25 @@ class MenuSectionExtractor:
         "starter": re.compile(
             r"^\s*((?:entrantes?|primer(?:o|os|a|as)|primer(?:os?)?\s+platos?|para\s+empezar|para\s+picar|picar|inicios?)"
             + HEADER_CHOICE_SUFFIX +
-            r")\s*[:\-–—]?\s+(.+)$",
+            r")\s*[:\-\"']?\s+(.+)$",
             re.IGNORECASE,
         ),
         "main": re.compile(
             r"^\s*((?:principal(?:es)?|segund(?:o|os|a|as)|segund(?:os?)?\s+platos?|plato\s+principal|carnes\s+y\s+pescados|carnes|pescados)"
             + HEADER_CHOICE_SUFFIX +
-            r")\s*[:\-–—]?\s+(.+)$",
+            r")\s*[:\-\"']?\s+(.+)$",
             re.IGNORECASE,
         ),
         "dessert": re.compile(
             r"^\s*((?:postres?\s+o\s+caf[eé]|postres?|dulces?|para\s+terminar|postre\s+del\s+d[ií]a)"
             + HEADER_CHOICE_SUFFIX +
-            r")\s*[:\-–—]?\s+(.+)$",
+            r")\s*[:\-\"']?\s+(.+)$",
             re.IGNORECASE,
         ),
     }
 
     NOISE_PATTERNS = re.compile(
-        r"^\d{1,3}(?:[,\.]\d{1,2})?\s*€[*ºo]?\s*$"
+        r"^\d{1,3}(?:[,\.]\d{1,2})?\s*(?:€|eur)?[*ºo]?\s*$"
         r"|^\s*(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)(?:\s+\d{1,2})?\s*$"
         r"|^\s*(?:(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\s+)?\d{1,2}\s+de\s+\w+\s+de\s+\d{4}"
         r"|^\s*men[uú]\s+del\s+d[ií]a\s*$"
@@ -236,7 +236,7 @@ class MenuSectionExtractor:
         r"|^\s*(?:con\s+)?pan[\s,]+(?:y\s+)?bebida"
         r"|^\s*bebida\s+(?:in|no\s+in)clu"
         r"|^\s*[\(\[]?(?:tercio|doble|cañ[ae]|jarra|cerveza|vino|agua|refresco|caf[eé]|infusi[oó]n)\b"
-        r"|^\s*[\(\[]?\+\s*\d+(?:[,\.]\d{1,2})?\s*€\s*[\)\]]?\s*$"
+        r"|^\s*[\(\[]?\+\s*\d+(?:[,\.]\d{1,2})?\s*(?:€|eur)?\s*[\)\]]?\s*$"
         r"|^\s*(?:iva|i\.v\.a|impuesto)\b"
         r"|^\s*medio\s+men[uú]\b"
         r"|^\s*con\s+un\s+(?:primero|segundo)\b",
@@ -244,8 +244,8 @@ class MenuSectionExtractor:
     )
 
     SEPARATOR_PATTERN = re.compile(r"^[-_=]{2,}$")
-    EXTRA_PRICE_PATTERN = re.compile(r"\(\s*\+\s*\d+(?:[,\.]\d{1,2})?\s*€\s*\)", re.IGNORECASE)
-    BRANDING_LINE_PATTERN = re.compile(r"^[A-ZÁÉÍÓÚÜÑ\s]{5,}$")
+    EXTRA_PRICE_PATTERN = re.compile(r"\(\s*\+\s*\d+(?:[,\.]\d{1,2})?\s*(?:€|eur)?\s*\)", re.IGNORECASE)
+    BRANDING_LINE_PATTERN = re.compile(r"^[A-ZÁÉÍÓÚÜÑ'\s]{5,}$")
     DESSERT_HINTS = ["flan", "tarta", "helado", "natillas", "arroz con leche", "tiramisu", "tiramisú"]
     MAIN_HINTS = [
         "chuleta", "filete", "solomillo", "entrecot", "costilla", "pollo", "ternera", "cerdo",
@@ -263,7 +263,7 @@ class MenuSectionExtractor:
 
     @staticmethod
     def _strip_bullets(line: str) -> str:
-        line = re.sub(r"^\s*[•·–—\*]\s*", "", line)
+        line = re.sub(r"^\s*[•·\"'\*]+\s*", "", line)
         line = re.sub(r"^\s*-\s+", "", line)
         return line.strip()
 
@@ -408,7 +408,7 @@ class MenuSectionExtractor:
 
     @staticmethod
     def _split_inline_candidates(line: str) -> list[str]:
-        separators_pattern = r"\s*[•|;]+\s*|\s{2,}|\s*/\s*"
+        separators_pattern = r"\s*[|;•·]+\s*|\s{2,}|\s*/\s*"
         if re.search(separators_pattern, line):
             return [chunk.strip(" -\t") for chunk in re.split(separators_pattern, line) if chunk.strip()]
         if " . " in line:
@@ -507,7 +507,7 @@ class MenuSectionExtractor:
 
     @staticmethod
     def _pick_representative(items: list[str]) -> str:
-        return items[0] if items else "Sin detectar"
+        return items[0] if items else "Not detected"
 
     @staticmethod
     def _classified_lines(buckets: dict[str, list[str]]) -> list[str]:
@@ -520,7 +520,7 @@ class MenuSectionExtractor:
         detected_lines = [line for line in lines if cls._is_valid_dish(line)]
         buckets: dict[str, list[str]] = {"starter": [], "main": [], "dessert": []}
 
-        # 1) HEADER-FIRST: si hay cabeceras, mandan.
+        # 1) HEADER-FIRST: if headers exist, they drive section assignment.
         has_headers = False
         current_section: str | None = None
         classified_lines: list[str] = []
@@ -565,7 +565,7 @@ class MenuSectionExtractor:
                 raw_text=raw_text,
             )
 
-        # 2) Fallback por bloques visuales (línea en blanco/separador)
+        # 2) Fallback by visual blocks (blank line/separator)
         blocks: list[list[str]] = [[]]
         for line in raw_lines:
             if not line or cls._is_separator(line):
@@ -594,13 +594,13 @@ class MenuSectionExtractor:
                 raw_text=raw_text,
             )
 
-        # 3) Fallback final por inferencia de inicio de principales
+        # 3) Final fallback by inferred start of main dishes
         valid = [line for line in lines if cls._is_valid_dish(line)]
         if not valid:
             return MenuSections(
-                starter="Sin detectar",
-                main="Sin detectar",
-                dessert="Sin detectar",
+                starter="Not detected",
+                main="Not detected",
+                dessert="Not detected",
                 starter_options=[],
                 main_options=[],
                 dessert_options=[],
@@ -618,7 +618,7 @@ class MenuSectionExtractor:
             return MenuSections(
                 starter=cls._pick_representative(buckets["starter"]),
                 main=cls._pick_representative(buckets["main"]),
-                dessert="Sin detectar",
+                dessert="Not detected",
                 starter_options=buckets["starter"],
                 main_options=buckets["main"],
                 dessert_options=[],
@@ -811,8 +811,11 @@ class MenuMLPredictor:
             fallback_value = getattr(sections, category)
             predictions[category] = [
                 (fallback_value, 0.9),
-                ("Sin suficiente contexto", 0.5),
-                ("Sin suficiente contexto", 0.4),
+                ("Insufficient context", 0.5),
+                ("Insufficient context", 0.4),
             ]
 
         return predictions
+
+
+

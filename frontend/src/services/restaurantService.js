@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Servicio API para restaurantes
  * Maneja todas las llamadas HTTP relacionadas con restaurantes
  */
@@ -95,3 +95,4 @@ export default {
   fetchRestaurantsNearby,
   fetchRestaurantDetail,
 };
+

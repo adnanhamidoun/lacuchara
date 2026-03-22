@@ -1,8 +1,8 @@
-import { useState } from 'react'
+﻿import { useState } from "react";
 
 function TestMode({ onBack }) {
   const [formData, setFormData] = useState({
-    service_date: new Date().toISOString().split('T')[0],
+    service_date: new Date().toISOString().split("T")[0],
     restaurant_id: 1,
     max_temp_c: 22,
     precipitation_mm: 0,
@@ -18,57 +18,62 @@ function TestMode({ onBack }) {
     capacity_limit: 80,
     table_count: 20,
     min_service_duration: 45,
-    terrace_setup_type: 'standard',
+    terrace_setup_type: "standard",
     opens_weekends: true,
     has_wifi: true,
-    restaurant_segment: 'casual',
-    menu_price: 25.50,
+    restaurant_segment: "casual",
+    menu_price: 25.5,
     dist_office_towers: 500,
     google_rating: 4.5,
-    cuisine_type: 'mediterranean'
-  })
+    cuisine_type: "mediterranean",
+  });
 
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState(null)
-  const [error, setError] = useState(null)
-  const [executionTime, setExecutionTime] = useState(null)
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [executionTime, setExecutionTime] = useState(null);
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target
-    setFormData(prev => ({
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : (type === 'number' ? parseFloat(value) : value)
-    }))
-  }
+      [name]:
+        type === "checkbox"
+          ? checked
+          : type === "number"
+            ? parseFloat(value)
+            : value,
+    }));
+  };
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    setResult(null)
-    setExecutionTime(null)
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    setExecutionTime(null);
 
-    const startTime = performance.now()
+    const startTime = performance.now();
 
     try {
-      const response = await fetch('/predict', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      })
+      const response = await fetch("/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
 
-      const endTime = performance.now()
-      setExecutionTime(Math.round(endTime - startTime))
+      const endTime = performance.now();
+      setExecutionTime(Math.round(endTime - startTime));
 
-      if (!response.ok) throw new Error(`HTTP error: ${response.status}`)
-      const data = await response.json()
-      setResult(data)
+      if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+      const data = await response.json();
+      setResult(data);
     } catch (err) {
-      setError(err.message)
+      setError(err.message);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-900">
@@ -80,7 +85,9 @@ function TestMode({ onBack }) {
               <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
                 ⚙️ Simulador Admin
               </h1>
-              <p className="text-indigo-300/80 text-sm mt-2">Control Panel - 24 Parámetros Completos</p>
+              <p className="text-indigo-300/80 text-sm mt-2">
+                Control Panel - 24 Parámetros Completos
+              </p>
             </div>
             <button
               onClick={onBack}
@@ -101,7 +108,7 @@ function TestMode({ onBack }) {
               {/* Section 1: Weather */}
               <div className="bg-gradient-to-br from-blue-600/20 to-cyan-600/20 border border-blue-500/40 backdrop-blur-sm rounded-xl p-6 hover:border-blue-400/60 transition-all duration-300">
                 <h3 className="text-lg font-bold text-blue-300 mb-4 flex items-center gap-2">
-                  🌤️ Condiciones Climáticas
+                  🌡️ Condiciones Climáticas
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -146,14 +153,17 @@ function TestMode({ onBack }) {
                 />
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { name: 'is_holiday', label: 'Festivo' },
-                    { name: 'is_bridge_day', label: 'Puente' },
-                    { name: 'is_rain_service_peak', label: 'Lluvia Pico' },
-                    { name: 'is_stadium_event', label: 'Estadio' },
-                    { name: 'is_azca_event', label: 'Evento AZCA' },
-                    { name: 'is_payday_week', label: 'Cobro' }
-                  ].map(field => (
-                    <label key={field.name} className="flex items-center gap-2 cursor-pointer p-3 bg-slate-800/30 rounded-lg border border-purple-400/20 hover:border-purple-300/50 hover:bg-slate-800/50 transition-all">
+                    { name: "is_holiday", label: "Festivo" },
+                    { name: "is_bridge_day", label: "Puente" },
+                    { name: "is_rain_service_peak", label: "Lluvia Pico" },
+                    { name: "is_stadium_event", label: "Estadio" },
+                    { name: "is_azca_event", label: "Evento AZCA" },
+                    { name: "is_payday_week", label: "Cobro" },
+                  ].map((field) => (
+                    <label
+                      key={field.name}
+                      className="flex items-center gap-2 cursor-pointer p-3 bg-slate-800/30 rounded-lg border border-purple-400/20 hover:border-purple-300/50 hover:bg-slate-800/50 transition-all"
+                    >
                       <input
                         type="checkbox"
                         name={field.name}
@@ -162,7 +172,9 @@ function TestMode({ onBack }) {
                         disabled={loading}
                         className="w-4 h-4 accent-purple-500"
                       />
-                      <span className="text-xs font-medium text-purple-200">{field.label}</span>
+                      <span className="text-xs font-medium text-purple-200">
+                        {field.label}
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -208,7 +220,7 @@ function TestMode({ onBack }) {
               {/* Section 4: Operations */}
               <div className="bg-gradient-to-br from-orange-600/20 to-red-600/20 border border-orange-500/40 backdrop-blur-sm rounded-xl p-6 hover:border-orange-400/60 transition-all duration-300">
                 <h3 className="text-lg font-bold text-orange-300 mb-4 flex items-center gap-2">
-                  🔧 Operacionales
+                  ⚙️ Operacionales
                 </h3>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <input
@@ -244,10 +256,13 @@ function TestMode({ onBack }) {
                 </select>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { name: 'opens_weekends', label: 'Fines Semana' },
-                    { name: 'has_wifi', label: 'Wi-Fi' }
-                  ].map(field => (
-                    <label key={field.name} className="flex items-center gap-2 cursor-pointer p-3 bg-slate-800/30 rounded-lg border border-orange-400/20 hover:border-orange-300/50 hover:bg-slate-800/50 transition-all">
+                    { name: "opens_weekends", label: "Fines Semana" },
+                    { name: "has_wifi", label: "Wi-Fi" },
+                  ].map((field) => (
+                    <label
+                      key={field.name}
+                      className="flex items-center gap-2 cursor-pointer p-3 bg-slate-800/30 rounded-lg border border-orange-400/20 hover:border-orange-300/50 hover:bg-slate-800/50 transition-all"
+                    >
                       <input
                         type="checkbox"
                         name={field.name}
@@ -256,7 +271,9 @@ function TestMode({ onBack }) {
                         disabled={loading}
                         className="w-4 h-4 accent-orange-500"
                       />
-                      <span className="text-xs font-medium text-orange-200">{field.label}</span>
+                      <span className="text-xs font-medium text-orange-200">
+                        {field.label}
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -296,7 +313,7 @@ function TestMode({ onBack }) {
                     value={formData.menu_price}
                     onChange={handleChange}
                     disabled={loading}
-                    placeholder="Precio Menú (€)"
+                    placeholder="Precio Menú (�,�)"
                     className="px-4 py-3 bg-slate-800/50 border border-cyan-400/50 rounded-lg text-white focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-500/30 placeholder-slate-400 transition-all text-sm"
                   />
                   <input
@@ -350,7 +367,7 @@ function TestMode({ onBack }) {
                   </>
                 ) : (
                   <>
-                    <span>🚀</span>
+                    <span>⚡</span>
                     Ejecutar Simulación
                   </>
                 )}
@@ -370,7 +387,9 @@ function TestMode({ onBack }) {
             {result ? (
               <div className="bg-gradient-to-br from-emerald-600/20 to-teal-600/20 border border-emerald-500/50 backdrop-blur-sm rounded-xl p-8 sticky top-32">
                 <div className="text-center mb-8">
-                  <p className="text-emerald-300/70 text-sm font-semibold uppercase tracking-wide mb-3">Predicción</p>
+                  <p className="text-emerald-300/70 text-sm font-semibold uppercase tracking-wide mb-3">
+                    Predicción
+                  </p>
                   <p className="text-6xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
                     {result.prediction_result}
                   </p>
@@ -379,40 +398,55 @@ function TestMode({ onBack }) {
 
                 <div className="space-y-4 border-t border-emerald-500/30 pt-6">
                   <div className="flex justify-between items-center">
-                    <span className="text-emerald-300/70 text-sm">Confianza</span>
+                    <span className="text-emerald-300/70 text-sm">
+                      Confianza
+                    </span>
                     <span className="text-emerald-400 font-bold">85%</span>
                   </div>
                   <div className="w-full h-2 bg-emerald-900/50 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full" style={{ width: '85%' }}></div>
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full"
+                      style={{ width: "85%" }}
+                    ></div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mt-6 pt-4 border-t border-emerald-500/30">
                     <div className="bg-slate-800/30 rounded-lg p-3">
                       <p className="text-emerald-300/70 text-xs">Versión</p>
-                      <p className="text-emerald-200 font-mono text-xs mt-1">{result.model_version || 'v1.0'}</p>
+                      <p className="text-emerald-200 font-mono text-xs mt-1">
+                        {result.model_version || "v1.0"}
+                      </p>
                     </div>
                     <div className="bg-slate-800/30 rounded-lg p-3">
                       <p className="text-emerald-300/70 text-xs">Ejecución</p>
-                      <p className="text-emerald-200 font-mono text-xs mt-1">{executionTime}ms</p>
+                      <p className="text-emerald-200 font-mono text-xs mt-1">
+                        {executionTime}ms
+                      </p>
                     </div>
                     <div className="col-span-2 bg-slate-800/30 rounded-lg p-3">
                       <p className="text-emerald-300/70 text-xs">Fecha</p>
-                      <p className="text-emerald-200 font-mono text-xs mt-1">{result.service_date}</p>
+                      <p className="text-emerald-200 font-mono text-xs mt-1">
+                        {result.service_date}
+                      </p>
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="bg-gradient-to-br from-slate-700/50 to-slate-600/50 border border-slate-500/30 backdrop-blur-sm rounded-xl p-8 text-center sticky top-32">
-                <p className="text-slate-400 text-sm">💡 Completa el formulario</p>
-                <p className="text-slate-300 text-sm font-semibold mt-2">y Ejecuta Simulación</p>
+                <p className="text-slate-400 text-sm">
+                  �Y'� Completa el formulario
+                </p>
+                <p className="text-slate-300 text-sm font-semibold mt-2">
+                  y Ejecuta Simulación
+                </p>
               </div>
             )}
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default TestMode
+export default TestMode;

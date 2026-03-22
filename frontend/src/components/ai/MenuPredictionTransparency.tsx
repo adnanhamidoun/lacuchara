@@ -1,10 +1,10 @@
-// Componente de transparencia específico para predicciones de menú
+﻿// Componente de transparencia específico para predicciones de menú
 
 import AITransparencyCard from './AITransparencyCard'
 
 export default function MenuPredictionTransparency() {
   const dataUsed = [
-    'Órdenes históricas: platos vendidos en fechas similares',
+    '�"rdenes históricas: platos vendidos en fechas similares',
     'Características del restaurante: tipo de cocina, segmento, valoración',
     'Contexto temporal: día de la semana, estacionalidad (primavera, verano, etc)',
     'Información meteorológica: temperatura y probabilidad de lluvia',
@@ -29,3 +29,4 @@ export default function MenuPredictionTransparency() {
     />
   )
 }
+

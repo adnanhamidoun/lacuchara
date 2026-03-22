@@ -1,4 +1,4 @@
-import type { AuthSession, RestaurantDetail } from '../types/domain'
+﻿import type { AuthSession, RestaurantDetail } from '../types/domain'
 
 const SESSION_KEY = 'aml-session'
 

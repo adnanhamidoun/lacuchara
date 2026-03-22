@@ -1,17 +1,17 @@
-# ML Training & Data
+﻿# ML Training & Data
 
 Machine learning models, training scripts, and datasets.
 
-## 📁 Structure
+## Structure
 
 ```
 backend/ml-training/
-├── src/              # Training scripts (Python)
-├── data/             # Training datasets (CSVs)
-└── models/           # Trained models (PKL files)
+ src/ # Training scripts (Python)
+ data/ # Training datasets (CSVs)
+ models/ # Trained models (PKL files)
 ```
 
-### `src/` — Training Scripts
+### `src/` Training Scripts
 Python scripts for ML model training and data preparation.
 
 **Dataset Preparation:**
@@ -21,19 +21,19 @@ Python scripts for ML model training and data preparation.
 - `generador_faker_menus.py` - Generate synthetic menu data
 
 **Feature Engineering:**
-- `categorizacion_platos.py` - Categorize dishes
+- `categorizacion_dishes.py` - Categorize dishes
 - `auditoria.py` - Data quality audits
 
 **Model Training:**
 - `entrenamiento_base.py` - Base model training
 - `entrenar_v3.py` - Latest training pipeline (v3)
 - `modelo_entrante.py` - Appetizer model training
-- `cargar_ratings_sql.py` - Load ratings from database
+- `load_ratings_sql.py` - Load ratings from database
 
 **Data Management:**
 - `subir_menus_historicos.py` - Upload historical menu data to SQL
 
-### `data/` — Training Datasets
+### `data/` Training Datasets
 CSV files with training data and intermediate results.
 
 **Raw Data:**
@@ -57,12 +57,12 @@ CSV files with training data and intermediate results.
 
 **Menu History:**
 - `menu_history_*.csv` - Historical menu records
-  - `advanced_features` - With computed features
-  - `advanced_shuffled` - Shuffled for training
-  - `categorized` - With category labels
-  - `clean` - Cleaned version
+ - `advanced_features` - With computed features
+ - `advanced_shuffled` - Shuffled for training
+ - `categorized` - With category labels
+ - `clean` - Cleaned version
 
-### `models/` — Trained Models
+### `models/` Trained Models
 Serialized scikit-learn/XGBoost models ready for inference.
 
 - `model_menus_v2.pkl` - Menu prediction model (v2)
@@ -80,7 +80,7 @@ Serialized scikit-learn/XGBoost models ready for inference.
 python backend/ml-training/src/clean_dataset.py
 
 # Prepare features
-python backend/ml-training/src/categorizacion_platos.py
+python backend/ml-training/src/categorizacion_dishes.py
 
 # Combine datasets
 python backend/ml-training/src/mezclar_datos.py
@@ -114,7 +114,7 @@ docker push azca:latest
 | `entrenamiento_base.py` | Script | Main training pipeline |
 | `entrenar_v3.py` | Script | Latest improvements |
 | `clean_dataset.py` | Script | Data quality steps |
-| `categorizacion_platos.py` | Script | Feature engineering |
+| `categorizacion_dishes.py` | Script | Feature engineering |
 | `dataset_menus_final.csv` | Data | Main training dataset |
 | `model_menus_v2.pkl` | Model | Serialized predictor |
 | `label_encoders_menus_v2.pkl` | Model | Category mappings |
@@ -126,3 +126,6 @@ docker push azca:latest
 - Keep trained models here for versioning/comparison
 - Copy to `backend/azca/artifacts/` when ready for production
 - Add new data to `data/` and update `.gitignore` if files are too large
+
+
+

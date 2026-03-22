@@ -1,21 +1,21 @@
--- Creación de la tabla de auditoría de predicciones
+﻿-- Create prediction audit table
 CREATE TABLE PredictionLogs (
     id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    execution_timestamp DATETIME2 DEFAULT GETDATE(), -- Cuándo se consultó
-    service_date DATE NOT NULL,                      -- Día predicho
-    max_temp_c FLOAT,                                -- Input: Temperatura
-    precipitation_mm FLOAT,                          -- Input: Lluvia
-    is_stadium_event BIT,                            -- Input: Fútbol
-    is_payday_week BIT,                              -- Input: Cobro
-    prediction_result INT NOT NULL,                  -- Resultado IA
-    model_version VARCHAR(50) DEFAULT 'v1_xgboost',  -- Versión
-    full_input_json NVARCHAR(MAX)                    -- Backup total
+    execution_timestamp DATETIME2 DEFAULT GETDATE(), -- Request timestamp
+    service_date DATE NOT NULL,                      -- Predicted service date
+    max_temp_c FLOAT,                                -- Input: temperature
+    precipitation_mm FLOAT,                          -- Input: rain
+    is_stadium_event BIT,                            -- Input: football match
+    is_payday_week BIT,                              -- Input: payday week
+    prediction_result INT NOT NULL,                  -- AI result
+    model_version VARCHAR(50) DEFAULT 'v1_xgboost',  -- Version
+    full_input_json NVARCHAR(MAX)                    -- Full payload backup
 );
 
--- Índice para que la App cargue rápido el historial
+-- Index to speed up history lookups
 CREATE INDEX idx_service_date ON PredictionLogs(service_date);
 
--- Tabla de Menús del Día (Subidos por OCR/Manual)
+-- Daily menus table (uploaded by OCR/manual flow)
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[daily_menus]') AND type in (N'U'))
 BEGIN
     CREATE TABLE dbo.daily_menus (
@@ -30,7 +30,7 @@ BEGIN
 END
 GO
 
--- Tabla de Usuarios (Autenticación de Restaurantes)
+-- Users table (restaurant authentication)
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[users]') AND type in (N'U'))
 BEGIN
     CREATE TABLE dbo.users (
@@ -45,7 +45,7 @@ BEGIN
 END
 GO
 
--- Tabla de Valoraciones de Platos (Nueva, para rankings y gestión dedicada)
+-- Dish ratings table (ranking and dedicated management)
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[dish_ratings]') AND type in (N'U'))
 BEGIN
     CREATE TABLE dbo.dish_ratings (
@@ -62,14 +62,14 @@ BEGIN
 END
 GO
 
--- Migración (si la tabla ya existe): quitar cualquier rastro de "usuarios" en valoraciones
+-- Migration (if table already exists): remove any legacy reviewer/user traces
 IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[dish_ratings]') AND type in (N'U'))
 BEGIN
-    -- Si existía un índice único por reviewer, eliminarlo
+    -- Drop legacy reviewer unique index if present
     IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_dish_ratings_reviewer' AND object_id = OBJECT_ID(N'dbo.dish_ratings'))
         DROP INDEX UX_dish_ratings_reviewer ON dbo.dish_ratings;
 
-    -- Si existía la columna reviewer_name, eliminarla
+    -- Drop legacy reviewer_name column if present
     IF EXISTS (
         SELECT 1
         FROM sys.columns
@@ -77,7 +77,7 @@ BEGIN
     )
         ALTER TABLE dbo.dish_ratings DROP COLUMN reviewer_name;
 
-    -- ✅ Eliminar rater_id (no hace falta ser usuario para valorar)
+    -- Drop legacy rater_id (ratings are anonymous)
     IF EXISTS (
         SELECT 1
         FROM sys.columns
@@ -85,7 +85,7 @@ BEGIN
     )
         ALTER TABLE dbo.dish_ratings DROP COLUMN rater_id;
 
-    -- Asegurar columnas esperadas (si la tabla venía de versiones anteriores)
+    -- Ensure expected columns exist (older schema compatibility)
     IF COL_LENGTH('dbo.dish_ratings', 'rating_date') IS NULL
         ALTER TABLE dbo.dish_ratings ADD rating_date DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE);
 
@@ -98,7 +98,7 @@ BEGIN
     IF COL_LENGTH('dbo.dish_ratings', 'rating') IS NULL
         ALTER TABLE dbo.dish_ratings ADD rating FLOAT NOT NULL DEFAULT (0);
     
-    -- ✅ Convertir rating de INT a FLOAT si aún es INT
+    -- Convert rating from INT to FLOAT when needed
     IF EXISTS (
         SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
         WHERE TABLE_NAME = 'dish_ratings' AND COLUMN_NAME = 'rating' AND DATA_TYPE = 'int'
@@ -107,7 +107,7 @@ BEGIN
         ALTER TABLE dbo.dish_ratings ALTER COLUMN rating FLOAT NOT NULL;
     END
 
-    -- Asegurar columnas esperadas (si la tabla venía de versiones anteriores)
+    -- Ensure expected foreign-key columns exist
     IF NOT EXISTS (
         SELECT 1
         FROM sys.columns
@@ -124,7 +124,7 @@ BEGIN
 END
 GO
 
--- Índices para búsquedas y rankings
+-- Indexes for queries and rankings
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_dish_ratings_restaurant' AND object_id = OBJECT_ID(N'dbo.dish_ratings'))
     CREATE INDEX IX_dish_ratings_restaurant ON dbo.dish_ratings(restaurant_id);
 GO
@@ -147,3 +147,4 @@ GO
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_dish_ratings_created_at' AND object_id = OBJECT_ID(N'dbo.dish_ratings'))
     CREATE INDEX IX_dish_ratings_created_at ON dbo.dish_ratings(created_at);
 GO
+

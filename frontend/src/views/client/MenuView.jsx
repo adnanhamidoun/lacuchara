@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 export default function MenuView() {
@@ -72,3 +72,4 @@ export default function MenuView() {
     </section>
   )
 }
+

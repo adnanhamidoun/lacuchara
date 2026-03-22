@@ -1,18 +1,18 @@
-"""
-API REST con FastAPI para predicciones de demanda de servicios.
+﻿"""
+FastAPI REST API for service-demand predictions.
 
-Este módulo expone los endpoints de predicción, integrando:
-- PredictionEngine: Motor de IA para predicciones
-- SQLAlchemy + Azure SQL: Persistencia de auditoría
+This module exposes prediction endpoints, integrating:
+- PredictionEngine: AI engine for predictions
+- SQLAlchemy + Azure SQL: Audit persistence
 
 Endpoints:
-    GET /health: Health check de la API
-    POST /predict: Realizar una predicción y guardarla
-    GET /docs: Documentación automática (Swagger)
+    GET /health: API health check
+    POST /predict: Run a prediction and store it
+    GET /docs: Automatic documentation (Swagger)
 """
 
 # ============================================================================
-# CARGAR .ENV AL INICIO
+# LOAD .ENV AT STARTUP
 # ============================================================================
 import sys
 from pathlib import Path
@@ -84,21 +84,21 @@ from ..core.blob_storage import (
     get_restaurant_image_url,
 )
 
-# Importar PredictionEngine - pero con fallback si falta
+# Import PredictionEngine with fallback when unavailable
 try:
     from ..core import PredictionEngine
     PREDICTION_ENGINE_AVAILABLE = True
 except ImportError:
     PREDICTION_ENGINE_AVAILABLE = False
-    # Mock para testing sin dependencias pesadas
+    # Mock for testing without heavy dependencies
     class PredictionEngine:
         def __init__(self, *args, **kwargs):
             pass
         def predict(self, model_name: str, data: dict) -> int:
-            """Mock que retorna una predicción dummy para testing"""
+            """Mock that returns a dummy prediction for testing"""
             return 150
 
-# Importar scheduler de modelos (soft — requiere Azure ML)
+# Import model scheduler (soft " requires Azure ML)
 try:
     from ..core.scheduler import start_model_refresh_scheduler
     MODEL_SCHEDULER_AVAILABLE = True
@@ -119,8 +119,8 @@ DEFAULT_SERVICES_REGISTERED_MODEL = "azca-services-model"
 app = FastAPI(
     title="AZCA Prediction API",
     description=(
-        "API REST para predicciones de demanda de servicios con IA.\n\n"
-        "Carga el modelo en memoria al iniciar para máximo rendimiento."
+        "API REST para predictions de demanda de services con IA.\n\n"
+        "Loads the model in memory at startup for maximum performance."
     ),
     version="1.0.0",
     contact={
@@ -130,56 +130,56 @@ app = FastAPI(
 )
 
 # ============================================================================
-# PYDANTIC MODELS (Para validación y documentación Swagger)
+# PYDANTIC MODELS (For validation and Swagger documentation)
 # ============================================================================
 
 
 class PredictionRequest(BaseModel):
     """
-    Modelo de solicitud para realizar una predicción completa.
+    Request model for running a complete prediction.
 
-    Contiene todos los parámetros necesarios para el modelo de ML:
-    - Fecha y meteorología
-    - Eventos especiales y calendario
-    - Características del restaurante
-    - Datos operacionales
+    Contains all required parameters for the ML model:
+    - Date and weather
+    - Special events and calendar
+    - Restaurant features
+    - Operational data
     """
 
-    # Fecha
+    # Date
     service_date: date = Field(
         ...,
-        description="Fecha del servicio (YYYY-MM-DD)",
+        description="Date del service (YYYY-MM-DD)",
         example="2026-03-15",
     )
     
-    # Identificación
+    # Identification
     restaurant_id: int = Field(
         ...,
-        description="ID del restaurante",
+        description="ID del restaurant",
         example=1,
         ge=1,
     )
     
-    # Meteorología (OBTENIDA AUTOMÁTICAMENTE DE OPEN-METEO)
+    # Weather (AUTOMATICALLY FETCHED FROM OPEN-METEO)
     max_temp_c: float = Field(
         default=20.0,
-        description="Temperatura máxima en Celsius (obtenida automáticamente de Open-Meteo si no se proporciona)",
+        description="Maximum temperature in Celsius (automatically fetched from Open-Meteo if not provided)",
         example=28.5,
         ge=-50,
         le=60,
     )
     precipitation_mm: float = Field(
         default=0.0,
-        description="Precipitación en milímetros (obtenida automáticamente de Open-Meteo si no se proporciona)",
+        description="Precipitation in millimeters (automatically fetched from Open-Meteo if not provided)",
         example=0.0,
         ge=0,
         le=500,
     )
     
-    # Eventos y calendario
+    # Events and calendar
     is_rain_service_peak: bool = Field(
         default=False,
-        description="¿Lluvia durante hora pico? (calculada automáticamente de Open-Meteo si no se proporciona)",
+        description="Rain during peak service time? (automatically calculated from Open-Meteo if not provided)",
         example=False,
     )
     is_stadium_event: bool = Field(
@@ -194,43 +194,43 @@ class PredictionRequest(BaseModel):
     )
     is_holiday: bool = Field(
         default=False,
-        description="¿Es día festivo? (calculado automáticamente si no se proporciona)",
+        description="Holiday? (automatically calculated if not provided)",
         example=False,
     )
     is_bridge_day: bool = Field(
         default=False,
-        description="¿Es puente festivo? (calculado automáticamente si no se proporciona)",
+        description="¿Es puente festivo? (automatically calculated if not provided)",
         example=False,
     )
     is_payday_week: bool = Field(
         default=False,
-        description="¿Es semana de cobro? (calculado automáticamente si no se proporciona)",
+        description="¿Es semana de cobro? (automatically calculated if not provided)",
         example=True,
     )
     is_business_day: bool = Field(
         default=True,
-        description="¿Es día laboral? (calculado automáticamente si no se proporciona)",
+        description="Business day? (automatically calculated if not provided)",
         example=True,
     )
     
-    # Datos históricos
+    # Historical data
     services_lag_7: int = Field(
         default=0,
-        description="Servicios hace 7 días (recuperado automáticamente de fact_services si no se proporciona)",
+        description="Services 7 days ago (automatically loaded from fact_services if not provided)",
         example=120,
         ge=0,
     )
     avg_4_weeks: float = Field(
         default=0.0,
-        description="Promedio últimas 4 semanas (recuperado automáticamente de fact_services si no se proporciona)",
+        description="Promedio latests 4 semanas (automatically loaded from fact_services if not provided)",
         example=125.5,
         ge=0,
     )
     
-    # Características del restaurante
+    # Restaurant features
     capacity_limit: int = Field(
         ...,
-        description="Límite de capacidad",
+        description="Capacity limit",
         example=80,
         ge=1,
     )
@@ -242,7 +242,7 @@ class PredictionRequest(BaseModel):
     )
     min_service_duration: int = Field(
         ...,
-        description="Duración mínima servicio (minutos)",
+        description="Minimum service duration (minutes)",
         example=45,
         ge=1,
     )
@@ -263,12 +263,12 @@ class PredictionRequest(BaseModel):
     )
     restaurant_segment: str = Field(
         ...,
-        description="Segmento del restaurante (e.g., casual, fine_dining)",
+        description="Segmento del restaurant (e.g., casual, fine_dining)",
         example="casual",
     )
     menu_price: float = Field(
         ...,
-        description="Precio promedio menú",
+        description="Average menu price",
         example=25.50,
         ge=0,
     )
@@ -280,7 +280,7 @@ class PredictionRequest(BaseModel):
     )
     google_rating: float = Field(
         ...,
-        description="Calificación Google",
+        description="Google rating",
         example=4.5,
         ge=0,
         le=5,
@@ -324,34 +324,34 @@ class PredictionRequest(BaseModel):
 
 class PredictionResponse(BaseModel):
     """
-    Modelo de respuesta de una predicción.
+    Response model for a prediction.
 
-    Retorna la predicción realizada junto con metadatos.
+    Returns prediction output along with metadata.
     """
 
     prediction_result: int = Field(
         ...,
-        description="Resultado de la predicción del modelo IA (cantidad de servicios)",
+        description="AI model prediction result (service count)",
         example=150,
     )
     service_date: date = Field(
         ...,
-        description="Fecha predicha",
+        description="Date predicha",
         example="2026-03-15",
     )
     model_version: str = Field(
         ...,
-        description="Versión del modelo utilizado",
+        description="Model version utilizado",
         example="v1_xgboost",
     )
     execution_timestamp: datetime = Field(
         ...,
-        description="Timestamp de cuándo se ejecutó la predicción",
+        description="Prediction execution timestamp",
         example="2026-03-11T10:30:00",
     )
     log_id: int = Field(
         ...,
-        description="ID del registro de auditoría en la base de datos",
+        description="Audit record ID in the database",
         example=1,
     )
 
@@ -369,204 +369,204 @@ class PredictionResponse(BaseModel):
 
 class StarterDish(BaseModel):
     """
-    Modelo para un plato de entrada (starter).
-    Incluye nombre, score de predicción y count estimado.
+    Modelo para un dish de entrada (starter).
+    Incluye nombre, score de prediction y count estimado.
     """
     rank: int = Field(..., description="Ranking (1=top)", example=1)
-    name: str = Field(..., description="Nombre del plato", example="Jamón Ibérico")
+    name: str = Field(..., description="Dish name", example="Iberian ham")
     score: float = Field(..., description="Score de probabilidad (0-1)", example=0.85)
-    estimated_count: int = Field(..., description="Número estimado de este plato en el restaurante", example=43)
+    estimated_count: int = Field(..., description="Estimated count of this dish in the restaurant", example=43)
 
 
 class StarterPredictionRequest(BaseModel):
     """
-    Modelo de solicitud para predecir platos de entrada.
+    Request model to predict starter dishes.
     
-    Inputs del usuario (mínimo):
-    - restaurant_id: ID del restaurante
-    - service_date: Fecha del servicio
+    Minimum user inputs:
+    - restaurant_id: ID del restaurant
+    - service_date: Date del service
     
-    Los demás parámetros se auto-calculan automáticamente.
+    All other parameters are auto-calculated.
     """
     restaurant_id: int = Field(
         ...,
-        description="ID del restaurante",
+        description="ID del restaurant",
         example=1,
         ge=1,
     )
     service_date: date = Field(
         ...,
-        description="Fecha del servicio (YYYY-MM-DD)",
+        description="Date del service (YYYY-MM-DD)",
         example="2026-03-15",
     )
 
 
 class StarterPredictionResponse(BaseModel):
     """
-    Modelo de respuesta para predicción de starters.
+    Modelo de respuesta para prediction de starters.
     
-    Retorna top 3 platos más probables con sus scores.
+    Returns top 3 most likely dishes with scores.
     """
     top_3_dishes: list[StarterDish] = Field(
         ...,
-        description="Top 3 platos de entrada ordenados por probabilidad",
+        description="Top 3 dishes de entrada ordenados por probabilidad",
         example=[
-            {"rank": 1, "name": "Jamón Ibérico", "score": 0.85},
-            {"rank": 2, "name": "Croquetas de Jamón", "score": 0.78},
-            {"rank": 3, "name": "Espárragos a la Crema", "score": 0.72},
+            {"rank": 1, "name": "Iberian Ham", "score": 0.85},
+            {"rank": 2, "name": "Ham Croquettes", "score": 0.78},
+            {"rank": 3, "name": "Creamed Asparagus", "score": 0.72},
         ],
     )
     service_date: date = Field(
         ...,
-        description="Fecha predicha",
+        description="Date predicha",
         example="2026-03-15",
     )
     restaurant_id: int = Field(
         ...,
-        description="ID del restaurante",
+        description="ID del restaurant",
         example=1,
     )
     model_version: str = Field(
         ...,
-        description="Versión del modelo",
+        description="Model version",
         example="azca_menu_starter_v2",
     )
     execution_timestamp: datetime = Field(
         ...,
-        description="Timestamp de ejecución",
+        description="Execution timestamp",
         example="2026-03-14T10:30:00",
     )
 
 
 class MainDish(BaseModel):
     """
-    Modelo para un plato principal (main course).
-    Incluye nombre, score de predicción y count estimado.
+    Modelo para un dish principal (main course).
+    Incluye nombre, score de prediction y count estimado.
     """
     rank: int = Field(..., description="Ranking (1=top)", example=1)
-    name: str = Field(..., description="Nombre del plato", example="Carne a la Sal")
+    name: str = Field(..., description="Dish name", example="Carne a la Sal")
     score: float = Field(..., description="Score de probabilidad (0-1)", example=0.88)
-    estimated_count: int = Field(..., description="Número estimado de este plato en el restaurante", example=44)
+    estimated_count: int = Field(..., description="Estimated count of this dish in the restaurant", example=44)
 
 
 class MainPredictionRequest(BaseModel):
     """
-    Modelo de solicitud para predecir platos principales.
-    Input mínimo del usuario: restaurant_id + service_date.
+    Request model to predict main dishes.
+    Minimum user input: restaurant_id + service_date.
     """
-    restaurant_id: int = Field(..., description="ID del restaurante", example=1, ge=1)
-    service_date: date = Field(..., description="Fecha del servicio (YYYY-MM-DD)", example="2026-03-15")
+    restaurant_id: int = Field(..., description="ID del restaurant", example=1, ge=1)
+    service_date: date = Field(..., description="Date del service (YYYY-MM-DD)", example="2026-03-15")
 
 
 class MainPredictionResponse(BaseModel):
     """
-    Modelo de respuesta para predicción de platos principales.
-    Retorna top 3 platos más probables.
+    Modelo de respuesta para prediction de dishes principales.
+    Returns top 3 most likely dishes.
     """
     top_3_dishes: list[MainDish] = Field(
         ...,
-        description="Top 3 platos principales ordenados por probabilidad",
+        description="Top 3 dishes principales ordenados por probabilidad",
         example=[
             {"rank": 1, "name": "Carne a la Sal", "score": 0.88},
             {"rank": 2, "name": "Merluza a la Gallega", "score": 0.82},
             {"rank": 3, "name": "Cordero Lechal", "score": 0.76},
         ],
     )
-    service_date: date = Field(..., description="Fecha predicha", example="2026-03-15")
-    restaurant_id: int = Field(..., description="ID del restaurante", example=1)
-    model_version: str = Field(..., description="Versión del modelo", example="azca_menu_main_v2")
-    execution_timestamp: datetime = Field(..., description="Timestamp de ejecución", example="2026-03-14T10:30:00")
+    service_date: date = Field(..., description="Date predicha", example="2026-03-15")
+    restaurant_id: int = Field(..., description="ID del restaurant", example=1)
+    model_version: str = Field(..., description="Model version", example="azca_menu_main_v2")
+    execution_timestamp: datetime = Field(..., description="Execution timestamp", example="2026-03-14T10:30:00")
 
 
 class DessertDish(BaseModel):
     """
     Modelo para un postre (dessert).
-    Incluye nombre, score de predicción y count estimado.
+    Incluye nombre, score de prediction y count estimado.
     """
     rank: int = Field(..., description="Ranking (1=top)", example=1)
     name: str = Field(..., description="Nombre del postre", example="Flan Casero")
     score: float = Field(..., description="Score de probabilidad (0-1)", example=0.83)
-    estimated_count: int = Field(..., description="Número estimado de este postre en el restaurante", example=42)
+    estimated_count: int = Field(..., description="Estimated count of this dessert in the restaurant", example=42)
 
 
 class DessertPredictionRequest(BaseModel):
     """
-    Modelo de solicitud para predecir postres.
-    Input mínimo del usuario: restaurant_id + service_date.
+    Request model to predict desserts.
+    Minimum user input: restaurant_id + service_date.
     """
-    restaurant_id: int = Field(..., description="ID del restaurante", example=1, ge=1)
-    service_date: date = Field(..., description="Fecha del servicio (YYYY-MM-DD)", example="2026-03-15")
+    restaurant_id: int = Field(..., description="ID del restaurant", example=1, ge=1)
+    service_date: date = Field(..., description="Date del service (YYYY-MM-DD)", example="2026-03-15")
 
 
 class DessertPredictionResponse(BaseModel):
     """
-    Modelo de respuesta para predicción de postres.
-    Retorna top 3 postres más probables.
+    Modelo de respuesta para prediction de postres.
+    Returns top 3 most likely desserts.
     """
     top_3_dishes: list[DessertDish] = Field(
         ...,
         description="Top 3 postres ordenados por probabilidad",
         example=[
             {"rank": 1, "name": "Flan Casero", "score": 0.83},
-            {"rank": 2, "name": "Tiramisú", "score": 0.79},
+            {"rank": 2, "name": "Tiramisu", "score": 0.79},
             {"rank": 3, "name": "Churros con Chocolate", "score": 0.75},
         ],
     )
-    service_date: date = Field(..., description="Fecha predicha", example="2026-03-15")
-    restaurant_id: int = Field(..., description="ID del restaurante", example=1)
-    model_version: str = Field(..., description="Versión del modelo", example="azca_menu_dessert_v2")
-    execution_timestamp: datetime = Field(..., description="Timestamp de ejecución", example="2026-03-14T10:30:00")
+    service_date: date = Field(..., description="Date predicha", example="2026-03-15")
+    restaurant_id: int = Field(..., description="ID del restaurant", example=1)
+    model_version: str = Field(..., description="Model version", example="azca_menu_dessert_v2")
+    execution_timestamp: datetime = Field(..., description="Execution timestamp", example="2026-03-14T10:30:00")
 
 
 class OCRExtractedMenu(BaseModel):
     """
-    Resultado de extracción OCR del menú subido.
+    OCR extraction result from uploaded menu.
     """
 
-    starter: str = Field(..., description="Entrante detectado por OCR", example="Ensalada César")
+    starter: str = Field(..., description="Starter detected by OCR", example="Caesar salad")
     main: str = Field(..., description="Principal detectado por OCR", example="Merluza a la Gallega")
     dessert: str = Field(..., description="Postre detectado por OCR", example="Flan Casero")
     starter_options: list[str] = Field(default_factory=list, description="Todos los entrantes detectados")
     main_options: list[str] = Field(default_factory=list, description="Todos los principales detectados")
     dessert_options: list[str] = Field(default_factory=list, description="Todos los postres detectados")
-    detected_lines: list[str] = Field(default_factory=list, description="Líneas útiles detectadas por OCR")
+    detected_lines: list[str] = Field(default_factory=list, description="Useful lines detected by OCR")
 
 
 class OCRPredictedDish(BaseModel):
     """
-    Plato predicho por el modelo para una categoría.
+    Dish predicted by the model for a category.
     """
 
     rank: int = Field(..., description="Ranking (1=top)", example=1)
-    name: str = Field(..., description="Nombre del plato", example="Merluza a la Gallega")
+    name: str = Field(..., description="Dish name", example="Merluza a la Gallega")
     score: float = Field(..., description="Probabilidad estimada (0-1)", example=0.82)
 
 
 class MenuUploadPredictionResponse(BaseModel):
     """
-    Respuesta combinada OCR + predicción ML del menú subido.
+    Combined OCR + ML prediction response for the uploaded menu.
     """
 
-    restaurant_id: int = Field(..., description="ID del restaurante", example=1)
-    service_date: date = Field(..., description="Fecha del servicio", example="2026-03-15")
+    restaurant_id: int = Field(..., description="ID del restaurant", example=1)
+    service_date: date = Field(..., description="Date del service", example="2026-03-15")
     ocr_provider: str = Field(..., description="Proveedor OCR usado", example="azure_document_intelligence")
-    extracted_menu: OCRExtractedMenu = Field(..., description="Platos detectados desde el menú")
+    extracted_menu: OCRExtractedMenu = Field(..., description="Dishes detected from the menu")
     starter_prediction: list[OCRPredictedDish] = Field(..., description="Top 3 entrantes predichos")
     main_prediction: list[OCRPredictedDish] = Field(..., description="Top 3 principales predichos")
     dessert_prediction: list[OCRPredictedDish] = Field(..., description="Top 3 postres predichos")
-    model_version: str = Field(..., description="Versión del stack de modelos", example="azca_menu_v2")
-    execution_timestamp: datetime = Field(..., description="Timestamp de ejecución")
+    model_version: str = Field(..., description="Model stack version", example="azca_menu_v2")
+    execution_timestamp: datetime = Field(..., description="Execution timestamp")
 
 
 class MenuOCRSectionsResponse(BaseModel):
     """
-    Respuesta OCR pura (sin predicción) para inspeccionar secciones detectadas.
+    Respuesta OCR pura (sin prediction) para inspeccionar secciones detectadas.
     """
 
     ocr_provider: str = Field(..., description="Proveedor OCR usado", example="azure_document_intelligence")
-    extracted_menu: OCRExtractedMenu = Field(..., description="Platos detectados desde el menú")
-    raw_text: str = Field(..., description="Texto OCR completo para depuración")
-    execution_timestamp: datetime = Field(..., description="Timestamp de ejecución")
+    extracted_menu: OCRExtractedMenu = Field(..., description="Dishes detected from the menu")
+    raw_text: str = Field(..., description="Full OCR text for debugging")
+    execution_timestamp: datetime = Field(..., description="Execution timestamp")
 
 
 class HealthResponse(BaseModel):
@@ -582,19 +582,19 @@ class HealthResponse(BaseModel):
     message: str = Field(
         ...,
         description="Mensaje descriptivo",
-        example="API y base de datos funcionando correctamente",
+        example="API y database funcionando correctamente",
     )
 
 
 class RestaurantItem(BaseModel):
     """
-    Modelo de respuesta para un restaurante individual (lista).
-    Incluye información básica y ubicación para calcular distancias.
+    Modelo de respuesta para un restaurant individual (lista).
+    Includes basic information and location to calculate distances.
     """
-    restaurant_id: int = Field(..., description="ID único del restaurante")
-    name: str = Field(..., description="Nombre del restaurante")
-    latitude: float | None = Field(None, description="Latitud del restaurante")
-    longitude: float | None = Field(None, description="Longitud del restaurante")
+    restaurant_id: int = Field(..., description="Unique restaurant ID")
+    name: str = Field(..., description="Nombre del restaurant")
+    latitude: float | None = Field(None, description="Latitud del restaurant")
+    longitude: float | None = Field(None, description="Longitud del restaurant")
 
     class Config:
         from_attributes = True
@@ -602,25 +602,25 @@ class RestaurantItem(BaseModel):
 
 class RestaurantDetailItem(BaseModel):
     """
-    Modelo de respuesta detallado para un restaurante.
-    Incluye todos los campos para llenar el formulario de predicción.
+    Modelo de respuesta detallado para un restaurant.
+    Incluye todos los campos para llenar el formulario de prediction.
     """
-    restaurant_id: int = Field(..., description="ID único del restaurante")
-    name: str = Field(..., description="Nombre del restaurante")
-    capacity_limit: int | None = Field(None, description="Límite de capacidad")
+    restaurant_id: int = Field(..., description="Unique restaurant ID")
+    name: str = Field(..., description="Nombre del restaurant")
+    capacity_limit: int | None = Field(None, description="Capacity limit")
     table_count: int | None = Field(None, description="Cantidad de mesas")
-    min_service_duration: int | None = Field(None, description="Duración mínima servicio (minutos)")
+    min_service_duration: int | None = Field(None, description="Minimum service duration (minutes)")
     terrace_setup_type: str | None = Field(None, description="Tipo de setup terraza")
     opens_weekends: bool | None = Field(None, description="¿Abre fines de semana?")
     has_wifi: bool | None = Field(None, description="¿Tiene Wi-Fi?")
-    restaurant_segment: str | None = Field(None, description="Segmento del restaurante")
-    menu_price: float | None = Field(None, description="Precio promedio menú")
+    restaurant_segment: str | None = Field(None, description="Segmento del restaurant")
+    menu_price: float | None = Field(None, description="Average menu price")
     dist_office_towers: int | None = Field(None, description="Distancia a torres de oficina (metros)")
-    google_rating: float | None = Field(None, description="Calificación Google")
+    google_rating: float | None = Field(None, description="Google rating")
     cuisine_type: str | None = Field(None, description="Tipo de cocina")
-    image_url: str | None = Field(None, description="URL de imagen pública del restaurante")
-    latitude: float | None = Field(None, description="Latitud del restaurante")
-    longitude: float | None = Field(None, description="Longitud del restaurante")
+    image_url: str | None = Field(None, description="Public image URL for the restaurant")
+    latitude: float | None = Field(None, description="Latitud del restaurant")
+    longitude: float | None = Field(None, description="Longitud del restaurant")
 
     class Config:
         from_attributes = True
@@ -628,15 +628,15 @@ class RestaurantDetailItem(BaseModel):
 
 class RestaurantWithDistance(BaseModel):
     """
-    Modelo de respuesta para restaurante con distancia calculada desde ubicación del usuario.
+    Response model for restaurant with distance calculated from user location.
     """
-    restaurant_id: int = Field(..., description="ID único del restaurante")
-    name: str = Field(..., description="Nombre del restaurante")
-    latitude: float | None = Field(None, description="Latitud del restaurante")
-    longitude: float | None = Field(None, description="Longitud del restaurante")
-    distance_km: float = Field(..., description="Distancia desde el usuario en km")
-    image_url: str | None = Field(None, description="URL de imagen del restaurante")
-    google_rating: float | None = Field(None, description="Calificación Google")
+    restaurant_id: int = Field(..., description="Unique restaurant ID")
+    name: str = Field(..., description="Nombre del restaurant")
+    latitude: float | None = Field(None, description="Latitud del restaurant")
+    longitude: float | None = Field(None, description="Longitud del restaurant")
+    distance_km: float = Field(..., description="Distancia desde el user en km")
+    image_url: str | None = Field(None, description="URL de imagen del restaurant")
+    google_rating: float | None = Field(None, description="Google rating")
     cuisine_type: str | None = Field(None, description="Tipo de cocina")
 
     class Config:
@@ -645,19 +645,19 @@ class RestaurantWithDistance(BaseModel):
 
 class RestaurantNearbyResponse(BaseModel):
     """
-    Respuesta para búsqueda de restaurantes nearby con distancias calculadas.
+    Response for nearby restaurant search with calculated distances.
     """
-    count: int = Field(..., description="Cantidad de restaurantes")
-    user_latitude: float = Field(..., description="Latitud del usuario")
-    user_longitude: float = Field(..., description="Longitud del usuario")
-    restaurants: list[RestaurantWithDistance] = Field(..., description="Restaurantes ordenados por distancia")
+    count: int = Field(..., description="Cantidad de restaurants")
+    user_latitude: float = Field(..., description="Latitud del user")
+    user_longitude: float = Field(..., description="Longitud del user")
+    restaurants: list[RestaurantWithDistance] = Field(..., description="Restaurants ordenados por distancia")
 
 
 class RestaurantUpdateRequest(BaseModel):
-    name: str | None = Field(None, description="Nombre del restaurante")
-    capacity_limit: int | None = Field(None, description="Límite de capacidad", ge=1)
+    name: str | None = Field(None, description="Nombre del restaurant")
+    capacity_limit: int | None = Field(None, description="Capacity limit", ge=1)
     table_count: int | None = Field(None, description="Cantidad de mesas", ge=1)
-    min_service_duration: int | None = Field(None, description="Duración mínima de servicio", ge=1)
+    min_service_duration: int | None = Field(None, description="Minimum service duration", ge=1)
     terrace_setup_type: Literal[
         "yearround",
         "summer",
@@ -670,10 +670,10 @@ class RestaurantUpdateRequest(BaseModel):
         "traditional",
         "business",
         "family",
-    ] | None = Field(None, description="Segmento del restaurante")
-    menu_price: float | None = Field(None, description="Precio del menú", ge=0)
+    ] | None = Field(None, description="Segmento del restaurant")
+    menu_price: float | None = Field(None, description="Menu price", ge=0)
     dist_office_towers: int | None = Field(None, description="Distancia a oficinas", ge=0)
-    google_rating: float | None = Field(None, description="Valoración de Google", ge=0, le=5)
+    google_rating: float | None = Field(None, description="Google rating", ge=0, le=5)
     cuisine_type: Literal[
         "grill",
         "spanish",
@@ -692,26 +692,26 @@ class RestaurantUpdateRequest(BaseModel):
 
 class RestaurantsListResponse(BaseModel):
     """
-    Modelo de respuesta para la lista de restaurantes.
+    Modelo de respuesta para la lista de restaurants.
     """
-    count: int = Field(..., description="Cantidad total de restaurantes")
-    restaurants: list[RestaurantItem] = Field(..., description="Lista de restaurantes")
+    count: int = Field(..., description="Cantidad total de restaurants")
+    restaurants: list[RestaurantItem] = Field(..., description="Lista de restaurants")
 
 
 class RestaurantsDetailListResponse(BaseModel):
-    """Modelo de respuesta para la lista de restaurantes con detalle completo."""
+    """Modelo de respuesta para la lista de restaurants con detalle completo."""
 
-    count: int = Field(..., description="Cantidad total de restaurantes")
-    restaurants: list[RestaurantDetailItem] = Field(..., description="Lista detallada de restaurantes")
+    count: int = Field(..., description="Cantidad total de restaurants")
+    restaurants: list[RestaurantDetailItem] = Field(..., description="Lista detallada de restaurants")
 
 
 class InscripcionCreateRequest(BaseModel):
     """Modelo de alta para solicitudes en dbo.inscriptions."""
 
-    name: str = Field(..., description="Nombre del restaurante", min_length=1)
-    capacity_limit: int | None = Field(None, description="Límite de capacidad", ge=1)
+    name: str = Field(..., description="Nombre del restaurant", min_length=1)
+    capacity_limit: int | None = Field(None, description="Capacity limit", ge=1)
     table_count: int | None = Field(None, description="Cantidad de mesas", ge=1)
-    min_service: str | None = Field(None, description="Duración mínima del servicio (texto)")
+    min_service: str | None = Field(None, description="Minimum service duration (text)")
     terrace_setup_type: Literal[
         "yearround",
         "summer",
@@ -724,10 +724,10 @@ class InscripcionCreateRequest(BaseModel):
         "traditional",
         "business",
         "family",
-    ] | None = Field(None, description="Segmento del restaurante")
-    menu_price: float | None = Field(None, description="Precio medio del menú", ge=0)
+    ] | None = Field(None, description="Segmento del restaurant")
+    menu_price: float | None = Field(None, description="Average menu price", ge=0)
     dist_office_towers: int | None = Field(None, description="Distancia a oficinas en metros", ge=0)
-    google_rating: float | None = Field(None, description="Valoración media (0-5)", ge=0, le=5)
+    google_rating: float | None = Field(None, description="Average rating (0-5)", ge=0, le=5)
     cuisine_type: Literal[
         "grill",
         "spanish",
@@ -742,12 +742,12 @@ class InscripcionCreateRequest(BaseModel):
         "plantbased",
         "streetfood",
     ] | None = Field(None, description="Tipo de cocina")
-    login_email: str | None = Field(None, description="Email para acceso del restaurante")
-    password: str | None = Field(None, description="Contraseña de acceso (se almacena hasheada)")
-    image_url: str | None = Field(None, description="URL inicial de imagen del restaurante")
-    google_maps_link: str = Field(..., description="Link de reseñas/Google Maps (obligatorio)", min_length=5)
-    image_url: str | None = Field(None, description="URL inicial de imagen del restaurante")
-    google_maps_link: str = Field(..., description="Link de reseñas/Google Maps (obligatorio)", min_length=5)
+    login_email: str | None = Field(None, description="Email para acceso del restaurant")
+    password: str | None = Field(None, description="Password de acceso (se almacena hasheada)")
+    image_url: str | None = Field(None, description="URL inicial de imagen del restaurant")
+    google_maps_link: str = Field(..., description="Google Reviews/Maps link (required)", min_length=5)
+    image_url: str | None = Field(None, description="URL inicial de imagen del restaurant")
+    google_maps_link: str = Field(..., description="Google Reviews/Maps link (required)", min_length=5)
 
 
 class InscripcionItem(BaseModel):
@@ -770,7 +770,7 @@ class InscripcionItem(BaseModel):
     image_url: str | None = None
     google_maps_link: str
     estado_inscripcion: str | None = None
-    fecha_solicitud: datetime | None = None
+    date_solicitud: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -784,7 +784,7 @@ class InscripcionesListResponse(BaseModel):
 
 
 class InscripcionActionResponse(BaseModel):
-    """Respuesta estándar para acciones administrativas sobre inscripciones."""
+    """Standard response for administrative registration actions."""
 
     inscripcion_id: int
     status: str
@@ -820,7 +820,7 @@ class DailyMenuResponse(BaseModel):
 class DishRatingCreateRequest(BaseModel):
     restaurant_id: int
     dish_name: str = Field(..., min_length=1, max_length=500)
-    rating: float = Field(..., ge=1, le=5)  # ✅ Float para aceptar decimales (ej: 4.5)
+    rating: float = Field(..., ge=1, le=5)  # Float para aceptar decimales (ej: 4.5)
     rating_date: date | None = None
 
 
@@ -830,7 +830,7 @@ class DishRatingWriteResponse(BaseModel):
     rating_date: date
     dish_name: str
     dish_key: str
-    rating: float  # ✅ Float para retornar decimales
+    rating: float  # Float para retornar decimales
 
 
 class DishRatingSummaryItem(BaseModel):
@@ -876,10 +876,10 @@ class RestaurantRankingResponse(BaseModel):
 
 
 class DishRankingItem(BaseModel):
-    dish_id: int | None = None  # ✅ Opcional: permite valoraciones sin dish_id asignado
+    dish_id: int | None = None  # Opcional: permite valoraciones sin dish_id asignado
     dish_name: str
-    restaurant_id: int  # ✅ ID del restaurante
-    restaurant_name: str  # ✅ Nombre del restaurante
+    restaurant_id: int  # ID del restaurant
+    restaurant_name: str  # Nombre del restaurant
     avg_rating: float | None = None
     votes: int
     trend_7d: float | None = None
@@ -910,7 +910,7 @@ class RestaurantImageUpdateRequest(BaseModel):
 
 
 class UserCreateRequest(BaseModel):
-    restaurant_id: int = Field(..., description="0 para admin, >0 para restaurante")
+    restaurant_id: int = Field(..., description="0 para admin, >0 para restaurant")
     email: str = Field(..., min_length=3)
     password: str = Field(..., min_length=6)
     role: Literal["admin", "restaurant_owner"] = "restaurant_owner"
@@ -949,67 +949,67 @@ def _require_auth(authorization: str | None) -> dict:
     token = _extract_bearer_token(authorization)
     payload = decode_access_token(token) if token else None
     if not payload:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión no válida.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session.")
     return payload
 
 
 def _require_admin_auth(authorization: str | None) -> dict:
-    """Requiere que el usuario sea admin (restaurant_id=0)"""
+    """Requiere que el user sea admin (restaurant_id=0)"""
     payload = _require_auth(authorization)
     if payload.get("role") != "admin":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión no válida para administrador.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session for administrator.")
     return payload
 
 
 def _require_restaurant_or_admin_auth(authorization: str | None, requested_restaurant_id: int | None) -> dict:
     """
-    Requiere que el usuario sea restaurant_owner o admin.
-    Si es restaurant_owner, valida que solo acceda a su propio restaurante.
+    Requiere que el user sea restaurant_owner o admin.
+    If role is restaurant_owner, validates access only to its own restaurant.
     
     Args:
-        authorization: Header de autorización
-        requested_restaurant_id: ID del restaurante solicitado (para validar permisos)
+        authorization: Authorization header
+        requested_restaurant_id: ID del restaurant solicitado (para validar permisos)
         
     Returns:
-        Payload del token si la autorización es válida
+        Token payload if authorization is valid
     """
     payload = _require_auth(authorization)
     role = payload.get("role")
     user_restaurant_id = payload.get("restaurant_id")
     
-    # Admin puede acceder a cualquier restaurante
+    # Admin puede acceder a cualquier restaurant
     if role == "admin":
         return payload
     
-    # Restaurant owner solo puede acceder a su propio restaurante
+    # Restaurant owner solo puede acceder a su propio restaurant
     if role == "restaurant_owner":
         if user_restaurant_id != requested_restaurant_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permisos para acceder a este restaurante."
+                detail="No tienes permisos para acceder a este restaurant."
             )
         return payload
     
     # Cualquier otro rol es rechazado
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Rol no autorizado para hacer predicciones de menú."
+        detail="Unauthorized role for menu predictions."
     )
 
 
 # ============================================================================
-# INICIALIZACIÓN DE LA APP
+# APP INITIALIZATION
 # ============================================================================
 
 class CacheManager:
     """
-    Gestor de caché en memoria para datos de clima, calendario y conteos de dishes.
+    In-memory cache manager for weather, calendar, and dish-count data.
     
     Evita llamadas repetidas a Open-Meteo API y queries costosas a BD.
     
     Beneficio: 
-    - Clima/Calendario: Reducir 200-500ms por predicción × 3 = hasta 1.5s ahorrados
-    - Dish Counts: Eliminar 3 JOINs + COUNT(DISTINCT) por predicción
+    - Clima/Calendario: Reducir 200-500ms por prediction 3 = hasta 1.5s ahorrados
+    - Dish Counts: Delete 3 JOINs + COUNT(DISTINCT) por prediction
     
     Atributos:
         ttl (timedelta): Tiempo de vida para clima/calendario (default: 20 min)
@@ -1022,106 +1022,106 @@ class CacheManager:
     def __init__(self, ttl_minutes: int = 20, dish_count_ttl_minutes: int = 60):
         """
         Args:
-            ttl_minutes: Minutos que clima/calendario permanecen en caché (default: 20 min)
-            dish_count_ttl_minutes: Minutos que conteos de dishes permanecen en caché (default: 60 min)
+            ttl_minutes: Minutes that weather/calendar data remains cached (default: 20 min)
+            dish_count_ttl_minutes: Minutes that dish counts remain cached (default: 60 min)
         """
         self.ttl = timedelta(minutes=ttl_minutes)
         self.dish_count_ttl = timedelta(minutes=dish_count_ttl_minutes)
         self.weather_cache = {}
         self.calendar_cache = {}
         self.dish_count_cache = {}
-        logger.info(f"🔄 CacheManager iniciado con TTL clima/calendario={ttl_minutes}min, dishes={dish_count_ttl_minutes}min")
+        logger.info(f"CacheManager initialized with weather/calendar TTL={ttl_minutes}min, dish-count TTL={dish_count_ttl_minutes}min")
     
     def _is_expired(self, cached_timestamp: datetime, ttl: timedelta) -> bool:
-        """Verifica si una entrada de caché ha expirado."""
+        """Checks whether a cache entry has expired."""
         return datetime.now() - cached_timestamp > ttl
     
     def get_weather(self, service_date: date) -> dict | None:
         """
-        Obtiene datos de clima del caché si existen y no han expirado.
+        Gets weather data from cache if present and not expired.
         
         Args:
-            service_date: Fecha para consultar
+            service_date: Date para consultar
             
         Returns:
-            dict con datos de clima, o None si no está en caché o ha expirado
+            dict with weather data, or None if not cached or expired
         """
         if service_date in self.weather_cache:
             data, timestamp = self.weather_cache[service_date]
             if not self._is_expired(timestamp, self.ttl):
-                logger.info(f"✅ Climat caché para {service_date} (edad: {(datetime.now() - timestamp).total_seconds():.0f}s)")
+                logger.info(f"Weather cache hit for {service_date} (age: {(datetime.now() - timestamp).total_seconds():.0f}s)")
                 return data
             else:
-                # Eliminar entrada expirada
+                # Delete expired entry
                 del self.weather_cache[service_date]
-                logger.info(f"🗑️  Caché clima expirado para {service_date}")
+                logger.info(f"Weather cache expired for {service_date}")
         
         return None
     
     def set_weather(self, service_date: date, data: dict) -> None:
-        """Guarda datos de clima en caché."""
+        """Stores weather data in cache."""
         self.weather_cache[service_date] = (data, datetime.now())
-        logger.info(f"💾 Guardado clima en caché para {service_date}")
+        logger.info(f"Weather cached for {service_date}")
     
     def get_calendar(self, service_date: date) -> dict | None:
         """
-        Obtiene datos de calendario del caché si existen y no han expirado.
+        Gets calendar data from cache if present and not expired.
         
         Args:
-            service_date: Fecha para consultar
+            service_date: Date to query
             
         Returns:
-            dict con datos de calendario, o None si no está en caché o ha expirado
+            dict with calendar data, or None if not cached or expired
         """
         if service_date in self.calendar_cache:
             data, timestamp = self.calendar_cache[service_date]
             if not self._is_expired(timestamp, self.ttl):
-                logger.info(f"✅ Calendario caché para {service_date} (edad: {(datetime.now() - timestamp).total_seconds():.0f}s)")
+                logger.info(f"Calendar cache hit for {service_date} (age: {(datetime.now() - timestamp).total_seconds():.0f}s)")
                 return data
             else:
-                # Eliminar entrada expirada
+                # Delete expired entry
                 del self.calendar_cache[service_date]
-                logger.info(f"🗑️  Caché calendario expirado para {service_date}")
+                logger.info(f"Calendar cache expired for {service_date}")
         
         return None
     
     def set_calendar(self, service_date: date, data: dict) -> None:
-        """Guarda datos de calendario en caché."""
+        """Stores calendar data in cache."""
         self.calendar_cache[service_date] = (data, datetime.now())
-        logger.info(f"💾 Guardado calendario en caché para {service_date}")
+        logger.info(f"Calendar cached for {service_date}")
     
     def get_dish_count(self, restaurant_id: int, course_type: str) -> int | None:
         """
-        Obtiene el conteo de dishes del caché si existe y no ha expirado.
+        Gets dish count from cache if present and not expired.
         
         Args:
-            restaurant_id: ID del restaurante
-            course_type: Tipo de plato ('first_course', 'second_course', 'dessert')
+            restaurant_id: Restaurant ID
+            course_type: Dish type ('first_course', 'second_course', 'dessert')
             
         Returns:
-            int con el conteo, o None si no está en caché o ha expirado
+            int count, or None if not cached or expired
         """
         cache_key = (restaurant_id, course_type)
         if cache_key in self.dish_count_cache:
             count, timestamp = self.dish_count_cache[cache_key]
             if not self._is_expired(timestamp, self.dish_count_ttl):
-                logger.info(f"✅ Conteo {course_type} caché para restaurante {restaurant_id} (edad: {(datetime.now() - timestamp).total_seconds():.0f}s)")
+                logger.info(f"Dish count cache hit for restaurant {restaurant_id}, {course_type} (age: {(datetime.now() - timestamp).total_seconds():.0f}s)")
                 return count
             else:
-                # Eliminar entrada expirada
+                # Delete expired entry
                 del self.dish_count_cache[cache_key]
-                logger.info(f"🗑️  Caché conteo expirado para restaurante {restaurant_id}, {course_type}")
+                logger.info(f"Dish count cache expired for restaurant {restaurant_id}, {course_type}")
         
         return None
     
     def set_dish_count(self, restaurant_id: int, course_type: str, count: int) -> None:
-        """Guarda conteo de dishes en caché."""
+        """Stores dish count in cache."""
         cache_key = (restaurant_id, course_type)
         self.dish_count_cache[cache_key] = (count, datetime.now())
-        logger.info(f"💾 Guardado conteo {course_type} en caché para restaurante {restaurant_id}: {count} platos")
+        logger.info(f"Dish count cached for restaurant {restaurant_id}, {course_type}: {count} dishes")
     
     def clear_expired(self) -> None:
-        """Limpia todas las entradas expiradas del caché."""
+        """Removes all expired cache entries."""
         expired_weather = [
             date_obj for date_obj, (_, ts) in self.weather_cache.items()
             if self._is_expired(ts, self.ttl)
@@ -1144,10 +1144,10 @@ class CacheManager:
             del self.dish_count_cache[key]
         
         if expired_weather or expired_calendar or expired_counts:
-            logger.info(f"🧹 Limpieza caché: {len(expired_weather)} clima, {len(expired_calendar)} calendario, {len(expired_counts)} conteos eliminados")
+            logger.info(f"Cache cleanup: removed {len(expired_weather)} weather, {len(expired_calendar)} calendar, {len(expired_counts)} count entries")
     
     def stats(self) -> dict:
-        """Retorna estadísticas del caché."""
+        """Returns cache statistics."""
         return {
             "weather_items": len(self.weather_cache),
             "calendar_items": len(self.calendar_cache),
@@ -1158,7 +1158,7 @@ class CacheManager:
 
 
 def _ensure_auth_columns_exist() -> None:
-    """Crea columnas de auth/imagen/geolocalización en las tablas si la BD aún no fue migrada. Idempotente."""
+    """Creates auth/image/geolocation columns in tables if DB migration is pending. Idempotent."""
     statements = [
         "IF COL_LENGTH('dbo.dim_restaurants', 'login_email') IS NULL ALTER TABLE dbo.dim_restaurants ADD login_email NVARCHAR(255) NULL;",
         "IF COL_LENGTH('dbo.dim_restaurants', 'password_hash') IS NULL ALTER TABLE dbo.dim_restaurants ADD password_hash NVARCHAR(255) NULL;",
@@ -1207,7 +1207,7 @@ def _sync_menu_model_from_azureml(provider: Any) -> Path | None:
         "on",
     }
     if disable_azure:
-        logger.info("ℹ️ Azure ML deshabilitado por AZCA_DISABLE_AZURE_ML_MODELS; se mantiene modelo local.")
+        logger.info("Azure ML disabled by AZCA_DISABLE_AZURE_ML_MODELS; using local model.")
         return None
 
     model_name = _menu_registered_model_name()
@@ -1220,14 +1220,14 @@ def _sync_menu_model_from_azureml(provider: Any) -> Path | None:
             dest_pkl_path=destination_path,
         )
         logger.info(
-            "✅ Modelo de menu actualizado desde Azure ML: %s (%s)",
+            "Menu model updated from Azure ML: %s (%s)",
             model_name,
             downloaded_path.name,
         )
         return downloaded_path
     except Exception as exc:
         logger.warning(
-            "⚠️ No se pudo actualizar '%s' desde Azure ML (%s). Se usara fallback local.",
+            "Could not update '%s' from Azure ML (%s). Local fallback will be used.",
             model_name,
             exc,
         )
@@ -1235,7 +1235,7 @@ def _sync_menu_model_from_azureml(provider: Any) -> Path | None:
 
 
 def _resolve_unified_menu_model_path() -> Path:
-    """Localiza el modelo de menu compatible con nombres antiguos y nuevos."""
+    """Locates the menu model compatible with old and new names."""
     artifacts_path = Path(__file__).parent.parent / "azca" / "artifacts"
 
     configured_name = os.getenv("AZCA_MENU_MODEL_FILENAME", "").strip()
@@ -1258,7 +1258,7 @@ def _resolve_unified_menu_model_path() -> Path:
             return candidate_path
 
     raise FileNotFoundError(
-        f"No se encontro ningun modelo de menu en {artifacts_path}. "
+        f"No menu model found in {artifacts_path}. "
         f"Probados: {', '.join(candidate_names)}"
     )
 
@@ -1272,48 +1272,48 @@ async def startup_event():
     """
     Evento de inicio de la API.
 
-    - Inicializa la base de datos (crea tablas si no existen)
-    - Carga el motor de predicción (PredictionEngine)
-    - Realiza validaciones básicas
+    - Inicializa la database (crea tables si no existen)
+    - Loads the prediction engine (PredictionEngine)
+    - Performs basic validations
     """
     global prediction_engine
 
     try:
-        # Inicializar base de datos
+        # Inicializar database
         init_db()
         _ensure_auth_columns_exist()
-        logger.info("✅ Columnas de auth/imagen verificadas")
+        logger.info("Auth/image columns verified")
     except Exception as migration_error:
-        logger.warning(f"⚠️  No se pudieron verificar columnas de auth: {str(migration_error)[:120]}")
+        logger.warning(f"Could not verify auth columns: {str(migration_error)[:120]}")
 
-    # 2. Intentar conectar a BD y verificar restaurantes
+    # 2. Intentar conectar a BD y verify restaurants
     try:
         db = SessionLocal()
         restaurant_count = db.query(Restaurant).count()
         db.close()
-        logger.info(f"✅ Conectado a BD: {restaurant_count} restaurantes disponibles")
+        logger.info(f"Connected to DB: {restaurant_count} restaurants disponibles")
     except Exception as db_error:
-        logger.error(f"❌ Error conectando BD: {str(db_error)}", exc_info=True)
+        logger.error(f"Error connecting to DB: {str(db_error)}", exc_info=True)
         raise
     
-    # 3. Inicializar el motor de predicción
+    # 3. Initialize prediction engine
     try:
         prediction_engine = PredictionEngine()
-        logger.info(f"✅ Motor de predicción inicializado")
+        logger.info("Prediction engine initialized")
     except Exception as engine_error:
-        logger.warning(f"⚠️  Motor de predicción no disponible: {str(engine_error)[:100]}")
-        prediction_engine = None  # Permitirá fallback con mock en endpoints
+        logger.warning("Prediction engine not available: %s", str(engine_error)[:100])
+        prediction_engine = None  # Allows mock fallback in endpoints
 
-    # 4. Sincronizar modelo de menu desde Azure ML y arrancar scheduler mensual
+    # 4. Sync menu model from Azure ML and start monthly scheduler
     app.state.model_refresh_task = None
     if prediction_engine is not None:
         model_provider = getattr(prediction_engine, "model_provider", None)
 
-        # Intenta descargar model.pkl desde Azure ML y guardarlo renombrado
+        # Intenta desload model.pkl desde Azure ML y savelo renombrado
         # como azca-menus-model.pkl para uso local consistente.
         _sync_menu_model_from_azureml(model_provider)
 
-        # Intenta descargar el modelo de servicios para que /predict use
+        # Intenta desload el modelo de services para que /predict use
         # artifacts/azca-services-model.pkl como origen principal local.
         try:
             model_provider.download_model_to_artifacts(
@@ -1325,10 +1325,10 @@ async def startup_event():
                     / f"{DEFAULT_SERVICES_REGISTERED_MODEL}.pkl"
                 ),
             )
-            logger.info("✅ Modelo de servicios actualizado: %s", DEFAULT_SERVICES_REGISTERED_MODEL)
+            logger.info("Services model updated: %s", DEFAULT_SERVICES_REGISTERED_MODEL)
         except Exception as exc:
             logger.warning(
-                "⚠️ No se pudo actualizar '%s' desde Azure ML (%s). Se usara fallback local.",
+                "Could not update '%s' from Azure ML (%s). Local fallback will be used.",
                 DEFAULT_SERVICES_REGISTERED_MODEL,
                 exc,
             )
@@ -1347,27 +1347,27 @@ async def startup_event():
                     scheduler_models,
                 )
                 logger.info(
-                    "✅ Scheduler mensual de modelos iniciado (%s)",
+                    "Monthly model scheduler started (%s)",
                     ", ".join(scheduler_models),
                 )
             except Exception as scheduler_error:
                 logger.warning(
-                    "⚠️ No se pudo iniciar scheduler mensual de modelos: %s",
+                    "Could not start monthly model scheduler: %s",
                     scheduler_error,
                 )
         elif not MODEL_SCHEDULER_AVAILABLE:
-            logger.warning("⚠️ Scheduler de modelos no disponible; se omite refresco mensual.")
+            logger.warning("Model scheduler not available; monthly refresh is skipped.")
 
-    # 5. Cargar modelo pickle en memoria (OPTIMIZACIÓN CLAVE)
+    # 5. Load pickle model in memory (key optimization)
     model_path: Path | None = None
     try:
         model_path = _resolve_unified_menu_model_path()
         
-        logger.info(f"📦 Cargando modelo desde: {model_path}")
+        logger.info(f"Loading model from: {model_path}")
         
         # Pre-importar onnx para registrar sus DLL nativas en Windows antes
-        # de que pickle.load lo intente importar a través de la cadena
-        # azureml -> skl2onnx -> onnx_cpp2py_export (causaría DLL init failure)
+        # so pickle.load does not try to import it through the chain
+        # azureml -> skl2onnx -> onnx_cpp2py_export (which could cause DLL init failure)
         try:
             import onnx  # noqa: F401
             import onnxruntime  # noqa: F401
@@ -1378,38 +1378,38 @@ async def startup_event():
             model = pickle.load(f)
         
         app.state.model = model
-        logger.info(f"✅ Modelo cargado en memoria (app.state.model)")
+        logger.info(f"Model loaded into memory (app.state.model)")
         logger.info(f"   Tipo de modelo: {type(model).__name__}")
         
     except FileNotFoundError:
         logger.error(
-            "❌ Modelo no encontrado. Rutas candidatas: %s",
+            "Model not found. Candidate paths: %s",
             "azca-menus-model.pkl, azca-secondary-menus-model.pkl, AzcaMenuModel.pkl",
         )
         # No re-lanzar para permitir que el servidor inicie
         app.state.model = None
-        logger.warning("⚠️ Servidor iniciará sin modelo de predicción")
+        logger.warning("Server will start without prediction model")
     except Exception as model_error:
-        logger.error(f"❌ Error cargando modelo: {str(model_error)}", exc_info=True)
+        logger.error(f"Error loading model: {str(model_error)}", exc_info=True)
         # No re-lanzar para permitir que el servidor inicie sin modelo
         # Los endpoints de imagen no necesitan el modelo
         app.state.model = None
-        logger.warning("⚠️ Servidor iniciará sin modelo de predicción")
+        logger.warning("Server will start without prediction model")
     
-    # 6. Inicializar caché en memoria (clima y calendario)
-    # 6. Inicializar caché en memoria (clima y calendario)
+    # 6. Initialize in-memory cache (weather and calendar)
+    # 6. Initialize in-memory cache (weather and calendar)
     try:
         app.state.cache = CacheManager(ttl_minutes=20)
-        logger.info(f"✅ Caché en memoria inicializado")
+        logger.info(f"In-memory cache initialized")
     except Exception as cache_error:
-        logger.warning(f"⚠️ Error inicializando caché (no crítico): {str(cache_error)}")
+        logger.warning(f"Error initializing cache (non-critical): {str(cache_error)}")
     
-    logger.info("🎯 Aplicación lista para servir predicciones")
+    logger.info("Application ready to serve predictions")
 
 # Configurar CORS para permitir requests desde el frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción, cambiar a ["https://tudominio.com"]
+    allow_origins=["*"],  # In production, change to ["https://your-domain.com"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1440,22 +1440,22 @@ async def health_check():
     """
     return HealthResponse(
         status="healthy",
-        message="API y base de datos funcionando correctamente",
+        message="API y database funcionando correctamente",
     )
 
 
 @app.get(
     "/restaurants",
     response_model=RestaurantsListResponse,
-    summary="Obtener Lista de Restaurantes",
+    summary="Get list of restaurants",
     tags=["Data"],
 )
 async def get_restaurants(db: Session = Depends(get_db)):
     """
-    Obtiene la lista de todos los restaurantes disponibles desde Azure SQL.
+    Obtiene la lista de todos los restaurants disponibles desde Azure SQL.
 
     Returns:
-        RestaurantsListResponse: Lista de restaurantes con su información básica
+        RestaurantsListResponse: List of restaurants with basic information
     """
     try:
         restaurants = db.query(Restaurant).all()
@@ -1475,32 +1475,32 @@ async def get_restaurants(db: Session = Depends(get_db)):
         
         return response
     except Exception as e:
-        logger.error(f"❌ Error en GET /restaurants: {str(e)}", exc_info=True)
-        # Devolver lista vacía en lugar de 500 para mantener la UI funcional.
-        # Esto ayuda cuando la DB no está disponible o falta configuración.
+        logger.error(f"Error in GET /restaurants: {str(e)}", exc_info=True)
+        # Return an empty list instead of 500 to keep the UI functional.
+        # This helps when DB is unavailable or configuration is missing.
         return RestaurantsListResponse(count=0, restaurants=[])
 
 
 @app.get(
     "/restaurants/nearby",
     response_model=RestaurantNearbyResponse,
-    summary="Obtener Restaurantes Cercanos",
+    summary="Get nearby restaurants",
     tags=["Data"],
 )
 async def get_restaurants_nearby(
-    user_latitude: float = Query(..., description="Latitud del usuario"),
-    user_longitude: float = Query(..., description="Longitud del usuario"),
+    user_latitude: float = Query(..., description="Latitud del user"),
+    user_longitude: float = Query(..., description="Longitud del user"),
     db: Session = Depends(get_db)
 ):
     """
-    Obtiene todos los restaurantes ordenados por distancia desde la ubicación del usuario.
+    Gets all restaurants ordered by distance from user location.
     
     Args:
-        user_latitude: Latitud de la ubicación del usuario
-        user_longitude: Longitud de la ubicación del usuario
+        user_latitude: Latitude of user location
+        user_longitude: Longitude of user location
         
     Returns:
-        RestaurantNearbyResponse: Lista de restaurantes con distancias calculadas, ordenados por proximidad
+        RestaurantNearbyResponse: Lista de restaurants con distancias calculadas, ordenados por proximidad
     """
     try:
         restaurants = db.query(Restaurant).all()
@@ -1508,7 +1508,7 @@ async def get_restaurants_nearby(
         restaurants_with_distance = []
         
         for restaurant in restaurants:
-            # Si el restaurante tiene coordenadas, calcular distancia
+            # Si el restaurant tiene coordenadas, calcular distancia
             if restaurant.latitude and restaurant.longitude:
                 distance = calculate_distance_haversine(
                     user_latitude,
@@ -1545,10 +1545,10 @@ async def get_restaurants_nearby(
         
         return response
     except Exception as e:
-        logger.error(f"❌ Error en GET /restaurants/nearby: {str(e)}", exc_info=True)
+        logger.error(f"Error in GET /restaurants/nearby: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al obtener restaurantes cercanos: {str(e)}"
+            detail=f"Error retrieving restaurants cercanos: {str(e)}"
         )
 
 
@@ -1556,11 +1556,11 @@ async def get_restaurants_nearby(
 @app.get(
     "/restaurants/details",
     response_model=RestaurantsDetailListResponse,
-    summary="Obtener Lista Detallada de Restaurantes",
+    summary="Get detailed restaurant list",
     tags=["Data"],
 )
 async def get_restaurants_details(db: Session = Depends(get_db)):
-    """Obtiene todos los restaurantes con detalle completo en una sola consulta."""
+    """Obtiene todos los restaurants con detalle completo en una sola consulta."""
     try:
         restaurants = db.query(Restaurant).all()
 
@@ -1569,27 +1569,27 @@ async def get_restaurants_details(db: Session = Depends(get_db)):
 
         return RestaurantsDetailListResponse(count=len(detail_rows), restaurants=detail_rows)
     except Exception as e:
-        logger.error(f"❌ Error en GET /restaurants/details: {str(e)}", exc_info=True)
+        logger.error(f"Error in GET /restaurants/details: {str(e)}", exc_info=True)
         return RestaurantsDetailListResponse(count=0, restaurants=[])
 
 
 @app.get(
     "/restaurants/{restaurant_id}",
     response_model=RestaurantDetailItem,
-    summary="Obtener Detalles de un Restaurante",
+    summary="Get restaurant details",
     tags=["Data"],
 )
 async def get_restaurant_detail(restaurant_id: int, db: Session = Depends(get_db)):
     """
-    Obtiene todos los detalles de un restaurante específico por ID.
+    Gets all details of a specific restaurant by ID.
     
-    Devuelve todos los campos necesarios para llenar el formulario de predicción.
+    Devuelve todos los campos necesarios para llenar el formulario de prediction.
 
     Args:
-        restaurant_id: ID del restaurante a obtener
+        restaurant_id: Restaurant ID to retrieve
 
     Returns:
-        RestaurantDetailItem: Detalles completos del restaurante
+        RestaurantDetailItem: Detalles completos del restaurant
     """
     try:
         restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
@@ -1597,7 +1597,7 @@ async def get_restaurant_detail(restaurant_id: int, db: Session = Depends(get_db
         if not restaurant:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Restaurante con ID {restaurant_id} no encontrado"
+                detail=f"Restaurant con ID {restaurant_id} not found"
             )
         
         return RestaurantDetailItem.from_orm(restaurant)
@@ -1605,11 +1605,11 @@ async def get_restaurant_detail(restaurant_id: int, db: Session = Depends(get_db
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Error en GET /restaurants/{restaurant_id}: {str(e)}", exc_info=True)
-        # Retornar un objeto mínimo para mantener la UI operativa
+        logger.error(f"Error in GET /restaurants/{restaurant_id}: {str(e)}", exc_info=True)
+        # Return a minimal object to keep UI operational
         return RestaurantDetailItem(
             restaurant_id=restaurant_id,
-            name=f"Restaurante {restaurant_id}",
+            name=f"Restaurant {restaurant_id}",
             capacity_limit=None,
             table_count=None,
             min_service_duration=None,
@@ -1627,7 +1627,7 @@ async def get_restaurant_detail(restaurant_id: int, db: Session = Depends(get_db
 
 @app.get(
     "/restaurants/{restaurant_id}/image",
-    summary="Obtener URL de imagen del restaurante",
+    summary="Get restaurant image URL",
     tags=["Data"],
     response_model=dict,
 )
@@ -1636,13 +1636,13 @@ async def get_restaurant_image(
     db: Session = Depends(get_db)
 ):
     """
-    Obtiene la URL de la imagen del restaurante.
+    Obtiene la URL de la imagen del restaurant.
     
-    Si el restaurante no tiene imagen personalizada en Blob Storage,
-    retorna la imagen por defecto según su tipo de cocina.
+    Si el restaurant no tiene imagen personalizada en Blob Storage,
+    returns the default image based on cuisine type.
 
     Args:
-        restaurant_id: ID del restaurante
+        restaurant_id: ID del restaurant
 
     Returns:
         {
@@ -1659,7 +1659,7 @@ async def get_restaurant_image(
         if not restaurant:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Restaurante con ID {restaurant_id} no encontrado"
+                detail=f"Restaurant con ID {restaurant_id} not found"
             )
 
         # Si tiene URL personalizada (del Blob Storage), usarla
@@ -1670,7 +1670,7 @@ async def get_restaurant_image(
                 "restaurant_id": restaurant_id
             }
 
-        # Si no, retornar imagen por defecto según tipo de cocina
+        # Otherwise, return default image based on cuisine type
         default_image_url = get_default_image_url(restaurant.cuisine_type)
         return {
             "image_url": default_image_url,
@@ -1683,18 +1683,18 @@ async def get_restaurant_image(
         raise
     except Exception as e:
         logger.error(
-            f"❌ Error en GET /restaurants/{restaurant_id}/image: {str(e)}",
+            f"Error in GET /restaurants/{restaurant_id}/image: {str(e)}",
             exc_info=True
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al obtener imagen del restaurante"
+            detail="Error retrieving imagen del restaurant"
         )
 
 
 @app.get(
     "/company/logo",
-    summary="Obtener logos de la empresa AML",
+    summary="Get AML company logos",
     tags=["Company"],
     response_model=dict,
 )
@@ -1703,7 +1703,7 @@ async def get_company_logos():
     Obtiene las URLs de los logos de AML desde Azure Blob Storage.
     
     Retorna:
-    - Logo.png: Logo completo con texto (para página Sobre Nosotros)
+    - Logo.png: Full logo with text (for About Us page)
     - Logo_sin.png: Logo sin texto (para header principal)
     """
     try:
@@ -1719,23 +1719,23 @@ async def get_company_logos():
             "logo_sin_texto": f"{base_url}/Logo_sin.png",
         }
         
-        logger.info(f"📦 Logos de empresa servidos desde: {base_url}")
+        logger.info(f"Company logos served from: {base_url}")
         
         return logos
         
     except Exception as e:
         logger.error(
-            f"❌ Error al obtener logos de empresa: {str(e)}",
+            f"Error retrieving company logos: {str(e)}",
             exc_info=True
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al obtener logos de la empresa"
+            detail="Error retrieving logos de la empresa"
         )
 
 
 def _parse_min_service_duration(min_service: str | None) -> int | None:
-    """Convierte min_service (nvarchar) a entero de minutos si es posible."""
+    """Converts min_service (nvarchar) to integer minutes when possible."""
     if not min_service:
         return None
 
@@ -1751,7 +1751,7 @@ def _parse_min_service_duration(min_service: str | None) -> int | None:
 
 
 def _capitalize_first(value: str | None) -> str | None:
-    """Devuelve el texto con la primera letra en mayúscula, preservando el resto."""
+    """Returns text with first letter capitalized, preserving the rest."""
     if value is None:
         return None
     trimmed = value.strip()
@@ -1763,7 +1763,7 @@ def _capitalize_first(value: str | None) -> str | None:
 @app.post(
     "/inscripciones",
     response_model=InscripcionItem,
-    summary="Crear Solicitud de Inscripción",
+    summary="Create registration request",
     tags=["Data"],
     status_code=status.HTTP_201_CREATED,
 )
@@ -1776,13 +1776,13 @@ async def create_inscripcion(request: InscripcionCreateRequest, db: Session = De
         if bool(normalized_login_email) != bool(normalized_password):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Debes enviar email y contraseña juntos.",
+                detail="Debes enviar email y password juntos.",
             )
 
         if normalized_password and len(normalized_password) < 6:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="La contraseña debe tener al menos 6 caracteres.",
+                detail="La password debe tener al menos 6 caracteres.",
             )
 
         if normalized_login_email:
@@ -1790,7 +1790,7 @@ async def create_inscripcion(request: InscripcionCreateRequest, db: Session = De
             if existing_user:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="Ya existe un usuario registrado con ese email.",
+                    detail="Ya existe un user registrado con ese email.",
                 )
 
         password_hash = hash_password(normalized_password) if normalized_password else None
@@ -1813,7 +1813,7 @@ async def create_inscripcion(request: InscripcionCreateRequest, db: Session = De
             image_url=request.image_url.strip() if request.image_url else None,
             google_maps_link=request.google_maps_link.strip(),
             estado_inscripcion="pendiente",
-            fecha_solicitud=datetime.now(),
+            date_solicitud=datetime.now(),
         )
 
         db.add(inscripcion)
@@ -1840,17 +1840,17 @@ async def create_inscripcion(request: InscripcionCreateRequest, db: Session = De
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Error en POST /inscripciones: {str(e)}", exc_info=True)
+        logger.error(f"Error in POST /inscripciones: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al crear solicitud de inscripción",
+            detail="Error while creating registration request",
         )
 
 
 @app.get(
     "/inscripciones/pending",
     response_model=InscripcionesListResponse,
-    summary="Obtener Inscripciones Pendientes",
+    summary="Get pending registrations",
     tags=["Data"],
 )
 async def get_pending_inscripciones(db: Session = Depends(get_db)):
@@ -1864,7 +1864,7 @@ async def get_pending_inscripciones(db: Session = Depends(get_db)):
                     func.lower(Inscripcion.estado_inscripcion) == "pendiente",
                 )
             )
-            .order_by(desc(Inscripcion.fecha_solicitud), desc(Inscripcion.inscripcion_id))
+            .order_by(desc(Inscripcion.date_solicitud), desc(Inscripcion.inscripcion_id))
             .all()
         )
 
@@ -1874,18 +1874,18 @@ async def get_pending_inscripciones(db: Session = Depends(get_db)):
         )
 
     except Exception as e:
-        logger.error(f"❌ Error en GET /inscripciones/pending: {str(e)}", exc_info=True)
+        logger.error(f"Error in GET /inscripciones/pending: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al obtener inscripciones pendientes",
+            detail="Error retrieving inscripciones pendientes",
         )
 
 
 @app.get(
     "/restaurants/{restaurant_id}",
     response_model=RestaurantDetailItem,
-    summary="Obtener detalles de un restaurante",
-    tags=["Restaurantes"],
+    summary="Get restaurant details",
+    tags=["Restaurants"],
 )
 async def get_restaurant(
     restaurant_id: int, 
@@ -1893,9 +1893,9 @@ async def get_restaurant(
     authorization: str | None = Header(default=None)
 ):
     """
-    Obtiene la información de un restaurante por su ID.
+    Gets restaurant information by ID.
     El admin puede ver cualquiera. 
-    Un owner solo puede ver su propio restaurante.
+    Un owner solo puede ver su propio restaurant.
     """
     payload = _require_auth(authorization)
     role = payload.get("role")
@@ -1905,7 +1905,7 @@ async def get_restaurant(
     if role == "restaurant_owner" and user_restaurant_id != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
-            detail="No tienes permisos para ver los detalles de este restaurante"
+            detail="No tienes permisos para ver los detalles de este restaurant"
         )
         
     restaurant = db.query(Restaurant).filter(
@@ -1915,7 +1915,7 @@ async def get_restaurant(
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Restaurante no encontrado"
+            detail="Restaurant not found"
         )
         
     return RestaurantDetailItem.from_orm(restaurant)
@@ -1924,8 +1924,8 @@ async def get_restaurant(
 @app.patch(
     "/restaurants/{restaurant_id}",
     response_model=RestaurantDetailItem,
-    summary="Actualizar datos del restaurante",
-    tags=["Restaurantes"],
+    summary="Update restaurant data",
+    tags=["Restaurants"],
 )
 async def update_restaurant(
     restaurant_id: int,
@@ -1934,11 +1934,11 @@ async def update_restaurant(
     authorization: str | None = Header(default=None),
 ):
     """
-    Actualiza los campos editables de un restaurante.
+    Actualiza los campos editables de un restaurant.
 
-    - Admin puede editar cualquier restaurante.
-    - El dueño solo puede editar su propio restaurante.
-    - Los campos opcionales enviados como null o cadena vacía se limpian en BD.
+    - Admin puede editar cualquier restaurant.
+    - Owner can edit only their own restaurant.
+    - Optional fields sent as null or empty string are cleaned in DB.
     """
     payload = _require_auth(authorization)
     role = payload.get("role")
@@ -1947,7 +1947,7 @@ async def update_restaurant(
     if role == "restaurant_owner" and user_restaurant_id != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tienes permisos para editar este restaurante",
+            detail="No tienes permisos para editar este restaurant",
         )
     if role not in {"admin", "restaurant_owner"}:
         raise HTTPException(
@@ -1959,7 +1959,7 @@ async def update_restaurant(
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurante no encontrado",
+            detail="Restaurant not found",
         )
 
     provided_fields = getattr(request, "model_fields_set", None)
@@ -1994,7 +1994,7 @@ async def update_restaurant(
             if field_name == "name" and not value:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="El nombre del restaurante no puede quedar vacío",
+                    detail="Restaurant name cannot be empty",
                 )
             if field_name != "name" and not value:
                 value = None
@@ -2008,8 +2008,8 @@ async def update_restaurant(
 
 @app.delete(
     "/restaurants/{restaurant_id}",
-    summary="Eliminar restaurante",
-    tags=["Restaurantes"],
+    summary="Delete restaurant",
+    tags=["Restaurants"],
 )
 async def delete_restaurant_endpoint(
     restaurant_id: int,
@@ -2017,10 +2017,10 @@ async def delete_restaurant_endpoint(
     authorization: str | None = Header(default=None),
 ):
     """
-    Elimina un restaurante de forma permanente.
+    Elimina un restaurant de forma permanente.
 
-    - Solo usuarios con rol admin pueden ejecutar esta acción.
-    - También elimina credenciales asociadas en la tabla users.
+    - Only admin-role users can run this action.
+    - Also removes associated credentials from users table.
     """
     _require_admin_auth(authorization)
 
@@ -2028,7 +2028,7 @@ async def delete_restaurant_endpoint(
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurante no encontrado",
+            detail="Restaurant not found",
         )
 
     try:
@@ -2047,7 +2047,7 @@ async def delete_restaurant_endpoint(
         db.query(FactServices).filter(FactServices.restaurant_id == restaurant_id).delete(synchronize_session=False)
         db.query(RestaurantRating).filter(RestaurantRating.restaurant_id == restaurant_id).delete(synchronize_session=False)
 
-        # Limpieza adicional de tablas sin FK directa pero con datos del restaurante
+        # Limpieza adicional de tables sin FK directa pero con datos del restaurant
         db.query(DailyMenu).filter(DailyMenu.restaurant_id == restaurant_id).delete(synchronize_session=False)
         db.query(DishRating).filter(DishRating.restaurant_id == restaurant_id).delete(synchronize_session=False)
         db.query(FactPredictionLog).filter(FactPredictionLog.restaurant_id == restaurant_id).delete(synchronize_session=False)
@@ -2056,25 +2056,25 @@ async def delete_restaurant_endpoint(
         db.query(User).filter(User.restaurant_id == restaurant_id).delete(synchronize_session=False)
         db.delete(restaurant)
         db.commit()
-        return {"success": True, "message": f"Restaurante {restaurant_id} eliminado correctamente."}
+        return {"success": True, "message": f"Restaurant {restaurant_id} eliminado correctamente."}
     except Exception as e:
         db.rollback()
         logger.error(
-            "❌ Error en DELETE /restaurants/%s: %s",
+            "Error in DELETE /restaurants/%s: %s",
             restaurant_id,
             str(e),
             exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al eliminar restaurante",
+            detail="Error while delete restaurant",
         )
 
 
 @app.get(
     "/inscripciones",
     response_model=InscripcionesListResponse,
-    summary="Obtener Inscripciones",
+    summary="Get registrations",
     tags=["Data"],
 )
 async def get_inscripciones(
@@ -2089,7 +2089,7 @@ async def get_inscripciones(
             normalized = status_filter.strip().lower()
             query = query.filter(func.lower(func.coalesce(Inscripcion.estado_inscripcion, "")) == normalized)
 
-        rows = query.order_by(desc(Inscripcion.fecha_solicitud), desc(Inscripcion.inscripcion_id)).all()
+        rows = query.order_by(desc(Inscripcion.date_solicitud), desc(Inscripcion.inscripcion_id)).all()
 
         return InscripcionesListResponse(
             count=len(rows),
@@ -2097,24 +2097,24 @@ async def get_inscripciones(
         )
 
     except Exception as e:
-        logger.error(f"❌ Error en GET /inscripciones: {str(e)}", exc_info=True)
+        logger.error(f"Error in GET /inscripciones: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al obtener inscripciones",
+            detail="Error retrieving inscripciones",
         )
 
 
 @app.post(
     "/inscripciones/{inscripcion_id}/approve",
     response_model=InscripcionActionResponse,
-    summary="Aprobar Inscripción",
+    summary="Approve registration",
     tags=["Data"],
 )
 async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)):
     """
-    Aprueba una inscripción:
-    - Inserta los datos del restaurante en dim_restaurants.
-    - Marca la inscripción como Aprobada.
+    Approves a registration:
+    - Inserta los datos del restaurant en dim_restaurants.
+    - Marks registration as approved.
     """
     try:
         inscripcion = (
@@ -2126,7 +2126,7 @@ async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)
         if not inscripcion:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Inscripción con ID {inscripcion_id} no encontrada",
+                detail=f"Registration with ID {inscripcion_id} not found",
             )
 
         restaurant_data = {
@@ -2155,7 +2155,7 @@ async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)
         db.add(restaurant)
         db.flush()
 
-        # Crear usuario en tabla users si hay email y contraseña
+        # Create user en table users si hay email y password
         if inscripcion.login_email and inscripcion.password_hash:
             normalized_email = inscripcion.login_email.strip().lower()
             existing_user = db.query(User).filter(User.login_email == normalized_email).first()
@@ -2181,7 +2181,7 @@ async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)
         return InscripcionActionResponse(
             inscripcion_id=inscripcion_id,
             status="aprobada",
-            message="Inscripción aprobada, movida a restaurantes y eliminada de inscripciones.",
+            message="Registration approved, moved to restaurants, and removed from registrations.",
             restaurant_id=restaurant.restaurant_id,
         )
 
@@ -2189,21 +2189,21 @@ async def approve_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Error en POST /inscripciones/{inscripcion_id}/approve: {str(e)}", exc_info=True)
+        logger.error(f"Error in POST /inscripciones/{inscripcion_id}/approve: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al aprobar inscripción",
+            detail="Error while approving registration",
         )
 
 
 @app.post(
     "/inscripciones/{inscripcion_id}/reject",
     response_model=InscripcionActionResponse,
-    summary="Solicitar Cambios o Rechazar Inscripción",
+    summary="Request changes or reject registration",
     tags=["Data"],
 )
 async def reject_inscripcion(inscripcion_id: int, db: Session = Depends(get_db)):
-    """Rechaza una inscripción y la elimina de la tabla de pendientes."""
+    """Rejects a registration and removes it from pending table."""
     try:
         inscripcion = (
             db.query(Inscripcion)
@@ -2214,7 +2214,7 @@ async def reject_inscripcion(inscripcion_id: int, db: Session = Depends(get_db))
         if not inscripcion:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Inscripción con ID {inscripcion_id} no encontrada",
+                detail=f"Registration with ID {inscripcion_id} not found",
             )
 
         if inscripcion.login_email:
@@ -2227,17 +2227,17 @@ async def reject_inscripcion(inscripcion_id: int, db: Session = Depends(get_db))
         return InscripcionActionResponse(
             inscripcion_id=inscripcion_id,
             status="rechazada",
-            message="Inscripción rechazada y eliminada de pendientes.",
+            message="Registration rejected and removed from pending list.",
         )
 
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Error en POST /inscripciones/{inscripcion_id}/reject: {str(e)}", exc_info=True)
+        logger.error(f"Error in POST /inscripciones/{inscripcion_id}/reject: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al actualizar inscripción",
+            detail="Error while updating registration",
         )
 
 
@@ -2248,7 +2248,7 @@ async def reject_inscripcion(inscripcion_id: int, db: Session = Depends(get_db))
     tags=["Data"],
 )
 async def clear_approval_history(db: Session = Depends(get_db)):
-    """Elimina del histórico las inscripciones con estado Aprobada."""
+    """Removes approved registrations from history."""
     try:
         approved_query = db.query(Inscripcion).filter(
             func.lower(func.coalesce(Inscripcion.estado_inscripcion, "")) == "aprobada"
@@ -2267,30 +2267,30 @@ async def clear_approval_history(db: Session = Depends(get_db)):
 
     except Exception as e:
         db.rollback()
-        logger.error("❌ Error en DELETE /inscripciones/history/approved: %s", str(e), exc_info=True)
+        logger.error("Error in DELETE /inscripciones/history/approved: %s", str(e), exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al limpiar historial de aprobaciones",
+            detail="Error while limpiar historial de aprobaciones",
         )
 
 
 @app.post(
     "/auth/login",
     response_model=AuthUserResponse,
-    summary="Iniciar sesión",
+    summary="Sign in",
     tags=["Auth"],
 )
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """
-    Login desde tabla users.
+    Login desde table users.
     
-    - Busca el usuario en la tabla users por email
-    - Verifica la contraseña con hash PBKDF2
+    - Busca el user en la table users por email
+    - Verifica la password con hash PBKDF2
     - Si es admin (restaurant_id=0), retorna role="admin"
-    - Si es restaurante normal (restaurant_id>0), retorna role="restaurant_owner"
-    - Valida que is_active=True
+    - Si es restaurant normal (restaurant_id>0), retorna role="restaurant_owner"
+    - Validates that is_active=True
     """
-    # Buscar usuario en tabla users
+    # Buscar user en table users
     user = db.query(User).filter(
         User.login_email == request.email.strip().lower()
     ).first()
@@ -2298,19 +2298,19 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     if not user or not verify_password(request.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail="Email o contraseña no válidos."
+            detail="Email o password no valids."
         )
     
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail="Usuario desactivado."
+            detail="User is disabled."
         )
     
-    # Determinar el rol según restaurant_id
+    # Determine role by restaurant_id
     role = "admin" if user.restaurant_id == 0 else "restaurant_owner"
     
-    # Obtener datos del restaurante si no es admin
+    # Get restaurant data if not admin
     restaurant_id = user.restaurant_id if user.restaurant_id != 0 else None
     restaurant_name = None
     if restaurant_id:
@@ -2320,7 +2320,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         if restaurant:
             restaurant_name = restaurant.name
     
-    # Crear token con rol y restaurant_id
+    # Create token con rol y restaurant_id
     token = create_access_token({
         "role": role, 
         "email": user.login_email,
@@ -2339,7 +2339,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
 @app.get(
     "/auth/me",
     response_model=AuthUserResponse,
-    summary="Obtener sesión actual",
+    summary="Get current session",
     tags=["Auth"],
 )
 async def auth_me(authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
@@ -2351,7 +2351,7 @@ async def auth_me(authorization: str | None = Header(default=None), db: Session 
     restaurant_id = payload.get("restaurant_id")
     restaurant_name = None
     
-    # Si es restaurant_owner, obtener el nombre del restaurante
+    # If role is restaurant_owner, get restaurant name
     if role == "restaurant_owner" and restaurant_id and restaurant_id != 0:
         restaurant = db.query(Restaurant).filter(
             Restaurant.restaurant_id == restaurant_id
@@ -2369,25 +2369,25 @@ async def auth_me(authorization: str | None = Header(default=None), db: Session 
 
 
 # =============================
-# ENDPOINTS ADMIN: GESTIÓN DE USUARIOS
+# ADMIN ENDPOINTS: USER MANAGEMENT
 # =============================
 
 @app.get(
     "/admin/users",
     response_model=list[UserAdminResponse],
-    summary="Listar todos los usuarios",
+    summary="Listar todos los users",
     tags=["Admin - Users"],
 )
 async def admin_list_users(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """Devuelve todos los usuarios registrados. Solo accesible por admin."""
+    """Devuelve todos los users registrados. Solo accesible por admin."""
     _require_admin_auth(authorization)
 
     users = db.query(User).order_by(User.user_id).all()
 
-    # Cargar nombres de restaurantes en batch
+    # Load nombres de restaurants en batch
     rest_ids = {u.restaurant_id for u in users if u.restaurant_id and u.restaurant_id != 0}
     restaurants = {}
     if rest_ids:
@@ -2412,7 +2412,7 @@ async def admin_list_users(
     "/admin/users",
     response_model=UserAdminResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Crear un usuario",
+    summary="Create un user",
     tags=["Admin - Users"],
 )
 async def admin_create_user(
@@ -2420,12 +2420,12 @@ async def admin_create_user(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """Crea un usuario manualmente (p. ej. el admin o un restaurante ya existente). Solo admin."""
+    """Crea un user manualmente (p. ej. el admin o un restaurant ya existente). Solo admin."""
     _require_admin_auth(authorization)
 
     email_normalized = body.email.strip().lower()
     if db.query(User).filter(User.login_email == email_normalized).first():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un usuario con ese email.")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un user con ese email.")
 
     new_user = User(
         restaurant_id=body.restaurant_id,
@@ -2458,7 +2458,7 @@ async def admin_create_user(
 @app.patch(
     "/admin/users/{user_id}",
     response_model=UserAdminResponse,
-    summary="Actualizar un usuario",
+    summary="Update a user",
     tags=["Admin - Users"],
 )
 async def admin_update_user(
@@ -2467,12 +2467,12 @@ async def admin_update_user(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """Permite al admin activar/desactivar un usuario, cambiar su rol o email."""
+    """Permite al admin activar/desactivar un user, cambiar su rol o email."""
     _require_admin_auth(authorization)
 
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Usuario {user_id} no encontrado.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {user_id} not found.")
 
     if body.is_active is not None:
         user.is_active = body.is_active
@@ -2482,7 +2482,7 @@ async def admin_update_user(
         email_normalized = body.email.strip().lower()
         conflict = db.query(User).filter(User.login_email == email_normalized, User.user_id != user_id).first()
         if conflict:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un usuario con ese email.")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un user con ese email.")
         user.login_email = email_normalized
 
     db.commit()
@@ -2507,7 +2507,7 @@ async def admin_update_user(
 
 @app.post(
     "/admin/users/{user_id}/reset-password",
-    summary="Restablecer contraseña de un usuario",
+    summary="Restablecer password de un user",
     tags=["Admin - Users"],
 )
 async def admin_reset_password(
@@ -2516,21 +2516,21 @@ async def admin_reset_password(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """Restablece la contraseña de cualquier usuario. Solo admin."""
+    """Restablece la password de cualquier user. Solo admin."""
     _require_admin_auth(authorization)
 
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Usuario {user_id} no encontrado.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {user_id} not found.")
 
     user.password_hash = hash_password(body.new_password)
     db.commit()
-    return {"success": True, "message": f"Contraseña del usuario {user_id} actualizada."}
+    return {"success": True, "message": f"Password del user {user_id} actualizada."}
 
 
 @app.delete(
     "/admin/users/{user_id}",
-    summary="Eliminar un usuario",
+    summary="Delete un user",
     tags=["Admin - Users"],
 )
 async def admin_delete_user(
@@ -2538,21 +2538,21 @@ async def admin_delete_user(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """Elimina permanentemente un usuario. Solo admin."""
+    """Elimina permanentemente un user. Solo admin."""
     _require_admin_auth(authorization)
 
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Usuario {user_id} no encontrado.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {user_id} not found.")
 
     db.delete(user)
     db.commit()
-    return {"success": True, "message": f"Usuario {user_id} eliminado."}
+    return {"success": True, "message": f"User {user_id} deleted."}
 
 
 @app.post(
     "/auth/change-password",
-    summary="Cambiar propia contraseña",
+    summary="Cambiar propia password",
     tags=["Auth"],
 )
 async def auth_change_password(
@@ -2560,17 +2560,17 @@ async def auth_change_password(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """Permite a cualquier usuario autenticado cambiar su propia contraseña."""
+    """Permite a cualquier user autenticado cambiar su propia password."""
     payload = _require_auth(authorization)
     email = payload.get("email", "")
 
     user = db.query(User).filter(User.login_email == email).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     user.password_hash = hash_password(body.new_password)
     db.commit()
-    return {"success": True, "message": "Contraseña actualizada correctamente."}
+    return {"success": True, "message": "Password actualizada correctamente."}
 
 
 def _canonical_course(course: str) -> str:
@@ -2611,7 +2611,7 @@ def _normalize_dish_name(dish_name: str) -> str:
 
 
 def _dish_match_score(query_key: str, dish_key: str) -> float:
-    """Devuelve un score [0..1] aproximado de similitud entre consulta y plato."""
+    """Devuelve un score [0..1] aproximado de similitud entre consulta y dish."""
     query_key = (query_key or "").strip()
     dish_key = (dish_key or "").strip()
 
@@ -2653,16 +2653,16 @@ def _current_service_date() -> date:
         return datetime.now(ZoneInfo("Europe/Madrid")).date()
     except ZoneInfoNotFoundError:
         logger.warning(
-            "⚠️ ZoneInfo Europe/Madrid no disponible (tzdata ausente). "
-            "Usando fecha local del sistema."
+            "ZoneInfo Europe/Madrid not available (tzdata missing). "
+            "Using local system date."
         )
         return datetime.now().date()
     try:
         return datetime.now(ZoneInfo("Europe/Madrid")).date()
     except ZoneInfoNotFoundError:
         logger.warning(
-            "⚠️ ZoneInfo Europe/Madrid no disponible (tzdata ausente). "
-            "Usando fecha local del sistema."
+            "ZoneInfo Europe/Madrid not available (tzdata missing). "
+            "Using local system date."
         )
         return datetime.now().date()
 
@@ -2698,7 +2698,7 @@ def _fact_menu_items_has_target_rating(db: Session) -> bool:
 @app.post(
     "/restaurants/{restaurant_id}/menu",
     response_model=DailyMenuResponse,
-    summary="Publicar menú del día",
+    summary="Publish daily menu",
     tags=["Restaurants"],
 )
 async def post_daily_menu(
@@ -2708,7 +2708,7 @@ async def post_daily_menu(
 ):
     restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
     if not restaurant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
     service_date = _current_service_date()
     date_id = int(service_date.strftime("%Y%m%d"))
@@ -2878,17 +2878,17 @@ async def post_daily_menu(
         raise
     except Exception as e:
         db.rollback()
-        logger.error("❌ Error en POST /restaurants/%s/menu: %s", restaurant_id, str(e), exc_info=True)
+        logger.error("Error in POST /restaurants/%s/menu: %s", restaurant_id, str(e), exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al guardar el menú del día",
+            detail="Error saving daily menu",
         )
 
 
 @app.get(
     "/restaurants/{restaurant_id}/menu/today",
     response_model=DailyMenuResponse,
-    summary="Obtener menú real de hoy",
+    summary="Get today's actual menu",
     tags=["Restaurants"],
 )
 async def get_daily_menu(
@@ -2896,9 +2896,10 @@ async def get_daily_menu(
     db: Session = Depends(get_db),
 ):
     service_date = _current_service_date()
+    service_date_sql = service_date.isoformat()
     date_id = int(service_date.strftime("%Y%m%d"))
 
-    # ✅ PRIMERO: Buscar en daily_menus (menú actual del día)
+    # FIRST: Search in daily_menus (current daily menu)
     daily_menu = db.execute(
         text(
             """
@@ -2908,11 +2909,11 @@ async def get_daily_menu(
             ORDER BY created_at DESC
             """
         ),
-        {"restaurant_id": restaurant_id, "target_date": service_date},
+        {"restaurant_id": restaurant_id, "target_date": service_date_sql},
     ).first()
 
     if daily_menu:
-        # Menú subido hoy por el restaurante
+        # Menu uploaded today by the restaurant
         menu_id = int(daily_menu[0])
         starter_str = daily_menu[1] or ""
         main_str = daily_menu[2] or ""
@@ -2937,7 +2938,7 @@ async def get_daily_menu(
             menu_price=restaurant.menu_price if restaurant else None,
         )
 
-    # ✅ FALLBACK: Buscar en fact_menus (histórico si existe)
+    # FALLBACK: Search in fact_menus (historical if available)
     has_includes_drink = _fact_menus_has_includes_drink(db)
 
     if has_includes_drink:
@@ -2966,7 +2967,7 @@ async def get_daily_menu(
         ).first()
 
     if not menu_row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay menú publicado para hoy")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="There is no menu published for today")
 
     menu_id = int(menu_row[0])
     includes_drink = bool(menu_row[1])
@@ -3020,7 +3021,7 @@ async def get_daily_menu(
 @app.get(
     "/restaurants/dish-search",
     response_model=DishSearchResponse,
-    summary="Buscar restaurantes por plato en el menú del día (incluye similares)",
+    summary="Search restaurants by dish in today's menu (includes similar dishes)",
     tags=["Restaurants"],
 )
 async def search_restaurants_by_dish(
@@ -3040,7 +3041,7 @@ async def search_restaurants_by_dish(
     primary_token = max(query_tokens, key=len) if query_tokens else query_key
     like_pattern = f"%{primary_token}%"
 
-    # 1) Menú de HOY (si existe)
+    # 1) TODAY menu (if available)
     today_rows = db.execute(
         text(
             """
@@ -3054,7 +3055,7 @@ async def search_restaurants_by_dish(
         {"date_id": date_id},
     ).fetchall()
 
-    # 2) Histórico (fact_*): platos a lo largo del tiempo
+    # 2) Historical (fact_*): dishes over time
     historical_rows = db.execute(
         text(
             """
@@ -3069,7 +3070,7 @@ async def search_restaurants_by_dish(
         {"pattern": like_pattern},
     ).fetchall()
 
-    # Agregación por restaurante
+    # Aggregation by restaurant
     best_by_restaurant: dict[int, dict[str, Any]] = {}
 
     def ensure_payload(restaurant_id: int) -> dict[str, Any]:
@@ -3179,7 +3180,7 @@ async def search_restaurants_by_dish(
 @app.post(
     "/ratings/dishes",
     response_model=DishRatingWriteResponse,
-    summary="Valorar un plato de un restaurante",
+    summary="Valorar un dish de un restaurant",
     tags=["Ratings"],
 )
 async def rate_dish(
@@ -3189,15 +3190,16 @@ async def rate_dish(
     try:
         restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == body.restaurant_id).first()
         if not restaurant:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
         rating_date = body.rating_date or _current_service_date()
+        rating_date_sql = rating_date.isoformat()
         dish_name = " ".join(body.dish_name.strip().split())
         dish_key = _normalize_dish_name(dish_name)
         if not dish_key:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nombre de plato inválido")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid dish name")
 
-        # Intentar obtener menu_id de daily_menus (opcional, puede ser None)
+        # Try to get menu_id from daily_menus (optional, may be None)
         menu_id: int | None = None
         menu_row = db.execute(
             text(
@@ -3208,25 +3210,25 @@ async def rate_dish(
                 ORDER BY menu_id DESC
                 """
             ),
-            {"restaurant_id": body.restaurant_id, "rating_date": rating_date},
+            {"restaurant_id": body.restaurant_id, "rating_date": rating_date_sql},
         ).first()
         if menu_row:
             menu_id = int(menu_row[0])
 
-        # Guardar valoración anónima (con menu_id si está disponible)
+        # Save anonymous rating (with menu_id if available)
         new_rating = DishRating(
             restaurant_id=body.restaurant_id,
             rating_date=rating_date,
             dish_name=dish_name,
             dish_key=dish_key,
-            rating=float(body.rating),  # ✅ Aceptar decimales
+            rating=float(body.rating),  # Aceptar decimales
             menu_id=menu_id,
             created_at=datetime.utcnow(),
         )
         db.add(new_rating)
         db.flush()
 
-        # ✅ ACTUALIZAR ranking de platos: calcular media de todas las valoraciones
+        # UPDATE dish ranking: calculate average from all ratings
         avg_rating = db.execute(
             text(
                 """
@@ -3246,7 +3248,7 @@ async def rate_dish(
         db.refresh(new_rating)
 
         logger.info(
-            f"✅ Valoración guardada: {dish_name} (media: {avg_rating:.2f}) en {body.restaurant_id}"
+            f"Rating saved: {dish_name} (avg: {avg_rating:.2f}) for restaurant_id={body.restaurant_id}"
         )
 
         return DishRatingWriteResponse(
@@ -3255,7 +3257,7 @@ async def rate_dish(
             rating_date=rating_date,
             dish_name=dish_name,
             dish_key=dish_key,
-            rating=float(body.rating),  # ✅ Retorna con decimales
+            rating=float(body.rating),  # Retorna con decimales
         )
 
     except HTTPException:
@@ -3263,17 +3265,17 @@ async def rate_dish(
         raise
     except Exception as exc:
         db.rollback()
-        logger.error(f"❌ Error al guardar valoración: {exc}", exc_info=True)
+        logger.error(f"Error saving rating: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al guardar valoración: {str(exc)}",
+            detail=f"Error saving rating: {str(exc)}",
         )
 
 
 @app.get(
     "/ratings/dishes/summary",
     response_model=DishRatingSummaryResponse,
-    summary="Resumen de valoraciones de platos por restaurante y día",
+    summary="Dish ratings summary by restaurant and day",
     tags=["Ratings"],
 )
 async def get_dish_rating_summary(
@@ -3323,7 +3325,7 @@ async def get_dish_rating_summary(
 @app.get(
     "/rankings/restaurants",
     response_model=RestaurantRankingResponse,
-    summary="Ranking de restaurantes basado en valoraciones de platos",
+    summary="Ranking de restaurants basado en valoraciones de dishes",
     tags=["Ratings"],
 )
 async def get_restaurant_rankings(
@@ -3400,7 +3402,7 @@ async def get_restaurant_rankings(
 @app.get(
     "/rankings/dishes",
     response_model=DishRankingResponse,
-    summary="Ranking de platos basado en valoraciones",
+    summary="Ranking de dishes basado en valoraciones",
     tags=["Ratings"],
 )
 async def get_dish_rankings(
@@ -3420,7 +3422,7 @@ async def get_dish_rankings(
 
     service_date = DishRating.rating_date
 
-    # ✅ CAMBIO: Agrupar por restaurant_id + dish_key para incluir valoraciones del menú diario
+    # CHANGE: Group by restaurant_id + dish_key to include daily-menu ratings
     rows = (
         db.query(
             DishRating.restaurant_id.label("restaurant_id"),
@@ -3465,7 +3467,7 @@ async def get_dish_rankings(
         restaurant_name = " ".join(str(row.restaurant_name or "").strip().split())
         items.append(
             DishRankingItem(
-                dish_id=None,  # ✅ No asignamos dish_id, usamos dish_name como identificador
+                dish_id=None,  # No asignamos dish_id, usamos dish_name como identificador
                 dish_name=dish_name,
                 restaurant_id=int(row.restaurant_id),
                 restaurant_name=restaurant_name,
@@ -3496,10 +3498,10 @@ def _ensure_prediction_engine_loaded() -> bool:
         return True
     try:
         prediction_engine = PredictionEngine()
-        logger.info("✅ Motor de predicción inicializado (lazy)")
+        logger.info("Prediction engine initialized (lazy)")
         return True
     except Exception as engine_error:
-        logger.error("❌ No se pudo inicializar PredictionEngine: %s", str(engine_error), exc_info=True)
+        logger.error("Could not initialize PredictionEngine: %s", str(engine_error), exc_info=True)
         return False
 
 
@@ -3515,25 +3517,25 @@ def _ensure_unified_menu_model_loaded(app: FastAPI) -> bool:
             pass
         with open(model_path, "rb") as f:
             app.state.model = pickle.load(f)
-        logger.info("✅ Modelo de menu cargado en app.state (lazy): %s", model_path.name)
+        logger.info("Menu model loaded in app.state (lazy): %s", model_path.name)
         return True
     except Exception as model_error:
-        logger.error("❌ Error cargando modelo de menu (lazy): %s", str(model_error), exc_info=True)
+        logger.error("Error loading menu model (lazy): %s", str(model_error), exc_info=True)
         return False
 
 
 def get_model_lazy():
     """Compatibilidad: algunos endpoints llaman a get_model_lazy()."""
     if not _ensure_unified_menu_model_loaded(app):
-        raise RuntimeError("Modelo de menu no disponible")
+        raise RuntimeError("Menu model not available")
     model = getattr(app.state, "model", None)
     if model is None:
-        raise RuntimeError("Modelo de menu no disponible")
+        raise RuntimeError("Menu model not available")
     return model
 
 
 # =============================
-# ENDPOINTS PARA IMÁGENES DE RESTAURANTES
+# ENDPOINTS FOR RESTAURANT IMAGES
 # =============================
 
 @app.post("/upload-inscripcion-image")
@@ -3549,10 +3551,10 @@ async def post_upload_inscripcion_image(
         file_content = await file.read()
 
         if not file.content_type or "image" not in file.content_type:
-            raise HTTPException(status_code=400, detail="Tipo de archivo inválido. Solo imágenes.")
+            raise HTTPException(status_code=400, detail="Invalid file type. Images only.")
 
         if len(file_content) > 5 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="Archivo demasiado grande (máx 5MB)")
+            raise HTTPException(status_code=400, detail="File too large (max 5MB)")
 
         extension = Path(file.filename or "image.jpg").suffix.lower() or ".jpg"
         if extension not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
@@ -3570,13 +3572,13 @@ async def post_upload_inscripcion_image(
         )
 
         if not blob_name:
-            raise HTTPException(status_code=500, detail="Error en la carga del archivo")
+            raise HTTPException(status_code=500, detail="Error in la carga del archivo")
 
         image_url = blob_manager.get_blob_sas_url(blob_name)
         if not image_url:
             raise HTTPException(status_code=500, detail="Error generando URL de acceso")
 
-        logger.info("✅ Imagen de inscripción subida: %s", blob_name)
+        logger.info("Registration image uploaded: %s", blob_name)
         return {
             "success": True,
             "image_url": image_url,
@@ -3586,8 +3588,8 @@ async def post_upload_inscripcion_image(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error subiendo imagen de inscripción: %s", str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail="Error en la carga")
+        logger.error("Error uploading registration image: %s", str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail="Error in la carga")
 
 @app.post("/upload-restaurant-image")
 async def post_upload_restaurant_image(
@@ -3599,8 +3601,8 @@ async def post_upload_restaurant_image(
     """
     Upload restaurant image to Blob Storage (container: fotos)
     
-    - Admin: puede subir fotos para cualquier restaurante
-    - Restaurant owner: puede subir fotos solo para su propio restaurante
+    - Admin: puede subir fotos para cualquier restaurant
+    - Restaurant owner: puede subir fotos solo para su propio restaurant
     """
     payload = _require_auth(authorization)
     role = payload.get("role")
@@ -3608,29 +3610,29 @@ async def post_upload_restaurant_image(
     
     # Validar permisos
     if role == "admin":
-        # Admin puede subir para cualquier restaurante
+        # Admin puede subir para cualquier restaurant
         pass
     elif role == "restaurant_owner":
-        # Restaurant owner solo puede subir para su propio restaurante
+        # Restaurant owner solo puede subir para su propio restaurant
         if user_restaurant_id != restaurant_id:
             raise HTTPException(
                 status_code=403, 
-                detail="No tienes permisos para subir fotos a este restaurante"
+                detail="No tienes permisos para subir fotos a este restaurant"
             )
     else:
         raise HTTPException(status_code=403, detail="Rol no autorizado")
     
     restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
     if not restaurant:
-        raise HTTPException(status_code=404, detail="Restaurante no encontrado")
+        raise HTTPException(status_code=404, detail="Restaurant not found")
     
     try:
         file_content = await file.read()
         if not file.content_type or "image" not in file.content_type:
-            raise HTTPException(status_code=400, detail="Tipo de archivo inválido. Solo imágenes.")
+            raise HTTPException(status_code=400, detail="Invalid file type. Images only.")
         
         if len(file_content) > 5 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="Archivo demasiado grande (máx 5MB)")
+            raise HTTPException(status_code=400, detail="File too large (max 5MB)")
         
         # Nombre del blob: res_{restaurant_id}.jpg
         blob_filename = f"res_{restaurant_id}.jpg"
@@ -3643,7 +3645,7 @@ async def post_upload_restaurant_image(
         )
         
         if not blob_name:
-            raise HTTPException(status_code=500, detail="Error en la carga del archivo")
+            raise HTTPException(status_code=500, detail="Error in la carga del archivo")
         
         sas_url = blob_manager.get_blob_sas_url(blob_name)
         if not sas_url:
@@ -3653,7 +3655,7 @@ async def post_upload_restaurant_image(
         db.commit()
         db.refresh(restaurant)
         
-        logger.info(f"✅ Foto subida para restaurante {restaurant_id}: {blob_name}")
+        logger.info(f"Photo uploaded for restaurant {restaurant_id}: {blob_name}")
         return {
             "success": True, 
             "image_url": sas_url, 
@@ -3665,7 +3667,7 @@ async def post_upload_restaurant_image(
         raise
     except Exception as e:
         logger.error(f"Error subiendo imagen: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Error en la carga")
+        raise HTTPException(status_code=500, detail="Error in la carga")
 
 
 @app.get("/get-restaurant-image/{restaurant_id}")
@@ -3746,7 +3748,7 @@ async def upload_restaurant_photo(
         db.commit()
         db.refresh(restaurant)
         
-        logger.info(f"✅ Image uploaded for restaurant {restaurant_id}: {blob_name}")
+        logger.info(f"Image uploaded for restaurant {restaurant_id}: {blob_name}")
         return {
             "success": True,
             "restaurant_id": restaurant_id,
@@ -3765,7 +3767,7 @@ async def upload_restaurant_photo(
 @app.patch(
     "/restaurants/{restaurant_id}/image",
     response_model=RestaurantDetailItem,
-    summary="Actualizar imagen del restaurante (legacy)",
+    summary="Update restaurant image (legacy)",
     tags=["Data"],
     deprecated=True,
 )
@@ -3778,7 +3780,7 @@ async def update_restaurant_image(
     """
     [DEPRECATED] Usa POST /restaurants/{restaurant_id}/image/upload
     
-    Actualiza la URL de imagen del restaurante.
+    Actualiza la URL de imagen del restaurant.
     Mantener por compatibilidad con versiones antiguas.
     """
     payload = _require_auth(authorization)
@@ -3787,7 +3789,7 @@ async def update_restaurant_image(
 
     restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
     if not restaurant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found.")
 
     restaurant.image_url = request.image_url.strip()
     db.commit()
@@ -3797,19 +3799,19 @@ async def update_restaurant_image(
 
 
 # ============================================================================
-# FUNCIONES AUXILIARES PARA CÁLCULO AUTOMÁTICO
+# HELPER FUNCTIONS FOR AUTOMATIC CALCULATION
 # ============================================================================
 
 def calculate_distance_haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
-    Calcula la distancia en kilómetros entre dos puntos geográficos usando la fórmula de Haversine.
+    Calculates distance in kilometers between two geographic points using the Haversine formula.
     
     Args:
         lat1, lon1: Coordenadas del user (latitud, longitud en grados)
-        lat2, lon2: Coordenadas del restaurante (latitud, longitud en grados)
+        lat2, lon2: Coordenadas del restaurant (latitud, longitud en grados)
         
     Returns:
-        float: Distancia en kilómetros
+        float: Distance in kilometers
     """
     R = 6371  # Radio de la Tierra en km
     
@@ -3829,22 +3831,22 @@ def calculate_distance_haversine(lat1: float, lon1: float, lat2: float, lon2: fl
 
 def get_weather_data(service_date: date) -> dict:
     """
-    Recupera datos meteorológicos de Open-Meteo para Azca (Madrid).
+    Retrieves weather data from Open-Meteo for Azca (Madrid).
     
-    Open-Meteo es una API meteorológica gratuita sin necesidad de API key.
-    Coordenadas de Azca Madrid (Bernabéu): 40.4532° N, -3.6885° W
+    Open-Meteo is a free weather API that does not require an API key.
+    Azca Madrid coordinates (Bernabeu): 40.4532° N, -3.6885° W
     
     Args:
-        service_date: Fecha para la cual se obtiene el clima (date object)
+        service_date: Date para la cual se obtiene el clima (date object)
         
     Returns:
         dict: {
-            'max_temp_c': float (temperatura máxima en C),
-            'precipitation_mm': float (precipitación en mm),
+            'max_temp_c': float (maximum temperature in C),
+            'precipitation_mm': float (precipitation in mm),
             'is_rain_service_peak': bool (si llueve en horas pico 12-20)
         }
     """
-    # Coordenadas de Azca (Madrid, al lado del Bernabéu)
+    # Azca coordinates (Madrid, near Bernabeu)
     latitude = 40.4532
     longitude = -3.6885
     
@@ -3879,7 +3881,7 @@ def get_weather_data(service_date: date) -> dict:
             hourly_times = data["hourly"]["time"]
             hourly_precip = data["hourly"]["precipitation"]
             
-            # Buscar índices para horas 12-20 del día solicitado
+            # Find indexes for hours 12-20 of requested day
             peak_hours_rain = sum(
                 1 for i, t in enumerate(hourly_times)
                 if service_date.strftime('%Y-%m-%d') in t and 
@@ -3895,7 +3897,7 @@ def get_weather_data(service_date: date) -> dict:
         }
         
     except requests.exceptions.RequestException as e:
-        logger.warning(f"⚠️  Open-Meteo no disponible: {str(e)[:50]}, usando valores por defecto")
+        logger.warning(f" Open-Meteo not available: {str(e)[:50]}, using default values")
         return {
             'max_temp_c': 20.0,
             'precipitation_mm': 0.0,
@@ -3907,19 +3909,19 @@ def get_services_data(db: Session, restaurant_id: int, service_date: date, capac
     """
     Recupera services_lag_7 y avg_4_weeks desde fact_services.
     
-    Si la fecha exacta no existe (ej: fechas futuras), busca el registro más reciente
-    para ese restaurante. Si no hay registros, usa valores por defecto (70% capacidad).
+    If the exact date does not exist (e.g., future dates), find the most recent record
+    para ese restaurant. Si no hay registros, usa valores por defecto (70% capacidad).
     
     Args:
-        db: Sesión de base de datos
-        restaurant_id: ID del restaurante
-        service_date: Fecha del servicio (date object)
-        capacity_limit: Capacidad del restaurante (para cálculo de fallback)
+        db: Database session
+        restaurant_id: ID del restaurant
+        service_date: Date del service (date object)
+        capacity_limit: Restaurant capacity (for fallback calculation)
         
     Returns:
         dict: {'services_lag_7': float, 'avg_4_weeks': float}
     """
-    # Convertir fecha YYYY-MM-DD a YYYYMMDD (formato date_id)
+    # Convertir date YYYY-MM-DD a YYYYMMDD (formato date_id)
     date_id = int(service_date.strftime('%Y%m%d'))
     
     # 1. Intentar buscar el registro exacto
@@ -3934,7 +3936,7 @@ def get_services_data(db: Session, restaurant_id: int, service_date: date, capac
             'avg_4_weeks': fact_record.avg_4_weeks or 0.0,
         }
     
-    # 2. Si no existe, buscar el registro más reciente
+    # 2. If not found, search for the most recent record
     recent_record = db.query(FactServices).filter(
         FactServices.restaurant_id == restaurant_id
     ).order_by(desc(FactServices.date_id)).first()
@@ -3955,11 +3957,11 @@ def get_services_data(db: Session, restaurant_id: int, service_date: date, capac
 
 def calculate_calendar_features(service_date: date) -> dict:
     """
-    Calcula automáticamente los parámetros de calendario basados en la fecha.
-    Usa la librería 'holidays' para festivos españoles en Madrid (Azca location).
+    Automatically calculates calendar parameters based on date.
+    Uses the 'holidays' library for Spanish holidays in Madrid (Azca location).
     
     Args:
-        service_date: Fecha del servicio (date object)
+        service_date: Date del service (date object)
         
     Returns:
         dict: {
@@ -3969,7 +3971,7 @@ def calculate_calendar_features(service_date: date) -> dict:
             'is_payday_week': bool (semana de pago)
         }
     """
-    # Inicializar calendario de festivos españoles (subdivisión Madrid)
+    # Initialize Spanish holiday calendar (Madrid subdivision)
     es_holidays = holidays.Spain(subdiv='MD')
     
     weekday = service_date.weekday()  # 0=lunes, 6=domingo
@@ -3977,11 +3979,11 @@ def calculate_calendar_features(service_date: date) -> dict:
     # 1. is_business_day: lunes(0) a viernes(4)
     is_business_day = weekday < 5
     
-    # 2. is_holiday: está en el calendario de festivos de Madrid
+    # 2. is_holiday: present in Madrid holiday calendar
     is_holiday = service_date in es_holidays
     
-    # 3. is_bridge_day: es un día entre festivo y fin de semana
-    # (ejm: viernes después de festivo, o lunes antes de festivo)
+    # 3. is_bridge_day: day between holiday and weekend
+    # (e.g., Friday after a holiday, or Monday before a holiday)
     is_bridge_day = False
     from datetime import timedelta
     
@@ -3994,8 +3996,8 @@ def calculate_calendar_features(service_date: date) -> dict:
         if next_day in es_holidays:
             is_bridge_day = True
     
-    # 4. is_payday_week: últimos días del mes (25-31)
-    # Típicamente entre 25-31 del mes
+    # 4. is_payday_week: last days of month (25-31)
+    # Typically between 25-31 of the month
     day_of_month = service_date.day
     is_payday_week = 25 <= day_of_month <= 31
     
@@ -4008,7 +4010,7 @@ def calculate_calendar_features(service_date: date) -> dict:
 
 
 def _get_total_course_count(db: Session, restaurant_id: int, course_column, fallback: int = 30) -> int:
-    """Estima el volumen de servicios para un curso usando histórico y fallback operativos."""
+    """Estimates service volume for a course using historical and operational fallback data."""
     recent_services = (
         db.query(FactServices.avg_4_weeks)
         .filter(FactServices.restaurant_id == restaurant_id)
@@ -4055,7 +4057,7 @@ def get_restaurant_historical_dish_ids(
     restaurant_id: int,
     course_type: str,
 ) -> list[int]:
-    """Obtiene los platos históricos del restaurante para el curso indicado."""
+    """Gets restaurant historical dishes for the selected course."""
     rows = (
         db.query(distinct(DimDishes.dish_id))
         .join(FactMenuItems, DimDishes.dish_id == FactMenuItems.dish_id)
@@ -4080,18 +4082,18 @@ def get_restaurant_historical_dish_ids(
 
 def get_prev_dish_id(db: Session, restaurant_id: int, course_type: str) -> float:
     """
-    Obtiene el ID del plato más recientemente servido de un tipo (course_type) en un restaurante.
+    Gets ID of most recently served dish of a type (course_type) in a restaurant.
     
     OPTIMIZADO: Ahora accede a la vista v_current_restaurant_context en lugar de hacer
-    múltiples JOINs manualmente. Según course_type retorna last_starter_id, last_main_id o last_dessert_id.
+    multiple manual JOINs. Depending on course_type, returns last_starter_id, last_main_id, or last_dessert_id.
     
     Args:
-        db: Sesión SQLAlchemy
-        restaurant_id: ID del restaurante
-        course_type: Tipo de plato ('first_course', 'second_course', 'dessert')
+        db: SQLAlchemy session
+        restaurant_id: ID del restaurant
+        course_type: Tipo de dish ('first_course', 'second_course', 'dessert')
     
     Returns:
-        dish_id del plato más reciente (float). Si no hay datos, retorna 0.0.
+        dish_id of most recent dish (float). If no data, returns 0.0.
     """
     try:
         # Acceder a la vista optimizada v_current_restaurant_context
@@ -4100,7 +4102,7 @@ def get_prev_dish_id(db: Session, restaurant_id: int, course_type: str) -> float
         ).first()
         
         if not context:
-            logger.warning(f"Restaurante {restaurant_id} no encontrado en v_current_restaurant_context")
+            logger.warning(f"Restaurant {restaurant_id} not found en v_current_restaurant_context")
             return 0.0
         
         # Mapear course_type a el campo correspondiente de la vista
@@ -4111,38 +4113,38 @@ def get_prev_dish_id(db: Session, restaurant_id: int, course_type: str) -> float
         elif course_type == 'dessert':
             prev_dish_id = context.last_dessert_id
         else:
-            logger.warning(f"course_type inválido: {course_type}")
+            logger.warning(f"course_type invalid: {course_type}")
             return 0.0
         
         if prev_dish_id:
-            logger.info(f"✅ prev_dish_id para {course_type}: {prev_dish_id} (desde vista)")
+            logger.info(f"prev_dish_id for {course_type}: {prev_dish_id} (from view)")
             return float(prev_dish_id)
         else:
-            logger.info(f"ℹ️  No hay historial de {course_type}, usando 0.0")
+            logger.info(f"No historical data for {course_type}; using 0.0")
             return 0.0
             
     except Exception as e:
-        logger.error(f"Error obteniendo prev_dish_id desde vista: {str(e)}", exc_info=True)
+        logger.error(f"Error obteniendo prev_dish_id from view: {str(e)}", exc_info=True)
         return 0.0
 
 
 def get_dish_name_by_id(db: Session, dish_id: int) -> str:
     """
-    Obtiene el nombre del plato (dish_name) desde dim_dishes usando dish_id.
+    Obtiene el nombre del dish (dish_name) desde dim_dishes usando dish_id.
     
     Args:
-        db: Sesión SQLAlchemy
-        dish_id: ID del plato
+        db: SQLAlchemy session
+        dish_id: ID del dish
     
     Returns:
-        Nombre del plato (string). Lanza excepción si no existe.
+        Dish name (string). Raises exception if it does not exist.
     """
     dish = db.query(DimDishes.dish_name).filter(
         DimDishes.dish_id == dish_id
     ).first()
     
     if not dish:
-        raise ValueError(f"Plato con dish_id={dish_id} no encontrado en dim_dishes. ¿Tu modelo predice IDs que no existen?")
+        raise ValueError(f"Dish with dish_id={dish_id} not found in dim_dishes. Is your model predicting non-existent IDs?")
     
     return dish[0]
 
@@ -4182,42 +4184,42 @@ def save_prediction_log(
     latency_ms: int,
 ) -> int:
     """
-    Guarda una predicción completa en fact_prediction_logs para auditoría.
+    Stores a full prediction in fact_prediction_logs for auditing.
     
-    Centraliza todas las predicciones (menus, servicios) en una sola tabla con formato JSON.
+    Centraliza todas las predictions (menus, services) en una sola table con formato JSON.
     
     Args:
-        db: Sesión SQLAlchemy
-        restaurant_id: ID del restaurante
-        prediction_domain: Tipo de predicción ('MENU_STARTER', 'MENU_MAIN', 'MENU_DESSERT', 'SERVICE_LEVEL')
+        db: SQLAlchemy session
+        restaurant_id: ID del restaurant
+        prediction_domain: Tipo de prediction ('MENU_STARTER', 'MENU_MAIN', 'MENU_DESSERT', 'SERVICE_LEVEL')
         input_context: Dict con los inputs (clima, calendario, etc.)
-        output_results: List de tuples [(dish_id, probability), ...] o scalar para servicios
-        model_version: Versión del modelo
-        latency_ms: Tiempo de ejecución en ms
+        output_results: List de tuples [(dish_id, probability), ...] o scalar para services
+        model_version: Model version
+        latency_ms: Execution time in ms
         
     Returns:
-        prediction_id guardado en BD
+        prediction_id saved en BD
     """
     try:
         # Convertir input_context a JSON
         input_json = json.dumps(input_context, default=str)
         
         # Convertir output_results a JSON
-        # Si es menú: [(dish_id, prob), ...] → [{"id": dish_id, "prob": prob}, ...]
-        # Si es servicio: scalar → {"level": valor}
+        # If it is a menu: [(dish_id, prob), ...] -> [{"id": dish_id, "prob": prob}, ...]
+        # If it is a service: scalar -> {"level": value}
         if isinstance(output_results, list) and len(output_results) > 0 and isinstance(output_results[0], tuple):
-            # Es menú (lista de tuplas)
+            # It is a menu (list of tuples)
             output_json = json.dumps(
                 [{"id": int(r[0]), "probability": float(r[1])} for r in output_results],
                 default=str
             )
         else:
-            # Es servicio (scalar o valor simple)
+            # Es service (scalar o valor simple)
             output_json = json.dumps({"level": output_results}, default=str)
         
-        # Crear el log con execution_date explícito
+        # Create log with explicit execution_date
         prediction_log = FactPredictionLog(
-            execution_date=datetime.now(),  # 🔧 Asegurar que se setea la fecha
+            execution_date=datetime.now(),  # Asegurar que se setea la date
             restaurant_id=restaurant_id,
             prediction_domain=prediction_domain,
             input_context_json=input_json,
@@ -4230,12 +4232,12 @@ def save_prediction_log(
         db.commit()
         db.refresh(prediction_log)
         
-        logger.info(f"✅ Predicción guardada en fact_prediction_logs (ID: {prediction_log.prediction_id}, domain: {prediction_domain}, latency: {latency_ms}ms)")
+        logger.info(f"Prediction saved in fact_prediction_logs (ID: {prediction_log.prediction_id}, domain: {prediction_domain}, latency: {latency_ms}ms)")
         
         return prediction_log.prediction_id
         
     except Exception as e:
-        logger.error(f"❌ ERROR guardando log de predicción: {str(e)}", exc_info=True)
+        logger.error(f"Error saving prediction log: {str(e)}", exc_info=True)
         try:
             db.rollback()
         except:
@@ -4244,12 +4246,12 @@ def save_prediction_log(
 
 
 def predict_top3_dishes(model, features_dict: dict, allowed_dish_ids: list[int] | None = None, top_k: int = 3, db: Session | None = None) -> list[tuple[int, float]]:
-    """Genera un ranking de platos candidatos usando el nuevo modelo de menús."""
-    logger.info(f"🔨 Prediciendo para cada plato del histórico...")
+    """Genera un ranking de dishes candidatos usando el nuevo modelo de menus."""
+    logger.info("Predicting for each historical dish...")
     logger.info(f"   Tipo de modelo: {type(model).__name__}")
 
     if not allowed_dish_ids:
-        logger.warning("⚠️ Sin platos candidatos para predecir")
+        logger.warning("No candidate dishes to predict")
         return []
 
     predictions_by_dish: list[tuple[int, float]] = []
@@ -4264,15 +4266,15 @@ def predict_top3_dishes(model, features_dict: dict, allowed_dish_ids: list[int] 
             score = float(prediction[0]) if hasattr(prediction, "__iter__") else float(prediction)
             predictions_by_dish.append((int(dish_id), score))
         except Exception as error:
-            logger.warning(f"⚠️ Error prediciendo dish_id={dish_id}: {str(error)[:100]}")
+            logger.warning(f"Error predicting dish_id={dish_id}: {str(error)[:100]}")
 
     ranked_predictions = sorted(predictions_by_dish, key=lambda item: item[1], reverse=True)
     result = ranked_predictions[:top_k]
     if result:
-        logger.info(f"✅ Top {len(result)} predicciones: {result}")
+        logger.info(f"Top {len(result)} predictions: {result}")
         return result
 
-    logger.error("❌ No se pudieron obtener predicciones para ningún plato")
+    logger.error("Could not get predictions for any dish")
     return []
 
 
@@ -4302,7 +4304,7 @@ def extract_menu_text_with_default_ocr(file_bytes: bytes, content_type: str | No
     extracted_text = ocr.extract_text(file_bytes=file_bytes, content_type=content_type)
 
     if not extracted_text:
-        raise RuntimeError("Document Intelligence no devolvió texto extraíble.")
+        raise RuntimeError("Document Intelligence did not return extractable text.")
 
     return extracted_text, "azure_document_intelligence"
 
@@ -4313,7 +4315,7 @@ def to_ranked_dishes(
 ) -> list[OCRPredictedDish]:
     """Convierte lista [(name, score)] en objetos tipados con ranking.
 
-    Si se pasa `db`, intentará resolver IDs numéricos a nombres en dim_dishes.
+    If `db` is passed, it will try to resolve numeric IDs to names in dim_dishes.
     """
     ranked: list[OCRPredictedDish] = []
     for index, (name, score) in enumerate(items[:3]):
@@ -4329,7 +4331,7 @@ def to_ranked_dishes(
 
 
 def build_extracted_menu(sections) -> OCRExtractedMenu:
-    """Convierte la salida del extractor en el modelo de respuesta estándar."""
+    """Converts extractor output into the standard response model."""
     return OCRExtractedMenu(
         starter=sections.starter,
         main=sections.main,
@@ -4343,9 +4345,9 @@ def build_extracted_menu(sections) -> OCRExtractedMenu:
 
 def persist_extracted_dishes(db: Session, sections) -> int:
     """
-    Persiste los platos extraídos por OCR en dim_dishes.
+    Persists OCR-extracted dishes into dim_dishes.
 
-    course_type usa los valores: first_course, second_course, dessert.
+    course_type uses values: first_course, second_course, dessert.
     """
     grouped_dishes = {
         "first_course": sections.starter_options,
@@ -4409,7 +4411,7 @@ def persist_extracted_dishes(db: Session, sections) -> int:
 @app.post(
     "/ocr/menu-sections",
     response_model=MenuOCRSectionsResponse,
-    summary="Subir menú y ver solo detección OCR por secciones",
+    summary="Upload menu and run OCR section detection only",
     tags=["Predictions"],
     status_code=status.HTTP_200_OK,
 )
@@ -4418,9 +4420,9 @@ async def extract_menu_sections_ocr_only(
     db: Session = Depends(get_db),
 ):
     """
-    Flujo OCR puro (sin predicción ML):
+    Pure OCR flow (without ML prediction):
     1) OCR con Azure Document Intelligence.
-    2) Parser para detectar entrante, principal y postre.
+    2) Parser to detect starter, main, and dessert.
 
     Request multipart/form-data:
     - menu_file: archivo (PDF/JPG/PNG, etc.)
@@ -4430,7 +4432,7 @@ async def extract_menu_sections_ocr_only(
         if not file_bytes:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El archivo de menú está vacío.",
+                detail="Uploaded menu file is empty.",
             )
 
         raw_text, ocr_provider = extract_menu_text_with_default_ocr(
@@ -4450,24 +4452,24 @@ async def extract_menu_sections_ocr_only(
     except HTTPException:
         raise
     except RuntimeError as runtime_error:
-        logger.error(f"OCR no disponible: {runtime_error}")
+        logger.error(f"OCR not available: {runtime_error}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(runtime_error),
         )
     except Exception as exc:
-        logger.error(f"Error en /ocr/menu-sections: {exc}", exc_info=True)
+        logger.error(f"Error in /ocr/menu-sections: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno al procesar OCR del menú.",
+            detail="Internal error while processing menu OCR.",
         )
 
 
 @app.post(
     "/restaurants/{restaurant_id}/menu-upload",
     response_model=dict,
-    tags=["Restaurantes"],
-    summary="Subir menú del restaurante (OCR automático)",
+    tags=["Restaurants"],
+    summary="Upload restaurant menu (automatic OCR)",
 )
 async def upload_restaurant_menu(
     restaurant_id: int,
@@ -4476,32 +4478,32 @@ async def upload_restaurant_menu(
     db: Session = Depends(get_db),
 ):
     """
-    Sube un menú para un restaurante específico y extrae sus platos con OCR.
-    Solo el dueño del restaurante o un administrador puede realizar esta acción.
+    Uploads a menu for a specific restaurant and extracts dishes with OCR.
+    Only the restaurant owner or an administrator can perform this action.
     """
     payload = _require_auth(authorization)
     role = payload.get("role")
     user_restaurant_id = payload.get("restaurant_id")
     
-    # Validar permisos
+    # Validate permissions
     if role == "restaurant_owner" and user_restaurant_id != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
-            detail="No tienes permisos para subir el menú a este restaurante"
+            detail="You do not have permission to upload the menu for this restaurant"
         )
     elif role not in ("admin", "restaurant_owner"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Rol no autorizado")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized role")
         
     restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
     if not restaurant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurante no encontrado")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
     try:
         file_bytes = await menu_file.read()
         if not file_bytes:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El archivo de menú está vacío.",
+                detail="Uploaded menu file is empty.",
             )
 
         raw_text, ocr_provider = extract_menu_text_with_default_ocr(
@@ -4510,17 +4512,17 @@ async def upload_restaurant_menu(
         )
         sections = MenuSectionExtractor.extract(raw_text)
         
-        # Opcional: Persistir los platos extraídos
+        # Optional: persist extracted dishes
         persist_extracted_dishes(db, sections)
         
-        # Crear un registro en MenusAzca para hoy y el restaurante
+        # Create a MenusAzca record for today and this restaurant
         today = datetime.now().date()
         
         starter = next((s[0] for s in sections.get("starter", []) if s), None)
         main = next((s[0] for s in sections.get("main", []) if s), None)
         dessert = next((s[0] for s in sections.get("dessert", []) if s), None)
         
-        # ✅ GUARDAR EN daily_menus para archivado posterior a fact_menus
+        # GUARDAR EN daily_menus para archivado posterior a fact_menus
         daily_menu = DailyMenu(
             restaurant_id=restaurant_id,
             date=today,
@@ -4532,7 +4534,7 @@ async def upload_restaurant_menu(
         db.add(daily_menu)
         db.commit()
         db.refresh(daily_menu)
-        logger.info(f"✅ Menú guardado en daily_menus (menu_id={daily_menu.menu_id}) para {restaurant_id} en {today}")
+        logger.info(f"Menu saved in daily_menus (menu_id={daily_menu.menu_id}) for {restaurant_id} en {today}")
         
         extracted_menu_data = build_extracted_menu(sections)
 
@@ -4541,7 +4543,7 @@ async def upload_restaurant_menu(
             "restaurant_id": restaurant_id,
             "menu_id": daily_menu.menu_id,
             "date": str(today),
-            "message": "Menú procesado exitosamente por OCR y guardado en daily_menus.",
+            "message": "Menu procesado exitosamente por OCR y saved en daily_menus.",
             "ocr_provider": ocr_provider,
             "extracted_menu": extracted_menu_data.dict()
         }
@@ -4549,23 +4551,23 @@ async def upload_restaurant_menu(
     except HTTPException:
         raise
     except RuntimeError as runtime_error:
-        logger.error(f"OCR no disponible: {runtime_error}")
+        logger.error(f"OCR not available: {runtime_error}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(runtime_error),
         )
     except Exception as exc:
-        logger.error(f"Error procesando menú para restaurante {restaurant_id}: {exc}", exc_info=True)
+        logger.error(f"Error procesando menu para restaurant {restaurant_id}: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno al procesar OCR del menú.",
+            detail="Internal error while processing menu OCR.",
         )
 
 
 @app.post(
     "/predict",
     response_model=PredictionResponse,
-    summary="Realizar Predicción",
+    summary="Run Prediction",
     tags=["Predictions"],
     status_code=status.HTTP_201_CREATED,
 )
@@ -4575,50 +4577,50 @@ async def create_prediction(
     db: Session = Depends(get_db),
 ):
     """
-    Realiza una predicción de demanda de servicios.
+    Runs a service-demand prediction.
 
-    **Flujo:**
-    1. Valida los parámetros de entrada (Pydantic)
+    **Flow:**
+    1. Validates input parameters (Pydantic)
     2. Llama al motor de IA (PredictionEngine)
-    3. Guarda el resultado en auditoría (Azure SQL)
-    4. Retorna la predicción
+    3. Stores the result in audit logs (Azure SQL)
+    4. Returns the prediction
 
-    **Parámetros en el body JSON:**
-    - `service_date`: Fecha para la cual se predice (YYYY-MM-DD)
-    - `max_temp_c`: Temperatura máxima en Celsius
-    - `precipitation_mm`: Precipitación en milímetros
-    - `is_stadium_event`: ¿Hay evento en estadio?
-    - `is_payday_week`: ¿Es semana de cobro?
+    **JSON body parameters:**
+    - `service_date`: Date to predict for (YYYY-MM-DD)
+    - `max_temp_c`: Maximum temperature in Celsius
+    - `precipitation_mm`: Precipitation in millimeters
+    - `is_stadium_event`: Whether there is a stadium event
+    - `is_payday_week`: Whether it is payday week
 
     Args:
-        request: Objeto PredictionRequest con los parámetros
-        db: Sesión de base de datos (inyectada por FastAPI)
+        request: PredictionRequest object with parameters
+        db: Database session (injected by FastAPI)
 
     Returns:
-        PredictionResponse: Predicción y metadatos
+        PredictionResponse: Prediction and metadata
 
     Raises:
-        HTTPException: Si hay error en la predicción
+        HTTPException: If prediction fails
     """
-    # Verificar que es admin o restaurant_owner del restaurante
+    # Verify that caller is admin or owner of the restaurant
     _require_restaurant_or_admin_auth(authorization, request.restaurant_id)
     
     global prediction_engine
 
-    # Validación: Motor cargado
+    # Validation: loaded engine
     if prediction_engine is None:
-        logger.error("Motor de predicción no inicializado")
+        logger.error("Prediction engine not initialized")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Motor de predicción no disponible. Reinicia la API.",
+            detail="Prediction engine not available. Restart the API.",
         )
 
     try:
-        # Calcular automáticamente parámetros de calendario
+        # Automatically calculate calendar features
         calendar_features = calculate_calendar_features(request.service_date)
         
-        # Recuperar datos históricos de fact_services
-        # (services_lag_7 y avg_4_weeks desde la BD, con fallback a 70% capacidad)
+        # Retrieve historical data from fact_services
+        # (services_lag_7 and avg_4_weeks from DB, with 70% capacity fallback)
         services_data = get_services_data(
             db=db,
             restaurant_id=request.restaurant_id,
@@ -4626,24 +4628,24 @@ async def create_prediction(
             capacity_limit=request.capacity_limit
         )
         
-        # Recuperar datos meteorológicos desde Open-Meteo
+        # Retrieve weather data from Open-Meteo
         weather_data = get_weather_data(request.service_date)
         
-        # Preparar datos para el motor (combinando request + cálculos automáticos)
+        # Build engine input (request + auto-calculated features)
         input_data = {
             "service_date": request.service_date,
             "restaurant_id": request.restaurant_id,
-            "max_temp_c": weather_data['max_temp_c'],  # DESDE Open-Meteo
-            "precipitation_mm": weather_data['precipitation_mm'],  # DESDE Open-Meteo
-            "is_rain_service_peak": weather_data['is_rain_service_peak'],  # DESDE Open-Meteo
+            "max_temp_c": weather_data['max_temp_c'],  # FROM Open-Meteo
+            "precipitation_mm": weather_data['precipitation_mm'],  # FROM Open-Meteo
+            "is_rain_service_peak": weather_data['is_rain_service_peak'],  # FROM Open-Meteo
             "is_stadium_event": request.is_stadium_event,
             "is_azca_event": request.is_azca_event,
-            "is_holiday": calendar_features['is_holiday'],  # CALCULADO
-            "is_bridge_day": calendar_features['is_bridge_day'],  # CALCULADO
-            "is_payday_week": calendar_features['is_payday_week'],  # CALCULADO
-            "is_business_day": calendar_features['is_business_day'],  # CALCULADO
-            "services_lag_7": services_data['services_lag_7'],  # DESDE fact_services
-            "avg_4_weeks": services_data['avg_4_weeks'],  # DESDE fact_services
+            "is_holiday": calendar_features['is_holiday'],  # CALCULATED
+            "is_bridge_day": calendar_features['is_bridge_day'],  # CALCULATED
+            "is_payday_week": calendar_features['is_payday_week'],  # CALCULATED
+            "is_business_day": calendar_features['is_business_day'],  # CALCULATED
+            "services_lag_7": services_data['services_lag_7'],  # FROM fact_services
+            "avg_4_weeks": services_data['avg_4_weeks'],  # FROM fact_services
             "capacity_limit": request.capacity_limit,
             "table_count": request.table_count,
             "min_service_duration": request.min_service_duration,
@@ -4657,32 +4659,32 @@ async def create_prediction(
             "cuisine_type": request.cuisine_type,
         }
 
-        # LOG: Entrada de predicción
+        # LOG: prediction input
         logger.info("="*80)
-        logger.info(f"📍 POST /predict - Solicitud recibida")
+        logger.info("POST /predict - request received")
         logger.info("="*80)
-        logger.info(f"🎯 Input: restaurante_id={request.restaurant_id}, fecha={request.service_date}")
-        logger.info(f"   Eventos: stadium={request.is_stadium_event}, azca={request.is_azca_event}")
-        logger.info(f"📊 Parámetros automáticos:")
-        logger.info(f"   Clima: temp={weather_data['max_temp_c']}°C, precip={weather_data['precipitation_mm']:.1f}mm")
-        logger.info(f"   Calendario: business_day={calendar_features['is_business_day']}, holiday={calendar_features['is_holiday']}, payday={calendar_features['is_payday_week']}")
-        logger.info(f"   Histórico: lag_7={services_data['services_lag_7']}, avg_4w={services_data['avg_4_weeks']}")
+        logger.info(f"Input: restaurant_id={request.restaurant_id}, date={request.service_date}")
+        logger.info(f"   Events: stadium={request.is_stadium_event}, azca={request.is_azca_event}")
+        logger.info("   Auto-calculated parameters:")
+        logger.info(f"   Weather: temp={weather_data['max_temp_c']}C, precip={weather_data['precipitation_mm']:.1f}mm")
+        logger.info(f"   Calendar: business_day={calendar_features['is_business_day']}, holiday={calendar_features['is_holiday']}, payday={calendar_features['is_payday_week']}")
+        logger.info(f"   History: lag_7={services_data['services_lag_7']}, avg_4w={services_data['avg_4_weeks']}")
         logger.info("="*80)
 
         # Llamar al motor de IA
         try:
             prediction_result = prediction_engine.predict("azca-services-model", input_data)
         except Exception as engine_error:
-            logger.error("Error real en motor de servicios", exc_info=True)
+            logger.error("Runtime error in services engine", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=(
-                    "Error en motor de prediccion de servicios. "
-                    f"Detalle: {type(engine_error).__name__}: {str(engine_error)[:220]}"
+                    "Error in services prediction engine. "
+                    f"Detail: {type(engine_error).__name__}: {str(engine_error)[:220]}"
                 ),
             ) from engine_error
 
-        # Crear registro de auditoría
+        # Create audit record
         prediction_log = PredictionLog(
             service_date=request.service_date,
             max_temp_c=request.max_temp_c,
@@ -4694,23 +4696,23 @@ async def create_prediction(
             full_input_json=json.dumps(input_data, default=str),
         )
 
-        # Guardar en base de datos
+        # Store in database
         try:
             db.add(prediction_log)
             db.commit()
             db.refresh(prediction_log)
             logger.info(
-                f"✅ Predicción guardada (ID: {prediction_log.id}, "
-                f"Resultado: {prediction_result})"
+                f"Prediction saved (ID: {prediction_log.id}, "
+                f"Result: {prediction_result})"
             )
         except Exception as db_error:
-            logger.warning(f"⚠️  No se guardó en BD (normal si no está configurada): {str(db_error)[:100]}")
+            logger.warning(f"Not persisted to DB (normal if not configured): {str(db_error)[:100]}")
             db.rollback()
-            # Crear un log simulado con ID ficticio para respuesta
+            # Create a simulated log with placeholder ID for response
             prediction_log.id = -1
             prediction_log.execution_timestamp = datetime.now()
 
-        # Retornar respuesta
+        # Return response
         return PredictionResponse(
             prediction_result=prediction_result,
             service_date=request.service_date,
@@ -4720,14 +4722,14 @@ async def create_prediction(
         )
 
     except ValueError as ve:
-        logger.error(f"❌ Error de validación en /predict: {str(ve)}")
+        logger.error(f"Validation error in /predict: {str(ve)}")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Error en los datos: {str(ve)}",
+            detail=f"Input data error: {str(ve)}",
         )
 
     except Exception as e:
-        error_msg = f"❌ Error durante la predicción: {type(e).__name__}: {str(e)}"
+        error_msg = f"Error during prediction: {type(e).__name__}: {str(e)}"
         logger.error(error_msg, exc_info=True)
         try:
             db.rollback()
@@ -4742,7 +4744,7 @@ async def create_prediction(
 @app.post(
     "/predict/starter",
     response_model=StarterPredictionResponse,
-    summary="Predecir Platos de Entrada",
+    summary="Predict Starter Dishes",
     tags=["Predictions"],
     status_code=status.HTTP_201_CREATED,
 )
@@ -4752,15 +4754,15 @@ async def predict_starter(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """Predice los 3 entrantes más probables usando el nuevo modelo de menús."""
-    # Verificar que es admin o restaurant_owner del restaurante
+    """Predicts the 3 most likely starters using the new menu model."""
+    # Verify caller is admin or owner of the restaurant
     _require_restaurant_or_admin_auth(authorization, request.restaurant_id)
     
     if not _ensure_unified_menu_model_loaded(http_request.app):
-        logger.error("Modelo no cargado en app.state")
+        logger.error("Model not loaded in app.state")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Motor de predicción no disponible. Reinicia la API.",
+            detail="Prediction engine not available. Restart the API.",
         )
 
     try:
@@ -4770,7 +4772,7 @@ async def predict_starter(
         if not restaurant:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Restaurante con ID {request.restaurant_id} no encontrado",
+                detail=f"Restaurant with ID {request.restaurant_id} not found",
             )
 
         weather_data = get_weather_data(request.service_date)
@@ -4806,7 +4808,7 @@ async def predict_starter(
         if not top_dishes:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="No se pudieron generar predicciones de entrantes para este restaurante.",
+                detail="Could not generate starter predictions for this restaurant.",
             )
 
         total_starters = get_total_starters(db, request.restaurant_id)
@@ -4834,17 +4836,17 @@ async def predict_starter(
     except HTTPException:
         raise
     except Exception as error:
-        logger.error(f"❌ Error durante la predicción de starters: {error}", exc_info=True)
+        logger.error(f"Error during starter prediction: {error}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno al procesar la predicción de entrantes.",
+            detail="Internal error while processing starter prediction.",
         )
 
 
 @app.post(
     "/predict/main",
     response_model=MainPredictionResponse,
-    summary="Predecir Platos Principales",
+    summary="Predict Main Dishes",
     tags=["Predictions"],
     status_code=status.HTTP_201_CREATED,
 )
@@ -4854,15 +4856,15 @@ async def predict_main(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """Predice los 3 principales más probables usando el nuevo modelo de menús."""
-    # Verificar que es admin o restaurant_owner del restaurante
+    """Predicts the 3 most likely mains using the new menu model."""
+    # Verify caller is admin or owner of the restaurant
     _require_restaurant_or_admin_auth(authorization, request.restaurant_id)
     
     if not _ensure_unified_menu_model_loaded(http_request.app):
-        logger.error("Modelo no cargado en app.state")
+        logger.error("Model not loaded in app.state")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Motor de predicción no disponible. Reinicia la API.",
+            detail="Prediction engine not available. Restart the API.",
         )
 
     try:
@@ -4872,7 +4874,7 @@ async def predict_main(
         if not restaurant:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Restaurante con ID {request.restaurant_id} no encontrado",
+                detail=f"Restaurant with ID {request.restaurant_id} not found",
             )
 
         weather_data = get_weather_data(request.service_date)
@@ -4908,7 +4910,7 @@ async def predict_main(
         if not top_dishes:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="No se pudieron generar predicciones de principales para este restaurante.",
+                detail="Could not generate main-course predictions for this restaurant.",
             )
 
         total_mains = get_total_mains(db, request.restaurant_id)
@@ -4936,17 +4938,17 @@ async def predict_main(
     except HTTPException:
         raise
     except Exception as error:
-        logger.error(f"❌ Error durante la predicción de principales: {error}", exc_info=True)
+        logger.error(f"Error during main-course prediction: {error}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno al procesar la predicción de platos principales.",
+            detail="Internal error while processing main-course prediction.",
         )
 
 
 @app.post(
     "/predict/dessert",
     response_model=DessertPredictionResponse,
-    summary="Predecir Postres",
+    summary="Predict Desserts",
     tags=["Predictions"],
     status_code=status.HTTP_201_CREATED,
 )
@@ -4956,15 +4958,15 @@ async def predict_dessert(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """Predice los 3 postres más probables usando el nuevo modelo de menús."""
-    # Verificar que es admin o restaurant_owner del restaurante
+    """Predicts the 3 most likely desserts using the new menu model."""
+    # Verify caller is admin or owner of the restaurant
     _require_restaurant_or_admin_auth(authorization, request.restaurant_id)
     
     if not _ensure_unified_menu_model_loaded(http_request.app):
-        logger.error("Modelo no cargado en app.state")
+        logger.error("Model not loaded in app.state")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Motor de predicción no disponible. Reinicia la API.",
+            detail="Prediction engine not available. Restart the API.",
         )
 
     try:
@@ -4974,7 +4976,7 @@ async def predict_dessert(
         if not restaurant:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Restaurante con ID {request.restaurant_id} no encontrado",
+                detail=f"Restaurant with ID {request.restaurant_id} not found",
             )
 
         weather_data = get_weather_data(request.service_date)
@@ -5010,7 +5012,7 @@ async def predict_dessert(
         if not top_dishes:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="No se pudieron generar predicciones de postres para este restaurante.",
+                detail="Could not generate dessert predictions for this restaurant.",
             )
 
         total_desserts = get_total_desserts(db, request.restaurant_id)
@@ -5038,48 +5040,48 @@ async def predict_dessert(
     except HTTPException:
         raise
     except Exception as error:
-        logger.error(f"❌ Error durante la predicción de postres: {error}", exc_info=True)
+        logger.error(f"Error during dessert prediction: {error}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno al procesar la predicción de postres.",
+            detail="Internal error while processing dessert prediction.",
         )
 
 
 # ============================================================================
-# ENDPOINT: Predicción de Top 3 Platos usando modelo de REGRESIÓN v2
+# ENDPOINT: Top 3 dish prediction using REGRESSION model v2
 # ============================================================================
 
 class DishScorePrediction(BaseModel):
-    """Predicción de un plato individual del modelo de regresión."""
-    dish_id: int = Field(..., description="ID del plato")
-    dish_name: str = Field(..., description="Nombre del plato")
-    score: float = Field(..., description="Puntuación de demanda predicha por el modelo")
-    course_type: str = Field(..., description="Tipo de curso (starter/main/dessert)")
+    """Prediction for an individual dish from the regression model."""
+    dish_id: int = Field(..., description="Dish ID")
+    dish_name: str = Field(..., description="Dish name")
+    score: float = Field(..., description="Demand score predicted by the model")
+    course_type: str = Field(..., description="Course type (starter/main/dessert)")
 
 
 class TopDishesResponse(BaseModel):
-    """Respuesta con los 3 platos mejor puntuados."""
-    restaurant_id: int = Field(..., description="ID del restaurante")
-    service_date: date = Field(..., description="Fecha del servicio")
-    top_3_dishes: list[DishScorePrediction] = Field(..., description="Los 3 platos con mayor puntuación predicha")
-    model_version: str = Field(..., description="Versión del modelo utilizado")
-    execution_timestamp: datetime = Field(..., description="Timestamp de ejecución")
+    """Response containing the 3 highest-scoring dishes."""
+    restaurant_id: int = Field(..., description="Restaurant ID")
+    service_date: date = Field(..., description="Service date")
+    top_3_dishes: list[DishScorePrediction] = Field(..., description="Top 3 dishes with highest predicted score")
+    model_version: str = Field(..., description="Model version used")
+    execution_timestamp: datetime = Field(..., description="Execution timestamp")
 
 
 def fetch_menu_data_for_prediction(db: Session, restaurant_id: int, service_date: date) -> pd.DataFrame:
     """
-    Realiza la query SQL para obtener los 13 features del modelo de regresión.
+    Runs the SQL query to fetch the 13 regression-model features.
     
-    Datos requeridos:
+    Required data:
     - dim_restaurants: restaurant_id, restaurant_segment, cuisine_type, dist_office_towers, google_rating
     - dim_calendar: month, day_of_week, max_temp_c, is_payday_week, is_azca_event
     - dim_dishes/fact_menu_items/fact_menus: dish_id, dish_name, course_type
     
     Returns:
-        DataFrame con una fila por plato disponible en el restaurante
+        DataFrame with one row per available dish for the restaurant
     """
     try:
-        # Query SQL que obtiene los datos necesarios
+        # SQL query that retrieves required data
         query = text("""
             SELECT
                 -- Restaurant features (5)
@@ -5121,50 +5123,50 @@ def fetch_menu_data_for_prediction(db: Session, restaurant_id: int, service_date
         rows = result.fetchall()
         
         if not rows:
-            logger.warning(f"⚠️ No se encontraron datos para restaurante {restaurant_id} en fecha {service_date}")
+            logger.warning(f"No data found for restaurant {restaurant_id} on date {service_date}")
             return pd.DataFrame()
         
-        logger.info(f"✅ Obtenidos {len(rows)} registros (platos) para{restaurant_id}")
+        logger.info(f"Retrieved {len(rows)} dish rows for restaurant {restaurant_id}")
         
-        # Convertir a DataFrame
+        # Convert to DataFrame
         df = pd.DataFrame(rows, columns=columns)
-        logger.info(f"📊 Estructura: {df.shape} | Columnas: {list(df.columns)}")
+        logger.info(f"Shape: {df.shape} | Columns: {list(df.columns)}")
         
         return df
         
     except Exception as e:
-        logger.error(f"❌ Error en query SQL: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error(f"Error in SQL query: {type(e).__name__}: {str(e)}", exc_info=True)
         raise
 
 
 def cast_features_for_model(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Castea los tipos de datos exactos que espera el modelo de regresión.
+    Casts exact data types expected by the regression model.
     
-    Casting obligatorio:
+    Required casting:
     - Strings: restaurant_id, restaurant_segment, cuisine_type, month, day_of_week, 
                dish_id, dish_name, course_type
     - Floats: google_rating, max_temp_c
     - Long/Int: dist_office_towers
-    - Booleanos: is_payday_week, is_azca_event
+    - Booleans: is_payday_week, is_azca_event
     """
     try:
-        # Copiar para no modificar el original
+        # Copy to avoid mutating original
         df_casted = df.copy()
         
-        # Strings (como strings)
+        # Strings
         for col in ['restaurant_segment', 'cuisine_type', 'dish_name', 'course_type']:
             if col in df_casted.columns:
                 df_casted[col] = df_casted[col].astype(str)
                 logger.info(f"   {col}: str")
         
-        # Conversiones de strings para IDs (que vienen como números pero van como strings en algunos modelos)
+        # Convert ID columns to strings (some models expect string IDs)
         for col in ['restaurant_id', 'dish_id']:
             if col in df_casted.columns:
                 df_casted[col] = df_casted[col].astype(str)
                 logger.info(f"   {col}: str")
         
-        # Month y day_of_week como strings (categorías)
+        # Month and day_of_week as strings (categories)
         for col in ['month', 'day_of_week']:
             if col in df_casted.columns:
                 df_casted[col] = df_casted[col].astype(str)
@@ -5190,82 +5192,82 @@ def cast_features_for_model(df: pd.DataFrame) -> pd.DataFrame:
                     df_casted[col] = df_casted[col].isin([1, True, 'True', 'true', 'yes']).astype(bool)
                 logger.info(f"   {col}: bool")
         
-        logger.info(f"✅ Casting completado: {df_casted.shape}")
+        logger.info(f"Casting completed: {df_casted.shape}")
         return df_casted
         
     except Exception as e:
-        logger.error(f"❌ Error en casting: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error(f"Error in casting: {type(e).__name__}: {str(e)}", exc_info=True)
         raise
 
 
 @app.get(
     "/predict/top-dishes/{restaurant_id}",
     response_model=TopDishesResponse,
-    summary="Predecir los 3 mejores platos",
+    summary="Predict top 3 dishes",
     tags=["Predictions"],
     status_code=status.HTTP_200_OK,
 )
 async def predict_top_dishes_regression(
     restaurant_id: int,
-    service_date: date = Query(..., description="Fecha del servicio (YYYY-MM-DD)"),
+    service_date: date = Query(..., description="Service date (YYYY-MM-DD)"),
     authorization: str | None = Header(default=None),
     request: Request = None,
     db: Session = Depends(get_db),
 ):
     """
-    Predice los 3 mejores platos para un restaurante en una fecha específica.
+    Predicts the top 3 dishes for a restaurant on a specific date.
     
-    Usa el modelo de REGRESIÓN azca_menu_model_v2.pkl que devuelve una puntuación
-    numérica para cada plato basada en:
-    - Características del restaurante (segment, cuisine, distancia, rating)
-    - Características de la fecha (mes, día de semana, temperatura, eventos)
-    - Características del plato (nombre, tipo de curso)
+    Uses regression model azca_menu_model_v2.pkl, which returns a numeric
+    score for each dish based on:
+    - Restaurant features (segment, cuisine, distance, rating)
+    - Date features (month, day of week, weather, events)
+    - Dish features (name, course type)
     
     Query Parameters:
-    - service_date: Fecha del servicio (YYYY-MM-DD)
+    - service_date: Service date (YYYY-MM-DD)
     
     Returns:
-        TopDishesResponse: Los 3 platos con mayor puntuación predicha
+        TopDishesResponse: Top 3 dishes with highest predicted score
     """
-    # Verificar que es admin o restaurant_owner del restaurante
+    # Verify caller is admin or owner of the restaurant
     _require_restaurant_or_admin_auth(authorization, restaurant_id)
     
     try:
         exec_start = datetime.now()
-        logger.info(f"📍 GET /predict/top-dishes/{restaurant_id}?service_date={service_date}")
+        logger.info(f"GET /predict/top-dishes/{restaurant_id}?service_date={service_date}")
         
-        # 1. Cargar modelo bajo demanda
-        logger.info(f"🔍 Cargando modelo...")
+        # 1. Load model on demand
+        logger.info("Loading model...")
         try:
             model = get_model_lazy()
         except Exception as model_error:
-            logger.error(f"❌ Fallo al cargar modelo: {str(model_error)}")
+            logger.error(f"Failed to load model: {str(model_error)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Modelo de predicción no disponible: {str(model_error)}"
+                detail=f"Prediction model not available: {str(model_error)}"
             )
         
-        # 2. Obtener datos desde la base de datos
-        logger.info(f"🔍 Consultando datos para restaurante {restaurant_id} en {service_date}...")
+        # 2. Retrieve data from database
+        logger.info(f"Querying data for restaurant {restaurant_id} on {service_date}...")
         df_menu = fetch_menu_data_for_prediction(db, restaurant_id, service_date)
         
         if df_menu.empty:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No se encontraron platos para restaurante {restaurant_id} en fecha {service_date}"
+                detail=f"No dishes found for restaurant {restaurant_id} on date {service_date}"
             )
         
-        # 3. Hacer casting de tipos
-        logger.info(f"🔧 Casting de tipos de datos...")
+        # 3. Cast feature types
+        logger.info("Casting feature data types...")
         df_casted = cast_features_for_model(df_menu)
         
-        # 4. Ejecutar predicción para cada plato
-        logger.info(f"🤖 Ejecutando predicción con modelo...")
+        # 4. Run prediction per dish
+        logger.info("Running model prediction...")
         
         predictions = model.predict(df_casted)
-        logger.info(f"✅ Predicción completada: {len(predictions)} scores")
+        logger.info(f"Prediction completed: {len(predictions)} scores")
         
-        # 5. Crear resultado con scores
+        # 5. Build result with scores
         results = []
         for idx, row in df_casted.iterrows():
             results.append({
@@ -5275,15 +5277,15 @@ async def predict_top_dishes_regression(
                 'course_type': str(row['course_type'])
             })
         
-        # 6. Ordenar por score descendente y tomar top 3
+        # 6. Sort by score descending and take top 3
         results_sorted = sorted(results, key=lambda x: x['score'], reverse=True)
         top_3 = results_sorted[:3]
         
-        logger.info(f"🏆 Top 3 platos predichos:")
+        logger.info("Top 3 predicted dishes:")
         for i, dish in enumerate(top_3, 1):
             logger.info(f"   {i}. {dish['dish_name']} ({dish['dish_id']}): {dish['score']:.4f}")
         
-        # 7. Retornar respuesta
+        # 7. Return response
         latency_ms = int((datetime.now() - exec_start).total_seconds() * 1000)
         logger.info(f"⏱️  Latencia total: {latency_ms}ms")
         
@@ -5298,7 +5300,7 @@ async def predict_top_dishes_regression(
     except HTTPException:
         raise
     except Exception as e:
-        error_msg = f"❌ Error durante predicción: {type(e).__name__}: {str(e)}"
+        error_msg = f"Error during prediction: {type(e).__name__}: {str(e)}"
         logger.error(error_msg, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -5309,7 +5311,7 @@ async def predict_top_dishes_regression(
 @app.post(
     "/predict/menu-upload",
     response_model=MenuUploadPredictionResponse,
-    summary="Subir menú (OCR) y predecir platos",
+    summary="Upload menu (OCR) and predict dishes",
     tags=["Predictions"],
     status_code=status.HTTP_201_CREATED,
 )
@@ -5320,10 +5322,10 @@ async def predict_from_menu_upload(
     db: Session = Depends(get_db),
 ):
     """
-    Flujo por defecto:
-    1) OCR con Azure Document Intelligence para extraer el menú subido.
-    2) Parser para detectar entrante, principal y postre.
-    3) Predicción ML top-3 por categoría en base al menú detectado.
+    Default flow:
+    1) OCR con Azure Document Intelligence para extraer el menu subido.
+    2) Parser to detect starter, main, and dessert.
+    3) ML top-3 prediction by category based on detected menu.
 
     Request multipart/form-data:
     - restaurant_id: int
@@ -5333,17 +5335,17 @@ async def predict_from_menu_upload(
     global prediction_engine
 
     if prediction_engine is None:
-        logger.error("Motor de predicción no inicializado")
+        logger.error("Prediction engine not initialized")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Motor de predicción no disponible. Reinicia la API.",
+            detail="Prediction engine not available. Restart the API.",
         )
 
     restaurant = db.query(Restaurant).filter(Restaurant.restaurant_id == restaurant_id).first()
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Restaurante con ID {restaurant_id} no encontrado",
+            detail=f"Restaurant con ID {restaurant_id} not found",
         )
 
     try:
@@ -5351,20 +5353,20 @@ async def predict_from_menu_upload(
         if not file_bytes:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El archivo de menú está vacío.",
+                detail="Uploaded menu file is empty.",
             )
 
-        # OCR por defecto con Azure Document Intelligence
+        # Default OCR using Azure Document Intelligence
         raw_text, ocr_provider = extract_menu_text_with_default_ocr(
             file_bytes=file_bytes,
             content_type=menu_file.content_type,
         )
 
-        # Detección de secciones del menú
+        # Menu section detection
         sections = MenuSectionExtractor.extract(raw_text)
         persist_extracted_dishes(db, sections)
 
-        # Variables contextuales automáticas (similares al flujo actual)
+        # Automatic contextual variables (similar to current flow)
         weather_data = get_weather_data(service_date)
         calendar_features = calculate_calendar_features(service_date)
 
@@ -5404,21 +5406,21 @@ async def predict_from_menu_upload(
     except HTTPException:
         raise
     except RuntimeError as runtime_error:
-        logger.error(f"OCR no disponible: {runtime_error}")
+        logger.error(f"OCR not available: {runtime_error}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(runtime_error),
         )
     except Exception as exc:
-        logger.error(f"Error en /predict/menu-upload: {exc}", exc_info=True)
+        logger.error(f"Error in /predict/menu-upload: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno al procesar OCR y predicción del menú.",
+            detail="Error interno al procesar OCR y prediction del menu.",
         )
 
 
 # ============================================================================
-# ARCHIVADO DE MENÚS (Daily → Fact)
+# MENU ARCHIVAL (Daily -> Fact)
 # ============================================================================
 
 
@@ -5426,38 +5428,39 @@ async def predict_from_menu_upload(
     "/admin/menus/archive",
     response_model=dict,
     tags=["Admin"],
-    summary="Archivar menús del día anterior a fact_menus",
+    summary="Archive previous day menus to fact_menus",
 )
 async def archive_daily_menus(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """
-    Archiva menús de ayer desde `daily_menus` a `fact_menus` + `fact_menu_items`.
+     Archives yesterday menus from `daily_menus` to `fact_menus` + `fact_menu_items`.
     
-    Solo administradores pueden ejecutar esta operación.
-    Flujo:
-    1. Encuentra todos los menús en `daily_menus` con fecha anterior a hoy
-    2. Para cada menú:
-       - Crea entrada en `fact_menus` (si no existe)
-       - Genera `fact_menu_items` basándose en `starter`, `main`, `dessert`
-       - Vincula `dish_ratings` al nuevo `menu_id` de fact_menus
-    3. Marca registros de `daily_menus` como archivados (opcional: los elimina)
+     Only administrators can execute this operation.
+     Flow:
+     1. Finds all menus in `daily_menus` with date before today
+     2. For each menu:
+         - Creates entry in `fact_menus` (if it does not exist)
+         - Generates `fact_menu_items` from `starter`, `main`, `dessert`
+         - Links `dish_ratings` to the new `menu_id` in fact_menus
+     3. Marks `daily_menus` rows as archived (optional: remove them)
     """
-    # Validar permiso admin
+     # Validate admin permission
     payload = _require_auth(authorization)
     role = payload.get("role")
     if role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo administradores pueden archivar menús",
+            detail="Only administrators can archive menus",
         )
 
     try:
         today = _current_service_date()
         yesterday = today - timedelta(days=1)
+        yesterday_sql = yesterday.isoformat()
 
-        # 1. Obtener menús de ayer en daily_menus
+        # 1. Get yesterday menus from daily_menus
         daily_menus = db.execute(
             text(
                 """
@@ -5466,13 +5469,13 @@ async def archive_daily_menus(
                 WHERE CAST(date AS DATE) = :target_date
                 """
             ),
-            {"target_date": yesterday},
+            {"target_date": yesterday_sql},
         ).fetchall()
 
         if not daily_menus:
             return {
                 "success": True,
-                "message": f"No hay menús para archivar en {yesterday}",
+                "message": f"No menus to archive for {yesterday}",
                 "archived_count": 0,
             }
 
@@ -5486,7 +5489,7 @@ async def archive_daily_menus(
             main = daily_menu[4]
             dessert = daily_menu[5]
 
-            # 2. Crear/obtener menú en fact_menus
+            # 2. Create/get menu in fact_menus
             fact_menu = db.execute(
                 text(
                     """
@@ -5499,7 +5502,7 @@ async def archive_daily_menus(
             ).first()
 
             if not fact_menu:
-                # Crear nuevo menú en fact_menus
+                # Create new menu in fact_menus
                 result = db.execute(
                     text(
                         """
@@ -5514,7 +5517,7 @@ async def archive_daily_menus(
             else:
                 fact_menu_id = fact_menu[0]
 
-            # 3. Crear fact_menu_items a partir de los platos
+            # 3. Create fact_menu_items from dishes
             dishes_to_add = []
             if starter:
                 for dish_name in starter.split(";"):
@@ -5530,7 +5533,7 @@ async def archive_daily_menus(
                 if not dish_name:
                     continue
 
-                # Buscar o crear dish_id
+                # Find or create dish_id
                 dish_row = db.execute(
                     text(
                         """
@@ -5546,7 +5549,7 @@ async def archive_daily_menus(
                 if dish_row:
                     dish_id = dish_row[0]
                 else:
-                    # Crear nuevo plato
+                    # Create new dish
                     result = db.execute(
                         text(
                             """
@@ -5559,7 +5562,7 @@ async def archive_daily_menus(
                     db.commit()
                     dish_id = result.lastrowid
 
-                # Agregar a fact_menu_items
+                # Add to fact_menu_items
                 db.execute(
                     text(
                         """
@@ -5570,7 +5573,7 @@ async def archive_daily_menus(
                     {"menu_id": fact_menu_id, "dish_id": dish_id},
                 )
 
-            # 4. Actualizar ratings para que apunten a fact_menus menu_id
+            # 4. Update ratings to point to fact_menus menu_id
             db.execute(
                 text(
                     """
@@ -5588,7 +5591,7 @@ async def archive_daily_menus(
 
         return {
             "success": True,
-            "message": f"Menús de {yesterday} archivados exitosamente",
+            "message": f"Menus from {yesterday} archived successfully",
             "archived_count": archived_count,
         }
 
@@ -5596,28 +5599,28 @@ async def archive_daily_menus(
         raise
     except Exception as exc:
         db.rollback()
-        logger.error(f"Error archivando menús: {exc}", exc_info=True)
+        logger.error(f"Error archiving menus: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al archivar menús: {str(exc)}",
+            detail=f"Error while archiving menus: {str(exc)}",
         )
 
 
 # ============================================================================
-# RAÍZ (Para documentación)
+# ROOT (for documentation)
 # ============================================================================
 
 
 @app.get(
     "/",
     tags=["Info"],
-    summary="Información de la API",
+    summary="API information",
 )
 async def root():
     """
-    Endpoint raíz con información general de la API.
+    Root endpoint with general API information.
 
-    Redirige a `/docs` para la documentación interactiva Swagger.
+    Redirects to `/docs` for interactive Swagger documentation.
     """
     return {
         "name": "AZCA Prediction API",
@@ -5629,7 +5632,7 @@ async def root():
 
 
 # ============================================================================
-# EJECUCIÓN (Para desarrollo local)
+# EXECUTION (for local development)
 # ============================================================================
 
 if __name__ == "__main__":
@@ -5644,3 +5647,16 @@ if __name__ == "__main__":
         reload=True,
         log_level="info",
     )
+
+
+
+
+
+
+
+
+
+
+
+
+

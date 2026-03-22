@@ -1,4 +1,4 @@
-# Integrated Menu Layout Refactoring
+﻿# Integrated Menu Layout Refactoring
 
 ## Overview
 
@@ -16,8 +16,8 @@ The restaurant detail page (MenuView) has been refactored from a bottom-heavy la
 **After:**
 - Hero image at top (unchanged)
 - Integrated 2-column grid:
-  - **Left Column (2/3 width)**: Overview + Menu Preview stacked
-  - **Right Column (1/3 width)**: Specifications card
+ - **Left Column (2/3 width)**: Overview + Menu Preview stacked
+ - **Right Column (1/3 width)**: Specifications card
 - Balanced layout with no visual gaps
 - Menu integrated as part of upper restaurant presentation
 
@@ -26,35 +26,35 @@ The restaurant detail page (MenuView) has been refactored from a bottom-heavy la
 ## Layout Structure
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Page Header                          │
-│             (Title + Back Button)                       │
-└─────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────┐
-│                   Hero Section                          │
-│              (Restaurant Image)                         │
-└─────────────────────────────────────────────────────────┘
+ Page Header 
+ (Title + Back Button) 
 
-┌──────────────────────────────┬──────────────────────────┐
-│                              │                          │
-│   LEFT COLUMN (2/3)          │  RIGHT COLUMN (1/3)      │
-│   ┌────────────────────────┐ │  ┌──────────────────────┐│
-│   │ Overview &             │ │  │   Specification      ││
-│   │ Quick Facts            │ │  │   Card               ││
-│   │ (About + Facts Grid)   │ │  │   • Cuisine Type     ││
-│   └────────────────────────┘ │  │   • Segment          ││
-│                              │  │   • Rating           ││
-│   ┌────────────────────────┐ │  │   • Capacity         ││
-│   │ Menu Preview Card      │ │  │   • WiFi             ││
-│   │ (Compact Menu)         │ │  │   • Terrace          ││
-│   │ • Entrantes (2 preview)│ │  │   • Opening Hours    ││
-│   │ • Principales (2)      │ │  │   • Distance         ││
-│   │ • Postres (2)          │ │  │                      ││
-│   │ • Price                │ │  └──────────────────────┘│
-│   └────────────────────────┘ │                          │
-│                              │                          │
-└──────────────────────────────┴──────────────────────────┘
+
+
+ Hero Section 
+ (Restaurant Image) 
+
+
+
+ 
+ LEFT COLUMN (2/3) RIGHT COLUMN (1/3) 
+ 
+ Overview & Specification 
+ Quick Facts Card 
+ (About + Facts Grid) Cuisine Type 
+ Segment 
+ Rating 
+ Capacity 
+ Menu Preview Card WiFi 
+ (Compact Menu) Terrace 
+ Entrantes (2 Opening Hours 
+ Principales (2) Distance 
+ Postres (2) 
+ Price 
+ 
+ 
+
 ```
 
 ---
@@ -67,25 +67,25 @@ The main view component that orchestrates the layout:
 
 ```tsx
 <section>
-  {/* Header & Navigation */}
-  <Header />
+ {/* Header & Navigation */}
+ <Header />
 
-  {/* Hero Section */}
-  <RestaurantHero />
+ {/* Hero Section */}
+ <RestaurantHero />
 
-  {/* 2-Column Premium Layout */}
-  <div className="grid gap-8 lg:grid-cols-3">
-    {/* Left Column (2/3) */}
-    <div className="lg:col-span-2 space-y-6">
-      <RestaurantOverview />
-      <RestaurantMenuPreviewCard />
-    </div>
+ {/* 2-Column Premium Layout */}
+ <div className="grid gap-8 lg:grid-cols-3">
+ {/* Left Column (2/3) */}
+ <div className="lg:col-span-2 space-y-6">
+ <RestaurantOverview />
+ <RestaurantMenuPreviewCard />
+ </div>
 
-    {/* Right Column (1/3) */}
-    <div className="lg:col-span-1">
-      <RestaurantSpecCard />
-    </div>
-  </div>
+ {/* Right Column (1/3) */}
+ <div className="lg:col-span-1">
+ <RestaurantSpecCard />
+ </div>
+ </div>
 </section>
 ```
 
@@ -104,8 +104,8 @@ The main view component that orchestrates the layout:
 **Props:**
 ```tsx
 {
-  restaurant: RestaurantDetail
-  menuData: TodayMenuResponse | null
+ restaurant: RestaurantDetail
+ menuData: TodayMenuResponse | null
 }
 ```
 
@@ -126,11 +126,11 @@ The main view component that orchestrates the layout:
 ### Grid Classes
 ```tsx
 <div className="grid gap-8 lg:grid-cols-3">
-  {/* Left: Takes 2 columns on lg+ screens */}
-  <div className="lg:col-span-2 space-y-6">
+ {/* Left: Takes 2 columns on lg+ screens */}
+ <div className="lg:col-span-2 space-y-6">
 
-  {/* Right: Takes 1 column on lg+ screens */}
-  <div className="lg:col-span-1">
+ {/* Right: Takes 1 column on lg+ screens */}
+ <div className="lg:col-span-1">
 ```
 
 ### Responsive Behavior
@@ -138,7 +138,7 @@ The main view component that orchestrates the layout:
 **Desktop (lg: 1024px+):**
 - Left column (2/3): 66.67% width
 - Right column (1/3): 33.33% width
-- Gap: 32px (2rem × 8)
+- Gap: 32px (2rem 8)
 - Left column items stack with 24px gap (space-y-6)
 
 **Tablet/Mobile (< 1024px):**
@@ -154,14 +154,14 @@ The main view component that orchestrates the layout:
 ### RestaurantMenuPreviewCard
 
 **Light Mode:**
-- Background gradient: #FAF7F0 → #F5F1E8 → #EAE5DB
+- Background gradient: #FAF7F0 #F5F1E8 #EAE5DB
 - Text: var(--text)
 - Muted text: var(--text-muted)
 - Accent: #D4AF37 (gold)
 - Border: rgba(212, 175, 55, 0.3)
 
 **Dark Mode:**
-- Background gradient: #2D2823 → #24201B → #1F1B16
+- Background gradient: #2D2823 #24201B #1F1B16
 - Text: var(--text)
 - Muted text: var(--text-muted)
 - Accent: #D4AF37 (gold) - unchanged
@@ -208,10 +208,10 @@ The main view component that orchestrates the layout:
 **Container:**
 ```tsx
 <motion.div
-  initial={{ opacity: 0, y: 20 }}
-  whileInView={{ opacity: 1, y: 0 }}
-  viewport={{ once: true }}
-  transition={{ duration: 0.5 }}
+ initial={{ opacity: 0, y: 20 }}
+ whileInView={{ opacity: 1, y: 0 }}
+ viewport={{ once: true }}
+ transition={{ duration: 0.5 }}
 >
 ```
 
@@ -237,31 +237,31 @@ transition={{ duration: 0.3, delay: (sectionIndex * 0.08) + (itemIndex * 0.04) }
 
 ```
 MenuView (loads data)
-  ├── fetch `/restaurants/{id}`
-  │   └── RestaurantDetail
-  │
-  ├── fetch `/restaurants/{id}/menu/today`
-  │   └── TodayMenuResponse
-  │
-  └── Components receive:
-      ├── RestaurantHero: restaurant, imageUrl
-      ├── RestaurantOverview: restaurant
-      ├── RestaurantMenuPreviewCard: restaurant, menuData
-      └── RestaurantSpecCard: restaurant
+ fetch `/restaurants/{id}`
+ RestaurantDetail
+ 
+ fetch `/restaurants/{id}/menu/today`
+ TodayMenuResponse
+ 
+ Components receive:
+ RestaurantHero: restaurant, imageUrl
+ RestaurantOverview: restaurant
+ RestaurantMenuPreviewCard: restaurant, menuData
+ RestaurantSpecCard: restaurant
 ```
 
 ### TodayMenuResponse Type
 
 ```typescript
 {
-  menu_id: number
-  restaurant_id: number
-  date: string (ISO 8601)
-  starter: string | null          // Semicolon-separated
-  main: string | null
-  dessert: string | null
-  includes_drink: boolean
-  menu_price?: number | null      // Optional, falls back to restaurant.menu_price
+ menu_id: number
+ restaurant_id: number
+ date: string (ISO 8601)
+ starter: string | null // Semicolon-separated
+ main: string | null
+ dessert: string | null
+ includes_drink: boolean
+ menu_price?: number | null // Optional, falls back to restaurant.menu_price
 }
 ```
 
@@ -271,11 +271,11 @@ Semicolon-separated values in menu fields are split and trimmed:
 
 ```tsx
 const parseMenuCourse = (rawValue: string | null | undefined): string[] => {
-  if (!rawValue) return []
-  return rawValue
-    .split(';')
-    .map((value) => value.trim())
-    .filter(Boolean)
+ if (!rawValue) return []
+ return rawValue
+ .split(';')
+ .map((value) => value.trim())
+ .filter(Boolean)
 }
 
 // Example:
@@ -288,7 +288,7 @@ const parseMenuCourse = (rawValue: string | null | undefined): string[] => {
 ```tsx
 const finalPrice = menuData.menu_price ?? restaurant.menu_price ?? 20
 
-// Priority: Menu-specific price → Restaurant default → Fallback 20€
+// Priority: Menu-specific price Restaurant default Fallback 
 ```
 
 ---
@@ -299,8 +299,8 @@ const finalPrice = menuData.menu_price ?? restaurant.menu_price ?? 20
 
 ```css
 /* Tailwind breakpoints */
-md:   768px   (tablet small)
-lg:   1024px  (tablet large / desktop)
+md: 768px (tablet small)
+lg: 1024px (tablet large / desktop)
 ```
 
 ### Layout Changes
@@ -325,11 +325,11 @@ When `menuData` is `null`:
 
 ```tsx
 <motion.div className="rounded-2xl border ... p-6 backdrop-blur-sm">
-  <div className="text-center">
-    <p className="text-sm text-[var(--text-muted)]">
-      Menú del día no disponible
-    </p>
-  </div>
+ <div className="text-center">
+ <p className="text-sm text-[var(--text-muted)]">
+ Menú del día no disponible
+ </p>
+ </div>
 </motion.div>
 ```
 
@@ -345,25 +345,25 @@ When `menuData` is `null`:
 
 ### RestaurantMenuPreviewCard (New - Integrated)
 
-✓ **Compact** - Fits upper layout
-✓ **Preview only** - First 2 items per section
-✓ **Elegant styling** - Premium hospitality feel
-✓ **Fast preview** - Quick overview of offerings
-✓ **"+N more" indicator** - Shows truncation
-✓ **Part of composition** - Fills empty space
-✗ **Not complete** - Only preview
+ **Compact** - Fits upper layout
+ **Preview only** - First 2 items per section
+ **Elegant styling** - Premium hospitality feel
+ **Fast preview** - Quick overview of offerings
+ **"+N more" indicator** - Shows truncation
+ **Part of composition** - Fills empty space
+ **Not complete** - Only preview
 
 **Use:** Restaurant detail page upper section
 
 ### RestaurantMenuCard (Existing - Full)
 
-✓ **Complete** - All menu items
-✓ **Detailed styling** - Full paper menu experience
-✓ **Elegant typography** - Serif fonts, gold accents
-✓ **Comprehensive** - All sections, prices, drinks
-✓ **Immersive** - Full menu experience
-✗ **Large** - Takes full width
-✗ **Takes space** - Bottom placement
+ **Complete** - All menu items
+ **Detailed styling** - Full paper menu experience
+ **Elegant typography** - Serif fonts, gold accents
+ **Comprehensive** - All sections, prices, drinks
+ **Immersive** - Full menu experience
+ **Large** - Takes full width
+ **Takes space** - Bottom placement
 
 **Use:** Full menu view (if needed in future)
 
@@ -390,8 +390,8 @@ When `menuData` is `null`:
 ### Visual
 - [ ] Paper-like background gradient visible
 - [ ] Gold accent color visible in light and dark modes
-- [ ] Icons display correctly (🥗 🍖 🍰)
-- [ ] Typography hierarchy clear (labels → sections → items)
+- [ ] Icons display correctly 
+- [ ] Typography hierarchy clear (labels sections items)
 - [ ] Animations smooth and not distracting
 - [ ] Borders and dividers visible
 
@@ -417,55 +417,55 @@ When `menuData` is `null`:
 ### Key Design Decisions
 
 1. **Integration Over Separation**
-   - Menu moved from bottom full-width to upper left column
-   - Creates balanced, premium presentation
-   - No visual gaps or disconnect
+ - Menu moved from bottom full-width to upper left column
+ - Creates balanced, premium presentation
+ - No visual gaps or disconnect
 
 2. **Preview Strategy**
-   - Shows first 2 items per section (not all)
-   - Indicates truncation with "+N more" label
-   - Keeps layout compact and elegant
-   - Users can request full menu if needed (future enhancement)
+ - Shows first 2 items per section (not all)
+ - Indicates truncation with "+N more" label
+ - Keeps layout compact and elegant
+ - Users can request full menu if needed (future enhancement)
 
 3. **Color Consistency**
-   - Uses #D4AF37 gold accent throughout
-   - Matches premium restaurant branding
-   - Works in both light and dark modes
-   - Paper-like gradients enhance luxury feel
+ - Uses #D4AF37 gold accent throughout
+ - Matches premium restaurant branding
+ - Works in both light and dark modes
+ - Paper-like gradients enhance luxury feel
 
 4. **Responsive Mobile-First**
-   - Single column on mobile (natural stack)
-   - 2-column on desktop (lg: 1024px+)
-   - Maintains visual hierarchy at all sizes
-   - Touch-friendly spacing and sizing
+ - Single column on mobile (natural stack)
+ - 2-column on desktop (lg: 1024px+)
+ - Maintains visual hierarchy at all sizes
+ - Touch-friendly spacing and sizing
 
 5. **Real Data Only**
-   - No invented content
-   - Database-driven from TodayMenuResponse
-   - Graceful empty state when unavailable
-   - Proper error handling
+ - No invented content
+ - Database-driven from TodayMenuResponse
+ - Graceful empty state when unavailable
+ - Proper error handling
 
 ### Future Enhancements
 
 1. **Full Menu Modal**
-   - "Ver menú completo" link
-   - Modal overlay with full RestaurantMenuCard
-   - Maintains preview in background
+ - "Ver menú completo" link
+ - Modal overlay with full RestaurantMenuCard
+ - Maintains preview in background
 
 2. **Menu History**
-   - Browse previous days' menus
-   - Calendar picker for different dates
-   - Archive view
+ - Browse previous days' menus
+ - Calendar picker for different dates
+ - Archive view
 
 3. **Dietary Filters**
-   - Allergen indicators
-   - Vegetarian/vegan/gluten-free tags
-   - Nutritional information
+ - Allergen indicators
+ - Vegetarian/vegan/gluten-free tags
+ - Nutritional information
 
 4. **Menu Analytics**
-   - Track popular items
-   - User ratings per dish
-   - Recommendation engine
+ - Track popular items
+ - User ratings per dish
+ - Recommendation engine
 
 ---
 
@@ -473,33 +473,33 @@ When `menuData` is `null`:
 
 ```
 src/
-├── views/client/
-│   └── MenuView.tsx                          [MODIFIED]
-│       ├── New integrated 2-column layout
-│       ├── Uses RestaurantMenuPreviewCard
-│       ├── No longer uses RestaurantMenuCard
-│       └── Cleaner JSX structure
-│
-├── components/restaurant/
-│   ├── RestaurantMenuPreviewCard.tsx         [NEW]
-│   │   ├── Compact menu preview
-│   │   ├── First 2 items per section
-│   │   ├── Premium paper-like styling
-│   │   └── Framer Motion animations
-│   │
-│   ├── RestaurantMenuCard.tsx                [EXISTING]
-│   │   ├── Full detailed menu (kept for future use)
-│   │   └── Not used in current layout
-│   │
-│   ├── RestaurantHero.tsx                    [EXISTING]
-│   ├── RestaurantOverview.tsx                [EXISTING]
-│   ├── RestaurantSpecCard.tsx                [EXISTING]
-│   └── index.ts                              [MODIFIED]
-│       └── Added RestaurantMenuPreviewCard export
-│
-└── utils/
-    └── formatTerraceType.ts                  [EXISTING]
-        └── Terrace value formatting (used by SpecCard)
+ views/client/
+ MenuView.tsx [MODIFIED]
+ New integrated 2-column layout
+ Uses RestaurantMenuPreviewCard
+ No longer uses RestaurantMenuCard
+ Cleaner JSX structure
+
+ components/restaurant/
+ RestaurantMenuPreviewCard.tsx [NEW]
+ Compact menu preview
+ First 2 items per section
+ Premium paper-like styling
+ Framer Motion animations
+ 
+ RestaurantMenuCard.tsx [EXISTING]
+ Full detailed menu (kept for future use)
+ Not used in current layout
+ 
+ RestaurantHero.tsx [EXISTING]
+ RestaurantOverview.tsx [EXISTING]
+ RestaurantSpecCard.tsx [EXISTING]
+ index.ts [MODIFIED]
+ Added RestaurantMenuPreviewCard export
+
+ utils/
+ formatTerraceType.ts [EXISTING]
+ Terrace value formatting (used by SpecCard)
 ```
 
 ---
@@ -510,17 +510,17 @@ src/
 ```
 npm run build
 
-✓ 2174 modules transformed
-✓ built in 1.07s
-dist/assets/index-*.css    63.44 kB (gzip: 10.83 kB)
-dist/assets/index-*.js     493.68 kB (gzip: 145.23 kB)
+ 2174 modules transformed
+ built in 1.07s
+dist/assets/index-*.css 63.44 kB (gzip: 10.83 kB)
+dist/assets/index-*.js 493.68 kB (gzip: 145.23 kB)
 ```
 
 ### Zero TypeScript Errors
 All new and modified files pass TypeScript validation:
-- ✓ MenuView.tsx
-- ✓ RestaurantMenuPreviewCard.tsx
-- ✓ restaurant/index.ts
+- MenuView.tsx
+- RestaurantMenuPreviewCard.tsx
+- restaurant/index.ts
 
 ### No Breaking Changes
 - Existing components remain functional
@@ -553,8 +553,8 @@ All new and modified files pass TypeScript validation:
 ```tsx
 // Verify grid structure
 <div className="grid gap-8 lg:grid-cols-3">
-  <div className="lg:col-span-2 space-y-6"> {/* 2/3 */}
-  <div className="lg:col-span-1">              {/* 1/3 */}
+ <div className="lg:col-span-2 space-y-6"> {/* 2/3 */}
+ <div className="lg:col-span-1"> {/* 1/3 */}
 ```
 
 ### Issue: Dark mode colors not matching
@@ -577,9 +577,9 @@ All new and modified files pass TypeScript validation:
 **Solution:**
 ```tsx
 // parseMenuCourse handles:
-// ✓ "Item 1;Item 2;Item 3"
-// ✓ "Item 1; Item 2; Item 3" (extra spaces)
-// ✓ null values (returns [])
+// "Item 1;Item 2;Item 3"
+// "Item 1; Item 2; Item 3" (extra spaces)
+// null values (returns [])
 ```
 
 ---
@@ -591,39 +591,39 @@ All new and modified files pass TypeScript validation:
 To modify styling, animations, or behavior:
 
 1. **Edit RestaurantMenuPreviewCard.tsx**
-   ```tsx
-   // Change padding
-   <div className="relative z-10 p-6">
-     // Change to p-8 for larger padding
+ ```tsx
+ // Change padding
+ <div className="relative z-10 p-6">
+ // Change to p-8 for larger padding
 
-   // Change animation duration
-   transition={{ duration: 0.5 }}
-     // Change to 0.3 for faster
-   ```
+ // Change animation duration
+ transition={{ duration: 0.5 }}
+ // Change to 0.3 for faster
+ ```
 
 2. **Update color palette**
-   ```tsx
-   // Light mode background
-   from-[#FAF7F0] via-[#F5F1E8] to-[#EAE5DB]
-   // Change hex values to adjust warmth
+ ```tsx
+ // Light mode background
+ from-[#FAF7F0] via-[#F5F1E8] to-[#EAE5DB]
+ // Change hex values to adjust warmth
 
-   // Dark mode background
-   dark:from-[#2D2823] dark:via-[#24201B] dark:to-[#1F1B16]
-   // Change hex values for different charcoal
-   ```
+ // Dark mode background
+ dark:from-[#2D2823] dark:via-[#24201B] dark:to-[#1F1B16]
+ // Change hex values for different charcoal
+ ```
 
 3. **Adjust preview item count**
-   ```tsx
-   // Currently shows first 2 items
-   section.items.slice(0, 2)
-   // Change 2 to 1 or 3 for different preview depth
-   ```
+ ```tsx
+ // Currently shows first 2 items
+ section.items.slice(0, 2)
+ // Change 2 to 1 or 3 for different preview depth
+ ```
 
 4. **Test changes**
-   ```bash
-   npm run build
-   # Verify 0 errors
-   ```
+ ```bash
+ npm run build
+ # Verify 0 errors
+ ```
 
 ### Monitoring Performance
 
@@ -639,12 +639,14 @@ To modify styling, animations, or behavior:
 The integrated menu layout refactoring transforms the restaurant detail page from a bottom-heavy layout to a **balanced, premium 2-column composition**. The menu is now part of the restaurant presentation experience, filling empty space while maintaining elegant design and visual hierarchy.
 
 **Key Achievements:**
-- ✅ Eliminated awkward empty space
-- ✅ Created balanced 2-column layout
-- ✅ Integrated menu into upper section
-- ✅ Maintained premium hospitality aesthetic
-- ✅ Responsive mobile-first design
-- ✅ Zero TypeScript errors
-- ✅ Production-ready implementation
+- Eliminated awkward empty space
+- Created balanced 2-column layout
+- Integrated menu into upper section
+- Maintained premium hospitality aesthetic
+- Responsive mobile-first design
+- Zero TypeScript errors
+- Production-ready implementation
 
 **Result:** Restaurant detail page now feels complete, intentional, and premium from top to bottom.
+
+

@@ -1,4 +1,4 @@
-import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react'
+﻿import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Search, Wifi, Sparkles, Building2, Briefcase, Users, ArrowLeft, Crown, Star, ChevronUp, ChevronDown, Navigation } from 'lucide-react'
 import { useUserLocation } from '../../context/LocationContext'
@@ -48,8 +48,8 @@ type DishRankingOrder = 'avg' | 'votes' | 'trend'
 type DishRankingRow = {
   dish_id: number | null
   dish_name: string
-  restaurant_id: number  // ✅ Nuevo
-  restaurant_name: string  // ✅ Nuevo
+  restaurant_id: number  // �o. Nuevo
+  restaurant_name: string  // �o. Nuevo
   avg_rating: number | null
   votes: number
   trend_7d: number | null
@@ -142,9 +142,9 @@ function mergeNearbyWithDetails(
 }
 
 function priceRangeLabel(range: PriceRange): string {
-  if (range === 'low') return 'Hasta €15'
-  if (range === 'mid') return '€15 - €25'
-  if (range === 'high') return 'Más de €25'
+  if (range === 'low') return 'Hasta �,�15'
+  if (range === 'mid') return '�,�15 - �,�25'
+  if (range === 'high') return 'Más de �,�25'
   return 'Todos los precios'
 }
 
@@ -266,7 +266,7 @@ const RestaurantCard = memo(function RestaurantCard({
               </span>}
             </span>
             <span className="text-xs font-semibold text-[#E07B54]">
-              {restaurant.menu_price ? `€${restaurant.menu_price}` : '-'}
+              {restaurant.menu_price ? `�,�${restaurant.menu_price}` : '-'}
             </span>
           </div>
           {userLocation && restaurant.distance_km !== undefined && (
@@ -689,7 +689,7 @@ export default function CatalogView() {
                     : 'text-[var(--text)] hover:bg-[var(--surface-soft)]'
                 }`}
               >
-                🗳️ Votos
+                �Y-�️ Votos
               </button>
             </div>
           </div>
@@ -726,7 +726,7 @@ export default function CatalogView() {
                                   key={i}
                                   className={`text-sm ${(row.avg_rating ?? 0) > i ? 'text-[#D4AF37]' : 'text-[#D4AF37]/20'}`}
                                 >
-                                  ★
+                                  �~.
                                 </span>
                               ))}
                               <span className="ml-1 text-xs text-[var(--text-muted)]">{row.avg_rating?.toFixed(1)}</span>
@@ -739,7 +739,7 @@ export default function CatalogView() {
                   <div className="overflow-hidden rounded-xl border border-[var(--border)]/60 bg-[var(--surface)]">
                     <div className="grid grid-cols-12 gap-2 border-b border-[var(--border)]/50 px-4 py-2 text-xs font-semibold text-[var(--text-muted)]">
                       <div className="col-span-1">#</div>
-                      <div className="col-span-11 text-right">Plato – Votos</div>
+                      <div className="col-span-11 text-right">Plato �?" Votos</div>
                     </div>
 
                     {dishRankingRows
@@ -767,7 +767,7 @@ export default function CatalogView() {
                       onClick={() => setDishRankingVisibleCount((prev) => prev + 5)}
                       className="inline-flex items-center rounded-lg border border-[#E07B54]/50 bg-[var(--surface-soft)] px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all hover:border-[#E07B54] hover:bg-[var(--surface-soft)]/80"
                     >
-                      ↓ Cargar más platos
+                      �?" Cargar más platos
                     </button>
                   </div>
                 )}
@@ -802,3 +802,4 @@ export default function CatalogView() {
     </div>
   )
 }
+

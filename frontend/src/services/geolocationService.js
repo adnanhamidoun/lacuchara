@@ -1,6 +1,6 @@
-/**
+﻿/**
  * Servicio de Geolocalización
- * 
+ *
  * Maneja:
  * - Solicitud de permisos de geolocalización
  * - Obtención de coordenadas del usuario
@@ -16,14 +16,16 @@ export async function requestGeolocationPermission() {
   try {
     if (!navigator.permissions || !navigator.permissions.query) {
       console.warn("Permissions API no disponible en este navegador");
-      return 'prompt';
+      return "prompt";
     }
 
-    const permission = await navigator.permissions.query({ name: 'geolocation' });
+    const permission = await navigator.permissions.query({
+      name: "geolocation",
+    });
     return permission.state; // 'granted', 'denied', 'prompt'
   } catch (error) {
     console.error("Error consultando permisos de geolocalización:", error);
-    return 'prompt';
+    return "prompt";
   }
 }
 
@@ -38,7 +40,7 @@ export function getUserLocation(options = {}) {
       enableHighAccuracy: true,
       timeout: 10000,
       maximumAge: 300000, // Cache para 5 minutos
-      ...options
+      ...options,
     };
 
     if (!navigator.geolocation) {
@@ -53,13 +55,13 @@ export function getUserLocation(options = {}) {
           latitude: parseFloat(latitude.toFixed(6)),
           longitude: parseFloat(longitude.toFixed(6)),
           accuracy: position.coords.accuracy,
-          timestamp: position.timestamp
+          timestamp: position.timestamp,
         });
       },
       (error) => {
         reject(error);
       },
-      defaultOptions
+      defaultOptions,
     );
   });
 }
@@ -67,7 +69,7 @@ export function getUserLocation(options = {}) {
 /**
  * Calcula distancia en km entre dos puntos usando Haversine
  * (Backup en caso de que el backend falle)
- * 
+ *
  * @param {number} lat1 - Latitud del punto 1
  * @param {number} lon1 - Longitud del punto 1
  * @param {number} lat2 - Latitud del punto 2 (restaurante)
@@ -78,12 +80,14 @@ export function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Radio de la Tierra en km
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
-  
-  const a = 
+
+  const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
@@ -101,10 +105,13 @@ function toRad(degrees) {
  */
 export function saveUserLocationLocal(location) {
   try {
-    localStorage.setItem('userLocation', JSON.stringify({
-      ...location,
-      timestamp: new Date().getTime()
-    }));
+    localStorage.setItem(
+      "userLocation",
+      JSON.stringify({
+        ...location,
+        timestamp: new Date().getTime(),
+      }),
+    );
   } catch (error) {
     console.warn("Error guardando ubicación en localStorage:", error);
   }
@@ -117,20 +124,21 @@ export function saveUserLocationLocal(location) {
  */
 export function loadUserLocationLocal(maxAgeMinutes = 30) {
   try {
-    const stored = localStorage.getItem('userLocation');
+    const stored = localStorage.getItem("userLocation");
     if (!stored) return null;
 
     const location = JSON.parse(stored);
-    const ageMinutes = (new Date().getTime() - location.timestamp) / (1000 * 60);
+    const ageMinutes =
+      (new Date().getTime() - location.timestamp) / (1000 * 60);
 
     if (ageMinutes > maxAgeMinutes) {
-      localStorage.removeItem('userLocation');
+      localStorage.removeItem("userLocation");
       return null;
     }
 
     return {
       latitude: location.latitude,
-      longitude: location.longitude
+      longitude: location.longitude,
     };
   } catch (error) {
     console.warn("Error cargando ubicación desde localStorage:", error);
@@ -146,7 +154,7 @@ export async function getLocationWithFallback() {
   // Intentar cargar del cache local
   const cached = loadUserLocationLocal(30);
   if (cached) {
-    console.log("📍 Usando ubicación del cache:", cached);
+    console.log("INFO: Usando ubicacion del cache:", cached);
     return cached;
   }
 
@@ -154,10 +162,10 @@ export async function getLocationWithFallback() {
   try {
     const location = await getUserLocation();
     saveUserLocationLocal(location);
-    console.log("📍 Ubicación obtenida del dispositivo:", location);
+    console.log("INFO: Ubicacion obtenida del dispositivo:", location);
     return location;
   } catch (error) {
-    console.error("❌ Error obteniendo ubicación:", error);
+    console.error("ERROR obteniendo ubicacion:", error);
     throw error;
   }
 }

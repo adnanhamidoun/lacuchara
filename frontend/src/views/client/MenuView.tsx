@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import type { RestaurantDetail } from '../../types/domain'
@@ -176,3 +176,4 @@ export default function MenuView() {
     </section>
   )
 }
+

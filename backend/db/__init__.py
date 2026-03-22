@@ -1,7 +1,6 @@
-"""
-Módulo de configuración y modelos de base de datos.
+﻿"""Database configuration and ORM model exports.
 
-Exporta los componentes principales para la integración con FastAPI.
+Exports the core components used by the FastAPI application.
 """
 
 from .database import engine, SessionLocal, Base, get_db, init_db
@@ -53,3 +52,5 @@ __all__ = [
     "TERRACE_OPTIONS",
     "CUISINE_OPTIONS",
 ]
+
+

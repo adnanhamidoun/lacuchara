@@ -1,7 +1,7 @@
-"""
-ANÁLISIS DE ESTRÉS - MODELO VOTINF ENSEMBLE (AZCA)
+﻿"""
+STRESS ANALYSIS�?S - MODELO VOTINF ENSEMBLE (AZCA)
 Senior ML Engineer Analysis
-Objetivo: Probar 10 escenarios extremos para validar robustez del modelo
+Goal: test 10 extreme scenarios to validate model robustness
 """
 
 import pickle
@@ -12,25 +12,25 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ============================================================================
-# 1. CARGAR MODELO
+# 1. LOAD MODEL
 # ============================================================================
 import sys
 sys.stdout.reconfigure(encoding='utf-8')
 
-print("[LOADING] Cargando modelo Azure AutoML (VotingEnsemble)...")
+print("[LOADING] Loading model Azure AutoML (VotingEnsemble)...")
 with open('model.pkl', 'rb') as f:
     modelo = pickle.load(f)
-print("[OK] Modelo cargado exitosamente\n")
+print("[OK] Model loaded exitosamente\n")
 
 # ============================================================================
-# 2. CREAR 10 ESCENARIOS EXTREMOS DE ESTRÉS
+# 2. CREATE 10 EXTREME STRESS SCENARIOS�?S
 # ============================================================================
 print("=" * 80)
-print("CREANDO 10 ESCENARIOS DE ESTRÉS")
+print("CREANDO 10 ESCENARIOS DE ESTR�?S")
 print("=" * 80 + "\n")
 
 def crear_base_scenario():
-    """Base común para todos los escenarios con valores neutrales"""
+    """Common base for all scenarios with neutral values"""
     return {
         'restaurant_id': 101,
         'capacity_limit': 150,
@@ -46,10 +46,10 @@ def crear_base_scenario():
         'cuisine_type': 'mediterranean'
     }
 
-# Definición de los 10 escenarios
+# Definition of 10 scenarios
 scenarios = []
 
-# Escenario 1: DÍA DE ORO [GOLDEN DAY]
+# Scenario 1: GOLDEN DAY [GOLDEN DAY]
 s1 = crear_base_scenario()
 s1.update({
     'service_date': datetime(2026, 3, 15),  # Viernes
@@ -60,20 +60,20 @@ s1.update({
     'is_azca_event': False,
     'is_holiday': False,
     'is_bridge_day': False,
-    'is_payday_week': True,  # Semana de paga
+    'is_payday_week': True,  # Payweek
     'is_business_day': True,
     'services_lag_7': 120,  # Demanda previa alta
     'avg_4_weeks': 118.0,
-    'logica_negocio': 'MAXIMA AFLUENCIA: Buen tiempo + Semana paga + Evento estadio + Labor'
+    'business_logic': 'MAXIMUM DEMAND: Buen tiempo + Semana paga + Evento estadio + Labor'
 })
-scenarios.append(('Dia de Oro [GOLDEN]', s1))
+scenarios.append(('Golden Day [GOLDEN]', s1))
 
-# Escenario 2: TORMENTA PERFECTA [PERFECT STORM]
+# Scenario 2: TORMENTA PERFECTA [PERFECT STORM]
 s2 = crear_base_scenario()
 s2.update({
     'service_date': datetime(2026, 3, 16),  # Lunes lluvia
-    'max_temp_c': 5,  # Frío extremo
-    'precipitation_mm': 30,  # Lluvia extrema
+    'max_temp_c': 5,  # Extreme cold
+    'precipitation_mm': 30,  # Extreme rain
     'is_rain_service_peak': True,
     'is_stadium_event': False,
     'is_azca_event': False,
@@ -83,11 +83,11 @@ s2.update({
     'is_business_day': True,
     'services_lag_7': 80,  # Demanda previa baja
     'avg_4_weeks': 85.0,
-    'logica_negocio': 'MINIMA AFLUENCIA: Lluvia extrema + Frio + Sin paga + Demanda baja'
+    'business_logic': 'MINIMUM DEMAND: Extreme rain + Frio + Sin paga + Demanda baja'
 })
-scenarios.append(('Tormenta Perfecta [STORM]', s2))
+scenarios.append(('Perfect Storm [STORM]', s2))
 
-# Escenario 3: EFECTO VACACIONES [VACATION EFFECT]
+# Scenario 3: EFECTO VACACIONES [VACATION EFFECT]
 s3 = crear_base_scenario()
 s3.update({
     'service_date': datetime(2026, 8, 15),  # Agosto
@@ -102,11 +102,11 @@ s3.update({
     'is_business_day': False,  # Vacaciones
     'services_lag_7': 45,  # Baja demanda previa (vacaciones)
     'avg_4_weeks': 50.0,
-    'logica_negocio': 'AGOSTO CRITICO: Calor extremo + Vacaciones + Pocas transacciones'
+    'business_logic': 'AGOSTO CRITICO: Calor extremo + Vacaciones + Pocas transacciones'
 })
 scenarios.append(('Efecto Vacaciones [VACATION]', s3))
 
-# Escenario 4: PICO POST-SALARIO [POST-PAYDAY PEAK]
+# Scenario 4: PICO POST-SALARIO [POST-PAYDAY PEAK]
 s4 = crear_base_scenario()
 s4.update({
     'service_date': datetime(2026, 3, 20),  # Primer viernes post-salario
@@ -121,11 +121,11 @@ s4.update({
     'is_business_day': True,
     'services_lag_7': 125,
     'avg_4_weeks': 120.0,
-    'logica_negocio': 'POST-SALARIO: Primera semana paga + Evento Azca + High spirits'
+    'business_logic': 'POST-SALARIO: Primera semana paga + Evento Azca + High spirits'
 })
-scenarios.append(('Pico PostSalario [PAYDAY]', s4))
+scenarios.append(('Post-Payday Peak [PAYDAY]', s4))
 
-# Escenario 5: FIN DE SEMANA LLUVIOSO [RAINY WEEKEND]
+# Scenario 5: FIN DE SEMANA LLUVIOSO [RAINY WEEKEND]
 s5 = crear_base_scenario()
 s5.update({
     'service_date': datetime(2026, 3, 22),  # Domingo
@@ -140,30 +140,30 @@ s5.update({
     'is_business_day': False,  # Fin semana
     'services_lag_7': 95,
     'avg_4_weeks': 100.0,
-    'logica_negocio': 'FIN SEMANA LLUVIOSO: Lluvia + Sin paga + No laboral compensado'
+    'business_logic': 'FIN SEMANA LLUVIOSO: Lluvia + Sin paga + No laboral compensado'
 })
-scenarios.append(('Fin de Semana [RAINY]', s5))
+scenarios.append(('Rainy Weekend [RAINY]', s5))
 
-# Escenario 6: NOCHE DE REYES [EPIPHANY NIGHT]
+# Scenario 6: NOCHE DE REYES [EPIPHANY NIGHT]
 s6 = crear_base_scenario()
 s6.update({
-    'service_date': datetime(2026, 1, 6),  # Día de Reyes
+    'service_date': datetime(2026, 1, 6),  # Epiphany day
     'max_temp_c': 8,
     'precipitation_mm': 2,
     'is_rain_service_peak': False,
     'is_stadium_event': False,
     'is_azca_event': True,
-    'is_holiday': True,  # FESTIVO
+    'is_holiday': True,  # HOLIDAY
     'is_bridge_day': False,
     'is_payday_week': True,
     'is_business_day': False,
     'services_lag_7': 110,
     'avg_4_weeks': 115.0,
-    'logica_negocio': 'FESTIVO: Día de Reyes + Holiday + Evento Azca + Post-paga'
+    'business_logic': 'HOLIDAY: Epiphany day + Holiday + Evento Azca + Post-paga'
 })
-scenarios.append(('Noche de Reyes [HOLIDAY]', s6))
+scenarios.append(('Epiphany Night [HOLIDAY]', s6))
 
-# Escenario 7: PUENTE FESTIVO [HOLIDAY BRIDGE]
+# Scenario 7: HOLIDAY BRIDGE [HOLIDAY BRIDGE]
 s7 = crear_base_scenario()
 s7.update({
     'service_date': datetime(2026, 5, 1),  # Puente festivo (1 mayo)
@@ -178,11 +178,11 @@ s7.update({
     'is_business_day': False,
     'services_lag_7': 100,
     'avg_4_weeks': 102.0,
-    'logica_negocio': 'PUENTE: Buen clima + Bridge day + Stadium event + No laboral'
+    'business_logic': 'PUENTE: Buen clima + Bridge day + Stadium event + No laboral'
 })
-scenarios.append(('Puente Festivo [BRIDGE]', s7))
+scenarios.append(('Holiday Bridge [BRIDGE]', s7))
 
-# Escenario 8: CRISIS TOTAL [TOTAL CRISIS]
+# Scenario 8: CRISIS TOTAL [TOTAL CRISIS]
 s8 = crear_base_scenario()
 s8.update({
     'service_date': datetime(2026, 2, 1),  # Febrero
@@ -197,11 +197,11 @@ s8.update({
     'is_business_day': True,
     'services_lag_7': 30,  # Demanda histórica muy baja
     'avg_4_weeks': 35.0,
-    'logica_negocio': 'CRISIS TOTAL: Todas las variables en rojo - Minimum predict'
+    'business_logic': 'CRISIS TOTAL: Todas las variables en rojo - Minimum predict'
 })
 scenarios.append(('Crisis Total [WORST]', s8))
 
-# Escenario 9: PUNTO DE EBULLICIÓN [BOILING POINT]
+# Scenario 9: PUNTO DE EBULLICI�"N [BOILING POINT]
 s9 = crear_base_scenario()
 s9.update({
     'service_date': datetime(2026, 6, 21),  # Verano
@@ -216,11 +216,11 @@ s9.update({
     'is_business_day': False,
     'services_lag_7': 140,  # Muy alto
     'avg_4_weeks': 135.0,
-    'logica_negocio': 'PUNTO EBULLICION: Todas variables en verde - Maximum predict'
+    'business_logic': 'PUNTO EBULLICION: Todas variables en verde - Maximum predict'
 })
-scenarios.append(('Punto Ebullicion [MAX]', s9))
+scenarios.append(('Boiling Point [MAX]', s9))
 
-# Escenario 10: DÍA NORMAL REFERENCIA [NORMAL DAY]
+# Scenario 10: DÍA NORMAL REFERENCIA [NORMAL DAY]
 s10 = crear_base_scenario()
 s10.update({
     'service_date': datetime(2026, 3, 18),  # Miércoles normal
@@ -235,12 +235,12 @@ s10.update({
     'is_business_day': True,
     'services_lag_7': 105,
     'avg_4_weeks': 107.0,
-    'logica_negocio': 'DIA NORMAL: Baseline para comparacion - Rango medio esperado'
+    'business_logic': 'DIA NORMAL: Baseline para comparacion - Rango medio esperado'
 })
-scenarios.append(('Dia Normal [BASELINE]', s10))
+scenarios.append(('Normal Day [BASELINE]', s10))
 
 # ============================================================================
-# 3. CREAR DATAFRAME DE PRUEBAS
+# 3. BUILD TEST DATAFRAME
 # ============================================================================
 print("\nConstructing test scenarios...\n")
 
@@ -252,7 +252,7 @@ for nombre, scenario_dict in scenarios:
 
 df_pruebas = pd.DataFrame(lista_datos)
 
-# Columnas en el orden correcto para el modelo
+# Columns in correct model order
 columnas_modelo = [
     'service_date', 'restaurant_id', 'max_temp_c', 'precipitation_mm',
     'is_rain_service_peak', 'is_stadium_event', 'is_azca_event', 'is_holiday',
@@ -263,33 +263,33 @@ columnas_modelo = [
 ]
 
 # ============================================================================
-# 4. GENERAR PREDICCIONES
+# 4. GENERATE PREDICTIONS
 # ============================================================================
 print("=" * 80)
-print("GENERANDO PREDICCIONES DEL MODELO")
+print("GENERANDO PREDICTIONONES DEL MODELO")
 print("=" * 80 + "\n")
 
 df_modelo = df_pruebas[columnas_modelo].copy()
-predicciones = modelo.predict(df_modelo)
+predictions = modelo.predict(df_modelo)
 
-df_pruebas['prediccion_servicios'] = predicciones.astype(int)
+df_pruebas['predicted_services'] = predictions.astype(int)
 
 # ============================================================================
-# 5. TABLA RESUMEN CON LÓGICA DE NEGOCIO
+# 5. SUMMARY TABLE WITH�"GICA DE NEGOCIO
 # ============================================================================
 print("=" * 80)
-print("TABLA RESUMEN - PREDICCIONES CON LÓGICA DE NEGOCIO")
+print("TABLA RESUMEN - PREDICTIONONES CON L�"GICA DE NEGOCIO")
 print("=" * 80 + "\n")
 
 df_resumen = df_pruebas[[
     'scenario_name', 'max_temp_c', 'precipitation_mm', 'is_payday_week',
     'is_stadium_event', 'is_azca_event', 'is_holiday', 'is_bridge_day',
-    'services_lag_7', 'prediccion_servicios', 'logica_negocio'
+    'services_lag_7', 'prediccion_servicios', 'business_logic'
 ]].copy()
 
 df_resumen.columns = [
     'Escenario', 'Temp(°C)', 'Lluvia(mm)', 'Paga', 'Estadio',
-    'Azca', 'Festivo', 'Puente', 'Lag7', 'Predicción', 'Lógica de Negocio'
+    'Azca', 'Festivo', 'Puente', 'Lag7', 'Predicción', 'Business Logic'
 ]
 
 # Mostrar tabla de forma legible
@@ -297,19 +297,19 @@ print(df_resumen.to_string(index=False))
 print("\n")
 
 # ============================================================================
-# 6. ESTADÍSTICAS GENERALES
+# 6. GENERAL STATISTICS
 # ============================================================================
 print("=" * 80)
-print("ESTADÍSTICAS DE PREDICCIONES")
+print("ESTADÍSTICAS DE PREDICTIONONES")
 print("=" * 80 + "\n")
 
 stats = {
-    'Predicción Mínima': df_pruebas['prediccion_servicios'].min(),
-    'Predicción Máxima': df_pruebas['prediccion_servicios'].max(),
-    'Promedio': df_pruebas['prediccion_servicios'].mean(),
-    'Mediana': df_pruebas['prediccion_servicios'].median(),
-    'Desv. Estándar': df_pruebas['prediccion_servicios'].std(),
-    'Rango (Max - Min)': df_pruebas['prediccion_servicios'].max() - df_pruebas['prediccion_servicios'].min(),
+    'Minimum prediction': df_pruebas['prediccion_servicios'].min(),
+    'Maximum prediction': df_pruebas['prediccion_servicios'].max(),
+    'Average': df_pruebas['prediccion_servicios'].mean(),
+    'Median': df_pruebas['prediccion_servicios'].median(),
+    'Std. deviation': df_pruebas['prediccion_servicios'].std(),
+    'Range (Max - Min)': df_pruebas['prediccion_servicios'].max() - df_pruebas['prediccion_servicios'].min(),
 }
 
 for key, value in stats.items():
@@ -318,7 +318,7 @@ for key, value in stats.items():
 print("\n")
 
 # ============================================================================
-# 7. ANÁLISIS DE SENSIBILIDAD: EVENTO ESTADIO
+# 7. SENSITIVITY ANALYSIS: STADIUM EVENT
 # ============================================================================
 print("=" * 80)
 print("ANÁLISIS DE SENSIBILIDAD: IMPACTO DE EVENTO EN ESTADIO")
@@ -366,11 +366,11 @@ promedio_impacto = df_sensitivity['Diferencia'].abs().mean()
 max_impacto = df_sensitivity['Diferencia'].abs().max()
 min_impacto = df_sensitivity['Diferencia'].abs().min()
 
-print(f"  Impacto Promedio del Evento Estadio: {promedio_impacto:.1f} servicios")
+print(f"  Impacto Average del Evento Estadio: {promedio_impacto:.1f} servicios")
 print(f"  Impacto Máximo: {max_impacto:.0f} servicios")
 print(f"  Impacto Mínimo: {min_impacto:.0f} servicios")
-print(f"\n  → El evento en estadio afecta en promedio ~{promedio_impacto:.0f} clientes/servicios")
-print(f"  → Esto representa el factor más importante en días con condiciones favorables")
+print(f"\n  �?' El evento en estadio afecta en promedio ~{promedio_impacto:.0f} clientes/servicios")
+print(f"  �?' Esto representa el factor más importante en días con condiciones favorables")
 
 # ============================================================================
 # 8. EXPORTAR RESULTADOS
@@ -394,3 +394,6 @@ print("[OK] Archivo 'sensibilidad_estadio.csv' creado")
 print("\n" + "=" * 80)
 print("[SUCCESS] ANALISIS COMPLETADO EXITOSAMENTE")
 print("=" * 80)
+
+
+

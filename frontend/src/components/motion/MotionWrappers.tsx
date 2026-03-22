@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Reusable animation wrapper components
  * Premium scroll-reveal motion components
  */
@@ -192,7 +192,7 @@ export function StaggerItem({ children, className, ...props }: StaggerItemProps)
 
 /**
  * HeroContent - Sequential reveal for hero sections
- * Title → Subtitle → CTA with delays
+ * Title �?' Subtitle �?' CTA with delays
  */
 interface HeroContentProps {
   children: ReactNode
@@ -210,3 +210,4 @@ export function HeroContent({ children, className }: HeroContentProps) {
     </motion.div>
   )
 }
+

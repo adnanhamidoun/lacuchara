@@ -1,33 +1,33 @@
-import { motion } from 'framer-motion'
-import type { RestaurantDetail } from '../../types/domain'
+﻿import { motion } from "framer-motion";
+import type { RestaurantDetail } from "../../types/domain";
 
 interface MenuItem {
-  title: string
-  items: string[]
-  icon: string
+  title: string;
+  items: string[];
+  icon: string;
 }
 
 interface RestaurantMenuCardProps {
-  restaurant: RestaurantDetail
+  restaurant: RestaurantDetail;
   menuData: {
-    menu_id: number
-    restaurant_id: number
-    date: string
-    starter: string | null
-    main: string | null
-    dessert: string | null
-    includes_drink: boolean
-    menu_price?: number | null
-  } | null
-  isLoading?: boolean
+    menu_id: number;
+    restaurant_id: number;
+    date: string;
+    starter: string | null;
+    main: string | null;
+    dessert: string | null;
+    includes_drink: boolean;
+    menu_price?: number | null;
+  } | null;
+  isLoading?: boolean;
 }
 
 function parseMenuCourse(rawValue: string | null | undefined): string[] {
-  if (!rawValue) return []
+  if (!rawValue) return [];
   return rawValue
-    .split(';')
+    .split(";")
     .map((value) => value.trim())
-    .filter(Boolean)
+    .filter(Boolean);
 }
 
 /**
@@ -35,7 +35,11 @@ function parseMenuCourse(rawValue: string | null | undefined): string[] {
  * Displays the daily menu like a refined paper menu card
  * with elegant typography and refined styling
  */
-export function RestaurantMenuCard({ restaurant, menuData, isLoading }: RestaurantMenuCardProps) {
+export function RestaurantMenuCard({
+  restaurant,
+  menuData,
+  isLoading,
+}: RestaurantMenuCardProps) {
   if (isLoading) {
     return (
       <motion.div
@@ -54,7 +58,7 @@ export function RestaurantMenuCard({ restaurant, menuData, isLoading }: Restaura
           </div>
         </div>
       </motion.div>
-    )
+    );
   }
 
   if (!menuData) {
@@ -67,25 +71,26 @@ export function RestaurantMenuCard({ restaurant, menuData, isLoading }: Restaura
         className="overflow-hidden rounded-2xl border border-[var(--border)]/30 bg-gradient-to-br from-[#F5F1E8] to-[#EAE5DB] dark:from-[#2A2520] dark:to-[#1F1B16] p-12 shadow-md"
       >
         <div className="flex flex-col items-center justify-center gap-4">
-          <div className="text-4xl">📋</div>
+          <div className="text-4xl">!</div>
           <h3 className="text-center text-lg font-semibold text-[var(--text)]">
             Este restaurante no ha publicado menú para hoy
           </h3>
           <p className="text-center text-sm text-[var(--text-muted)]">
-            Consulta la carta del restaurante en el local o contacta directamente
+            Consulta la carta del restaurante en el local o contacta
+            directamente
           </p>
         </div>
       </motion.div>
-    )
+    );
   }
 
   const menuSections: MenuItem[] = [
-    { title: 'Entrantes', items: parseMenuCourse(menuData.starter), icon: '🥗' },
-    { title: 'Principales', items: parseMenuCourse(menuData.main), icon: '🍖' },
-    { title: 'Postres', items: parseMenuCourse(menuData.dessert), icon: '🍰' },
-  ].filter((section) => section.items.length > 0)
+    { title: "Entrantes", items: parseMenuCourse(menuData.starter), icon: "E" },
+    { title: "Principales", items: parseMenuCourse(menuData.main), icon: "P" },
+    { title: "Postres", items: parseMenuCourse(menuData.dessert), icon: "D" },
+  ].filter((section) => section.items.length > 0);
 
-  const finalPrice = menuData.menu_price ?? restaurant.menu_price ?? 20
+  const finalPrice = menuData.menu_price ?? restaurant.menu_price ?? 20;
 
   return (
     <motion.div
@@ -117,11 +122,11 @@ export function RestaurantMenuCard({ restaurant, menuData, isLoading }: Restaura
               {/* Date and Info */}
               <div className="mb-4 text-center sm:text-left">
                 <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
-                  {new Date(menuData.date).toLocaleDateString('es-ES', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
+                  {new Date(menuData.date).toLocaleDateString("es-ES", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
                   })}
                 </p>
               </div>
@@ -134,7 +139,7 @@ export function RestaurantMenuCard({ restaurant, menuData, isLoading }: Restaura
               {/* Drink Badge */}
               <div className="mt-6 flex justify-center">
                 <span className="inline-block rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#D4AF37]">
-                  {menuData.includes_drink ? '🍷 Incluye bebida' : '🍽️ Sin bebida'}
+                  {menuData.includes_drink ? "Incluye bebida" : "Sin bebida"}
                 </span>
               </div>
             </div>
@@ -169,13 +174,18 @@ export function RestaurantMenuCard({ restaurant, menuData, isLoading }: Restaura
                         initial={{ opacity: 0, x: -10 }}
                         whileInView={{ opacity: 1, x: 0 }}
                         viewport={{ once: true }}
-                        transition={{ duration: 0.4, delay: (sectionIndex * 0.1) + (itemIndex * 0.05) }}
+                        transition={{
+                          duration: 0.4,
+                          delay: sectionIndex * 0.1 + itemIndex * 0.05,
+                        }}
                         className="flex items-start gap-3"
                       >
                         {/* Elegant bullet */}
                         <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#D4AF37]/60 flex-shrink-0" />
                         {/* Item text */}
-                        <p className="text-sm leading-relaxed text-[var(--text)]">{item}</p>
+                        <p className="text-sm leading-relaxed text-[var(--text)]">
+                          {item}
+                        </p>
                       </motion.div>
                     ))}
                   </div>
@@ -197,21 +207,23 @@ export function RestaurantMenuCard({ restaurant, menuData, isLoading }: Restaura
                   Precio del menú del día
                 </p>
                 <p className="text-4xl font-serif font-bold text-[#D4AF37]">
-                  €{finalPrice.toFixed(2)}
+                  EUR {finalPrice.toFixed(2)}
                 </p>
-                <p className="mt-2 text-xs text-[var(--text-muted)]">Por persona</p>
+                <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  Por persona
+                </p>
               </div>
             </div>
 
             {/* Bottom Decoration */}
             <div className="mt-8 flex items-center justify-center gap-2 text-[#D4AF37]/40">
-              <span className="text-lg">✦</span>
-              <span className="text-lg">✦</span>
-              <span className="text-lg">✦</span>
+              <span className="text-lg">*</span>
+              <span className="text-lg">*</span>
+              <span className="text-lg">*</span>
             </div>
           </div>
         </div>
       </div>
     </motion.div>
-  )
+  );
 }

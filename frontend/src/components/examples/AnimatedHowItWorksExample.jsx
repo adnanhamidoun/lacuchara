@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Example: Animated "Cómo Funciona" section with Framer Motion
  * Shows how to use motion wrappers for scroll-based reveals
  */
@@ -109,3 +109,4 @@ export default function AnimatedHowItWorksSection() {
     </section>
   )
 }
+

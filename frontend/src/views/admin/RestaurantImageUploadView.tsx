@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useAuth } from '../../components/auth/AuthContext.jsx'
 import { uploadRestaurantImage, getRestaurantImage } from '../../services/authService'
 import type { RestaurantDetail } from '../../types/domain'
@@ -81,7 +81,7 @@ export default function RestaurantImageUploadView() {
       const imageData = await getRestaurantImage(selectedRestaurantId)
       setPreviewUrl(imageData.data_uri || '')
 
-      setMessage('✅ Imagen subida correctamente')
+      setMessage('�o. Imagen subida correctamente')
       setSelectedFile(null)
 
       // Limpiar input
@@ -159,7 +159,7 @@ export default function RestaurantImageUploadView() {
               className="w-full text-sm mt-1 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#1A1A2E]/5 file:text-[#1A1A2E] hover:file:bg-[#1A1A2E]/10 cursor-pointer text-[var(--text)]"
             />
             <p className="text-xs text-[var(--text-muted)]">
-              máx. 5MB • JPEG, PNG, WebP
+              máx. 5MB �?� JPEG, PNG, WebP
             </p>
           </div>
 
@@ -239,3 +239,4 @@ export default function RestaurantImageUploadView() {
     </section>
   )
 }
+

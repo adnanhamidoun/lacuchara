@@ -1,20 +1,20 @@
-import pickle
+﻿import pickle
 import pandas as pd
 from datetime import datetime
 
-# 1. Cargar el modelo
+# 1. Load model
 with open('model.pkl', 'rb') as f:
     modelo = pickle.load(f)
 
 def probr_ia():
     print("\n--- SIMULADOR DE AZCA ---")
-    temp = float(input("¿Qué temperatura máxima hará? (ej: 22): "))
-    lluvia = float(input("¿Cuántos mm de lluvia? (0 si está despejado): "))
-    payday = input("¿Es semana de paga? (s/n): ").lower() == 's'
+    temp = float(input("What maximum temperature is expected? (e.g., 22): "))
+    lluvia = float(input("How many mm of rain? (0 if clear): "))
+    payday = input("Is it payday week? (y/n): ").lower() == 's'
     stadium = input("¿Hay evento en el estadio? (s/n): ").lower() == 's'
     
     # Creamos el diccionario con los 24 campos
-    # Ponemos valores 'base' para lo que no cambia
+    # Set baseline values for fields that do not change
     datos = {
         'service_date': [datetime.now()],
         'restaurant_id': [101],
@@ -45,10 +45,11 @@ def probr_ia():
     df = pd.DataFrame(datos)
     pred = modelo.predict(df)[0]
     
-    print(f"\n>>> PREDICCIÓN: {int(pred)} servicios.")
+    print(f"\n>>> PREDICCI�"N: {int(pred)} servicios.")
     print("-" * 30)
 
 if __name__ == "__main__":
     while True:
         probr_ia()
         if input("¿Otra prueba? (s/n): ").lower() != 's': break
+

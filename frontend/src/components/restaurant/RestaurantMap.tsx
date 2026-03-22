@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+﻿import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import type { RestaurantDetail } from '../../types/domain'
 
@@ -77,3 +77,4 @@ export function RestaurantMap({ restaurant }: RestaurantMapProps) {
     </div>
   )
 }
+

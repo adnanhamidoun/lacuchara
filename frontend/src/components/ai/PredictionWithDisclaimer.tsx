@@ -1,4 +1,4 @@
-// Wrapper componente para mostrar predicciones con disclaimer de IA responsable
+﻿// Wrapper componente para mostrar predicciones con disclaimer de IA responsable
 
 import { ReactNode } from 'react'
 import AIDisclaimer from './AIDisclaimer'
@@ -65,10 +65,11 @@ export default function PredictionWithDisclaimer({
 
       {/* Pie de página con meta información */}
       <div className="text-xs text-[var(--text-muted)] flex gap-4 text-center">
-        <span>🔄 Actualizado: Hace 1 hora</span>
-        <span>📊 Datos: 28 días históricos</span>
-        <span>🎯 Precisión esperada: {confidenceLevel === 'high' ? '85-95%' : confidenceLevel === 'medium' ? '75-85%' : '60-75%'}</span>
+        <span>�Y"" Actualizado: Hace 1 hora</span>
+        <span>�Y"S Datos: 28 días históricos</span>
+        <span>�YZ� Precisión esperada: {confidenceLevel === 'high' ? '85-95%' : confidenceLevel === 'medium' ? '75-85%' : '60-75%'}</span>
       </div>
     </div>
   )
 }
+

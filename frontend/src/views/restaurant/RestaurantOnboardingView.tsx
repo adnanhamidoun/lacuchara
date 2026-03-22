@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { createInscripcion, uploadInscripcionImage } from '../../services/inscripcionesService.ts'
 import type { InscripcionCreatePayload } from '../../types/domain'
 import { CUISINE_META } from '../../utils/cuisine'
@@ -379,7 +379,7 @@ export default function RestaurantOnboardingView() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-[var(--text)]">Precio medio menú (€)</label>
+              <label className="text-sm font-semibold text-[var(--text)]">Precio medio menú (�,�)</label>
               <input
                 type="number"
                 min={0}
@@ -459,7 +459,7 @@ export default function RestaurantOnboardingView() {
                 className="w-full text-sm mt-1 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#1A1A2E]/5 file:text-[#1A1A2E] hover:file:bg-[#1A1A2E]/10 cursor-pointer text-[var(--text)]"
               />
               {selectedImageFile ? (
-                <p className="text-xs text-green-600 mt-1">✔ Imagen seleccionada. Se subirá al enviar la inscripción.</p>
+                <p className="text-xs text-green-600 mt-1">�o" Imagen seleccionada. Se subirá al enviar la inscripción.</p>
               ) : null}
               {imagePreviewUrl ? (
                 <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]/40">
@@ -490,7 +490,7 @@ export default function RestaurantOnboardingView() {
                     : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--surface-soft)]'
                 }`}
               >
-                {form.opens_weekends ? '✅ Abre fines de semana' : '⬜ Abre fines de semana'}
+                {form.opens_weekends ? '�o. Abre fines de semana' : '�o Abre fines de semana'}
               </button>
 
               <button
@@ -502,7 +502,7 @@ export default function RestaurantOnboardingView() {
                     : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--surface-soft)]'
                 }`}
               >
-                {form.has_wifi ? '✅ Tiene WiFi' : '⬜ Tiene WiFi'}
+                {form.has_wifi ? '�o. Tiene WiFi' : '�o Tiene WiFi'}
               </button>
             </div>
           </div>
@@ -544,3 +544,4 @@ export default function RestaurantOnboardingView() {
     </section>
   )
 }
+

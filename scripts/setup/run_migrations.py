@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Script para ejecutar migraciones SQL en Azure SQL.
 Agrega la columna image_data a dim_restaurants.
@@ -19,7 +19,7 @@ def add_image_data_column():
     """Agregar columna image_data si no existe"""
     try:
         with engine.connect() as connection:
-            # Verificar si la columna ya existe
+            # Verify si la columna ya existe
             result = connection.execute(text("""
                 SELECT COLUMN_NAME
                 FROM INFORMATION_SCHEMA.COLUMNS
@@ -27,28 +27,31 @@ def add_image_data_column():
             """))
             
             if result.fetchone():
-                print("✅ Columna 'image_data' ya existe")
+                print("�o. Columna 'image_data' ya existe")
                 return True
             
             # Agregar columna
-            print("📝 Agregando columna 'image_data' a dim_restaurants...")
+            print("�Y"� Agregando columna 'image_data' a dim_restaurants...")
             connection.execute(text("""
                 ALTER TABLE dim_restaurants
                 ADD image_data VARBINARY(MAX) NULL
             """))
             connection.commit()
-            print("✅ Columna 'image_data' agregada correctamente")
+            print("�o. Columna 'image_data' agregada correctamente")
             return True
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"�O Error: {e}")
         return False
 
 if __name__ == "__main__":
-    print("🔄 Ejecutando migraciones...")
+    print("�Y"" Ejecutando migraciones...")
     if add_image_data_column():
-        print("✅ Migraciones completadas")
+        print("�o. Migraciones completadas")
         exit(0)
     else:
-        print("❌ Error en migraciones")
+        print("�O Error in migrations")
         exit(1)
+
+
+

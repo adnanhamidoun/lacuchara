@@ -1,4 +1,4 @@
-import { Wifi, MapPin, Wine, Star, Users, Clock, Utensils, Armchair, Umbrella } from 'lucide-react'
+﻿import { Wifi, MapPin, Wine, Star, Users, Clock, Utensils, Armchair, Umbrella } from 'lucide-react'
 import type { RestaurantDetail } from '../../types/domain'
 import { formatTerraceType } from '../../utils/formatTerraceType'
 
@@ -69,7 +69,7 @@ export function RestaurantOverview({ restaurant }: RestaurantOverviewProps) {
             <QuickFactCard
               icon={Wine}
               label="Precio Menú"
-              value={`€${restaurant.menu_price.toFixed(0)}`}
+              value={`�,�${restaurant.menu_price.toFixed(0)}`}
             />
           )}
           {restaurant.capacity_limit && (
@@ -89,3 +89,4 @@ export function RestaurantOverview({ restaurant }: RestaurantOverviewProps) {
     </div>
   )
 }
+

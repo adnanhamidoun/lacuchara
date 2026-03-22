@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { MapPin, Navigation } from 'lucide-react';
 import { formatDistance } from '../services/geolocationService';
 
@@ -63,3 +63,4 @@ function toRad(degrees) {
 }
 
 export default RestaurantDistance;
+

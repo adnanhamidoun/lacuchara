@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-"""Test script para los endpoints de imagen Base64"""
+﻿#!/usr/bin/env python
+"""Test script for Base64 image endpoints."""
 
 import requests
 import base64
@@ -12,28 +12,28 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BASE_URL = "http://localhost:8000"
 RESTAURANT_ID = 1
 
-# Token de admin (puede ser cualquier token válido)
+# Admin token (puede ser cualquier token valid)
 ADMIN_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluIiwicm9sZSI6ImFkbWluIiwicmVzdGF1cmFudF9pZCI6MCwiaWF0IjoxNjk5NDIwODAwfQ.test"
 
-# Token de restaurante
+# Restaurant token
 RESTAURANT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImF6Y2FwcmltZWdyaWxsIiwicm9sZSI6InJlc3RhdXJhbnRfb3duZXIiLCJyZXN0YXVyYW50X2lkIjoxLCJpYXQiOjE2OTk0MjA4MDB9.test"
 
 def test_image_upload():
-    """Test PATCH /restaurants/{id}/image con archivo"""
-    print(f"\n📸 Test: Subir imagen a restaurante {RESTAURANT_ID}")
+    """Test PATCH /restaurants/{id}/image with file upload."""
+    print(f"\nTest: Upload image to restaurant {RESTAURANT_ID}")
     
-    # Crear una imagen de prueba simple
+    # Create a simple test image
     image_path = PROJECT_ROOT / "tests" / "assets" / "test_image.png"
     
-    # Si no existe, usar una URL de imagen de prueba pequeña
+    # If missing, download a small placeholder image
     if not image_path.exists():
-        print(f"  ⚠️  No encontrado {image_path}, descargando imagen de prueba...")
+        print(f"  Not found {image_path}, downloading test image...")
         try:
             response = requests.get("https://placehold.co/200x200.png")
             with open(image_path, "wb") as f:
                 f.write(response.content)
         except Exception as e:
-            print(f"  ❌ Error descargando imagen: {e}")
+            print(f"  �O Error downloading image: {e}")
             return False
     
     try:
@@ -49,68 +49,71 @@ def test_image_upload():
         
         if response.status_code == 200:
             data = response.json()
-            print(f"  ✅ Imagen subida correctamente")
+            print("  Image uploaded successfully")
             print(f"     - Base64 length: {len(data['image_base64'])} chars")
             print(f"     - Content-Type: {data['content_type']}")
             return True
         else:
-            print(f"  ❌ Error: {response.status_code}")
+            print(f"  �O Error: {response.status_code}")
             print(f"     Response: {response.text}")
             return False
     except Exception as e:
-        print(f"  ❌ Error: {e}")
+        print(f"  �O Error: {e}")
         return False
 
 def test_image_retrieve():
-    """Test GET /restaurants/{id}/image"""
-    print(f"\n📥 Test: Recuperar imagen del restaurante {RESTAURANT_ID}")
+    """Test GET /restaurants/{id}/image."""
+    print(f"\nTest: Retrieve image for restaurant {RESTAURANT_ID}")
     
     try:
         response = requests.get(f"{BASE_URL}/restaurants/{RESTAURANT_ID}/image")
         
         if response.status_code == 200:
             data = response.json()
-            print(f"  ✅ Imagen recuperada correctamente")
+            print("  Image retrieved successfully")
             print(f"     - Base64 length: {len(data['image_base64'])} chars")
             print(f"     - Data URI starts with: {data['data_uri'][:50]}...")
             
-            # Verificar que podemos decodificar el base64
+            # Verify base64 decoding works
             try:
                 image_data = base64.b64decode(data['image_base64'])
                 print(f"     - Decoded size: {len(image_data)} bytes")
             except Exception as e:
-                print(f"     ❌ Error decodificando Base64: {e}")
+                print(f"     �O Error decoding Base64: {e}")
                 return False
             
             return True
         elif response.status_code == 404:
-            print(f"  ℹ️  No hay imagen (esperado si es la primera vez)")
+            print("  No image found (expected on first run)")
             return True
         else:
-            print(f"  ❌ Error: {response.status_code}")
+            print(f"  �O Error: {response.status_code}")
             print(f"     Response: {response.text}")
             return False
     except Exception as e:
-        print(f"  ❌ Error: {e}")
+        print(f"  �O Error: {e}")
         return False
 
 def main():
-    print("🧪 Test de endpoints de imagen Base64")
+    print("Base64 image endpoint tests")
     print("=" * 50)
     
-    # Test 1: Subir imagen
+    # Test 1: Upload image
     upload_ok = test_image_upload()
     
-    # Test 2: Recuperar imagen
+    # Test 2: Retrieve image
     retrieve_ok = test_image_retrieve()
     
     print("\n" + "=" * 50)
     if upload_ok and retrieve_ok:
-        print("✅ Todos los tests pasaron")
+        print("All tests passed")
         return 0
     else:
-        print("❌ Algunos tests fallaron")
+        print("Some tests failed")
         return 1
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+

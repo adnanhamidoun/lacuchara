@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from 'react'
+﻿import { useState, useMemo, memo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Sparkles, Building2, Briefcase, Users } from 'lucide-react'
 import { useRestaurants } from '../../hooks/useRestaurants'
@@ -279,3 +279,4 @@ export default function LandingPageView() {
     </div>
   )
 }
+

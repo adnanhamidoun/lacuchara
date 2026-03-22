@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Star } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { CookingPot, Dessert, GlassWater, Salad } from 'lucide-react'
@@ -381,7 +381,7 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
                                 <div className="flex items-center gap-2 sm:justify-end">
                                   <DishStars value={myValue} onChange={onRate} disabled={disabled} />
                                   <span className="w-10 text-right text-[11px] tabular-nums text-[var(--text-muted)]">
-                                    {summary && summary.votes > 0 ? `${summary.avg_rating.toFixed(1)} (${summary.votes})` : '—'}
+                                    {summary && summary.votes > 0 ? `${summary.avg_rating.toFixed(1)} (${summary.votes})` : '�?"'}
                                   </span>
                                 </div>
                               )
@@ -400,7 +400,7 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
                 <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--text-muted)]">
                   Precio del menú
                 </p>
-                <p className="text-2xl font-bold text-[#E07B54]">€{finalPrice.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-[#E07B54]">�,�{finalPrice.toFixed(2)}</p>
               </div>
 
               {menuData.includes_drink && (
@@ -416,3 +416,4 @@ export function RestaurantMenuPreviewCard({ restaurant, menuData }: RestaurantMe
     </motion.div>
   )
 }
+

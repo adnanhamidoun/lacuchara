@@ -1,4 +1,4 @@
-// Página de ejemplo - Cómo integrar IA responsable en predicciones
+﻿// Página de ejemplo - Cómo integrar IA responsable en predicciones
 
 import AIFailureWarning from '../components/ai/AIFailureWarning'
 import PredictionConfidenceBreakdown from '../components/ai/PredictionConfidenceBreakdown'
@@ -43,25 +43,25 @@ export default function IAResponsableExamplePage() {
     {
       scenario: 'Evento local no previsto',
       probability: 'high' as const,
-      example: 'Se anuncia un concierto gratuito en la plaza cercana → +40% servicios',
+      example: 'Se anuncia un concierto gratuito en la plaza cercana �?' +40% servicios',
       whatToDo: 'Si sabes de eventos próximos, ajusta manualmente tu stock',
     },
     {
       scenario: 'Cambio de marketing',
       probability: 'medium' as const,
-      example: 'Promoción viral en TikTok → inesperado aumento de tráfico',
+      example: 'Promoción viral en TikTok �?' inesperado aumento de tráfico',
       whatToDo: 'Monitorea redes sociales. Si promoción funciona, notifica al sistema.',
     },
     {
       scenario: 'Cambio de competencia',
       probability: 'medium' as const,
-      example: 'Cierra el pub de al lado → clientes migran',
+      example: 'Cierra el pub de al lado �?' clientes migran',
       whatToDo: 'El modelo se adaptará en 2-3 semanas. Mientras, ajusta manualmente.',
     },
     {
       scenario: 'Pandemia o cierre obligatorio',
       probability: 'low' as const,
-      example: '2020: COVID lockdown → todos los restaurantes cerrados',
+      example: '2020: COVID lockdown �?' todos los restaurantes cerrados',
       whatToDo: 'En crisis menor: el modelo se adapta. En crisis mayor: ignora predicciones.',
     },
   ]
@@ -69,7 +69,7 @@ export default function IAResponsableExamplePage() {
   // Ejemplo 2: Predicción de platos
   const platosFactores = [
     {
-      name: 'Historial de Órdenes',
+      name: 'Historial de �"rdenes',
       score: 88,
       description: '30 días de datos de órdenes (suficiente para tendencias)',
       impact: 'high' as const,
@@ -89,7 +89,7 @@ export default function IAResponsableExamplePage() {
     {
       name: 'Cambios de Menú',
       score: 30,
-      description: '3 platos nuevos en últimas 2 semanas → datos limitados',
+      description: '3 platos nuevos en últimas 2 semanas �?' datos limitados',
       impact: 'high' as const,
     },
   ]
@@ -110,13 +110,13 @@ export default function IAResponsableExamplePage() {
     {
       scenario: 'Cambio de precio o tamaño',
       probability: 'medium' as const,
-      example: 'Subiste "Ensalada" de 6€ a 9€ → demanda cae (no capturado)',
+      example: 'Subiste "Ensalada" de 6�,� a 9�,� �?' demanda cae (no capturado)',
       whatToDo: 'El modelo no ve cambios de precio. Notifica al sistema si cambio es drástico.',
     },
     {
       scenario: 'Tendencia viral no prevista',
       probability: 'low' as const,
-      example: 'TikTok: "Challenge: probar el plato X" → demanda de un plato x10',
+      example: 'TikTok: "Challenge: probar el plato X" �?' demanda de un plato x10',
       whatToDo: 'Evento viral es impredecible. Confía en instinto + historial.',
     },
   ]
@@ -127,7 +127,7 @@ export default function IAResponsableExamplePage() {
         {/* Header */}
         <div className="space-y-4">
           <h1 className="text-4xl font-bold text-[var(--text)]">
-            🤖 Ejemplo: IA Responsable en Predicciones
+            �Y�- Ejemplo: IA Responsable en Predicciones
           </h1>
           <p className="text-lg text-[var(--text-muted)]">
             Esta página muestra cómo usar correctamente los componentes de IA responsable 
@@ -138,14 +138,14 @@ export default function IAResponsableExamplePage() {
         {/* Sección 1: Predicción de Servicios */}
         <section className="space-y-8 pb-8 border-b border-[var(--border)]">
           <h2 className="text-3xl font-bold text-[var(--text)]">
-            📈 Ejemplo 1: Predicción de Servicios
+            �Y"^ Ejemplo 1: Predicción de Servicios
           </h2>
 
           {/* Disclaimer general */}
           <AIDisclaimer
             type="info"
             title="Sobre esta predicción"
-            message="Las predicciones se basan en historial y factores externos. Úsalas como guía, no como verdad absoluta."
+            message="Las predicciones se basan en historial y factores externos. �ssalas como guía, no como verdad absoluta."
           />
 
           {/* Wrapper con todo */}
@@ -266,55 +266,55 @@ export default function IAResponsableExamplePage() {
 
         {/* Resumen de mejores prácticas */}
         <section className="space-y-6 p-8 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          <h2 className="text-2xl font-bold text-[var(--text)]">✅ Mejores Prácticas con IA Responsable</h2>
+          <h2 className="text-2xl font-bold text-[var(--text)]">�o. Mejores Prácticas con IA Responsable</h2>
 
           <div className="grid gap-4 md:grid-cols-2">
             {[
               {
-                icon: '✓',
+                icon: '�o"',
                 title: 'HAGO: Combinar IA con criterio humano',
                 desc: 'IA sugiere, tú decides. No ignores tu experiencia.',
               },
               {
-                icon: '✓',
+                icon: '�o"',
                 title: 'HAGO: Validar predicciones vs realidad',
                 desc: 'Si predice "20 servicios" pero llegan 30, ajusta manualmente.',
               },
               {
-                icon: '✓',
+                icon: '�o"',
                 title: 'HAGO: Comunicar cambios importantes',
                 desc: 'Si haces promoción o cambias menú, avisa al sistema.',
               },
               {
-                icon: '✓',
+                icon: '�o"',
                 title: 'HAGO: Revisar confianza',
-                desc: 'Confianza baja (< 60%) → aumenta tu margen de error.',
+                desc: 'Confianza baja (< 60%) �?' aumenta tu margen de error.',
               },
               {
-                icon: '✗',
+                icon: '�o-',
                 title: 'NO HAGO: Confiar ciegamente',
                 desc: 'Aunque diga 95% confianza, siempre hay riesgo.',
               },
               {
-                icon: '✗',
+                icon: '�o-',
                 title: 'NO HAGO: Ignorar "alucinaciones"',
                 desc: 'Valida que platos existen en tu menú actual.',
               },
               {
-                icon: '✗',
+                icon: '�o-',
                 title: 'NO HAGO: Usar predicciones >30 días futuro',
                 desc: 'Precisión cae mucho. Usa solo para planificación general.',
               },
               {
-                icon: '✗',
+                icon: '�o-',
                 title: 'NO HAGO: Culpar a IA por resultados',
-                desc: 'IA es herramienta, decisión es tuya. Úsala responsablemente.',
+                desc: 'IA es herramienta, decisión es tuya. �ssala responsablemente.',
               },
             ].map((practice, idx) => (
               <div
                 key={idx}
                 className={`p-4 rounded-lg border ${
-                  practice.icon === '✓'
+                  practice.icon === '�o"'
                     ? 'border-[#4CAF50]/30 bg-[#4CAF50]/5'
                     : 'border-[#FF6B6B]/30 bg-[#FF6B6B]/5'
                 }`}
@@ -323,7 +323,7 @@ export default function IAResponsableExamplePage() {
                   <span
                     className="w-6 h-6 rounded-full flex items-center justify-center text-sm"
                     style={{
-                      backgroundColor: practice.icon === '✓' ? '#4CAF50' : '#FF6B6B',
+                      backgroundColor: practice.icon === '�o"' ? '#4CAF50' : '#FF6B6B',
                       color: 'white',
                     }}
                   >
@@ -339,24 +339,24 @@ export default function IAResponsableExamplePage() {
 
         {/* Control Humano - Sección destacada */}
         <section className="space-y-6">
-          <h2 className="text-2xl font-bold text-[var(--text)]">👤 Control Humano - El Corazón de la IA Responsable</h2>
+          <h2 className="text-2xl font-bold text-[var(--text)]">�Y'� Control Humano - El Corazón de la IA Responsable</h2>
           
           <div className="grid gap-4 md:grid-cols-3">
             {[
               {
-                icon: '👍',
+                icon: '�Y'�',
                 title: 'Tu Feedback',
                 desc: 'Dinos "Buena", "Regular" o "Mala". No es obligatorio, pero ayuda.',
-                action: '← Ve arriba ↑',
+                action: '�?� Ve arriba �?'',
               },
               {
-                icon: '❌',
+                icon: '�O',
                 title: 'Rechaza Predicciones',
                 desc: 'Si no te parece, ignórala. Tú estás en control, no la IA.',
                 action: 'Tu decisión',
               },
               {
-                icon: '📞',
+                icon: '�Y"z',
                 title: 'Reporte Problemas',
                 desc: 'Si algo parece muy raro, escríbenos. Queremos aprender.',
                 action: 'ia-responsable@azca.es',
@@ -381,7 +381,7 @@ export default function IAResponsableExamplePage() {
 
         {/* Conclusión */}
         <div className="p-8 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]/50">
-          <h3 className="text-xl font-bold text-[var(--text)] mb-3">🎯 Conclusión</h3>
+          <h3 className="text-xl font-bold text-[var(--text)] mb-3">�YZ� Conclusión</h3>
           <p className="text-[var(--text-muted)] leading-relaxed">
             La IA responsable no es "IA perfecta", es "IA honesta". AZCA usa IA para ayudarte a tomar 
             mejores decisiones, pero siempre documentamos qué datos usamos, qué limitaciones tenemos y 
@@ -389,7 +389,7 @@ export default function IAResponsableExamplePage() {
             Confiamos en ti para usar esta herramienta responsablemente.
           </p>
           <p className="text-sm text-[var(--text-muted)] mt-4">
-            📧 Si detectas sesgos o errores sistemáticos, reporta a 
+            �Y"� Si detectas sesgos o errores sistemáticos, reporta a 
             <strong> ia-responsable@azca.es</strong>
           </p>
         </div>
@@ -397,3 +397,4 @@ export default function IAResponsableExamplePage() {
     </div>
   )
 }
+

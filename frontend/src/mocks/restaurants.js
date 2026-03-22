@@ -1,4 +1,4 @@
-export const mockRestaurants = [
+﻿export const mockRestaurants = [
   {
     restaurant_id: 1,
     name: 'La Cuchara Azca',
@@ -18,3 +18,4 @@ export const mockRestaurants = [
     google_rating: 4.7,
   },
 ]
+

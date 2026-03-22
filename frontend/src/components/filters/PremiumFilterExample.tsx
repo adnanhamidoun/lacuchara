@@ -1,4 +1,4 @@
-/**
+﻿/**
  * EXAMPLE: Premium Filter Component Usage
  * 
  * This file demonstrates how to use the new filter components
@@ -160,17 +160,17 @@ export function PremiumFilterExample() {
                   onClick={() => setPriceRange('all')}
                 />
                 <FilterChip
-                  label="Hasta €15"
+                  label="Hasta �,�15"
                   isActive={priceRange === 'low'}
                   onClick={() => setPriceRange('low')}
                 />
                 <FilterChip
-                  label="€15 - €25"
+                  label="�,�15 - �,�25"
                   isActive={priceRange === 'mid'}
                   onClick={() => setPriceRange('mid')}
                 />
                 <FilterChip
-                  label="Más de €25"
+                  label="Más de �,�25"
                   isActive={priceRange === 'high'}
                   onClick={() => setPriceRange('high')}
                 />
@@ -268,3 +268,4 @@ export function PremiumFilterExample() {
  * - Automatically adapts to theme
  * - No manual theme handling needed
  */
+

@@ -1,4 +1,4 @@
-import pandas as pd
+﻿import pandas as pd
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -317,7 +317,7 @@ class InferencePipeline:
             df["service_date"] = pd.to_datetime(df["service_date"], errors="coerce")
 
         
-        print(f"📊 DataFrame construido:")
+        print("DataFrame built:")
         print(f"   Tipos: {df.dtypes.to_dict()}")
         print(f"   Shape: {df.shape}")
         
@@ -465,7 +465,7 @@ class InferencePipeline:
 
         df = pd.DataFrame([[row[col] for col in normalized_columns]], columns=normalized_columns)
         
-        print("📊 Menu DataFrame construido:")
+        print("Menu DataFrame built:")
         print(f"   Columns: {list(df.columns)}")
         print(f"   Tipos: {df.dtypes.to_dict()}")
         print(f"   Shape: {df.shape}")
@@ -494,7 +494,7 @@ class InferencePipeline:
                 - terrace_setup_type: str
                 - menu_price: float
                 - course_type: str ('first_course', 'second_course', 'dessert')
-                - prev_dish_id: float (ID del plato anterior o 0.0)
+                - prev_dish_id: float (ID del dish anterior o 0.0)
         
         Returns:
             pd.DataFrame with 15 columns in exact order for the unified model
@@ -519,16 +519,16 @@ class InferencePipeline:
         ]
         
         # Create row with all 15 features
-        print(f"🔍 Input data recibido:\n{data}")
+        print(f"Input data received:\n{data}")
         row = {col: data.get(col) for col in UNIFIED_MENU_COLUMNS}
         
         # Validate all required fields are present
         missing = [col for col in UNIFIED_MENU_COLUMNS if row[col] is None]
         if missing:
-            print(f"❌ Missing fields: {missing}")
+            print(f"Missing fields: {missing}")
             raise ValueError(f"Missing required unified menu features: {missing}")
         
-        print(f"✅ Todos los campos presentes")
+        print("All required fields present")
         
         # Ensure correct types
         row["day_of_week"] = int(row["day_of_week"])
@@ -544,15 +544,19 @@ class InferencePipeline:
         row["prev_dish_id"] = float(row["prev_dish_id"])
         # cuisine_type, restaurant_segment, terrace_setup_type, course_type are already strings
         
-        print(f"✅ Tipos convertidos correctamente")
+        print("Field types converted successfully")
         
         # Create DataFrame with all 15 columns in EXACT order
         df = pd.DataFrame([row])
         df = df[UNIFIED_MENU_COLUMNS]
         
-        print(f"📊 Unified Menu DataFrame construido:")
+        print("Unified Menu DataFrame built:")
         print(f"   Columns: {list(df.columns)}")
         print(f"   Tipos: {df.dtypes.to_dict()}")
         print(f"   Shape: {df.shape}")
         
         return df
+
+
+
+

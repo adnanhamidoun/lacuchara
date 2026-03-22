@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Reusable animation wrapper components
  * Premium scroll-reveal motion components for Framer Motion
  */
@@ -148,7 +148,7 @@ export function StaggerItem({ children, className = '' }) {
 
 /**
  * HeroContent - Sequential reveal for hero sections
- * Title → Subtitle → CTA with delays
+ * Title �?' Subtitle �?' CTA with delays
  */
 export function HeroContent({ children, className = '' }) {
   return (
@@ -161,3 +161,4 @@ export function HeroContent({ children, className = '' }) {
     </motion.div>
   )
 }
+

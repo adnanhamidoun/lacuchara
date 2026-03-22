@@ -221,7 +221,7 @@ Pillow==12.1.1
 Docker==7.1.0
 databricks-sdk==0.99.0
 dotnetcore2==3.1.23
-fusion==3.0.1
+# fusion==3.0.1
 GitPython==3.1.46
 gitdb==4.0.12
 smmap==5.0.3

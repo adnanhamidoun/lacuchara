@@ -1,49 +1,54 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../../components/auth/AuthContext.jsx'
-import { Lock, CheckCircle2, Loader } from 'lucide-react'
+﻿import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../components/auth/AuthContext.jsx";
+import { Lock, CheckCircle2, Loader } from "lucide-react";
 
 const PRIVATE_FEATURES = [
   {
-    title: 'Panel de administración',
-    description: 'Aprobaciones, supervisión del catálogo y gestión global de restaurantes.',
+    title: "Panel de administración",
+    description:
+      "Aprobaciones, supervisión del catálogo y gestión global de restaurantes.",
   },
   {
-    title: 'Panel de restaurante',
-    description: 'Gestiona tu perfil, actualiza información y administra tu presencia en CUISINE AML.',
+    title: "Panel de restaurante",
+    description:
+      "Gestiona tu perfil, actualiza información y administra tu presencia en CUISINE AML.",
   },
   {
-    title: 'Herramientas inteligentes',
-    description: 'Accede a paneles y utilidades internas disponibles según tu rol.',
+    title: "Herramientas inteligentes",
+    description:
+      "Accede a paneles y utilidades internas disponibles según tu rol.",
   },
-]
+];
 
 export default function LoginView() {
-  const navigate = useNavigate()
-  const { login } = useAuth() as any
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const navigate = useNavigate();
+  const { login } = useAuth() as any;
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setLoading(true)
-    setError('')
+    event.preventDefault();
+    setLoading(true);
+    setError("");
 
     try {
-      const result = await login(email, password)
-      if (result.role === 'admin') {
-        navigate('/admin/inscripciones', { replace: true })
+      const result = await login(email, password);
+      if (result.role === "admin") {
+        navigate("/admin/inscripciones", { replace: true });
       } else {
-        navigate('/restaurante/panel', { replace: true })
+        navigate("/restaurante/panel", { replace: true });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión.')
+      setError(
+        err instanceof Error ? err.message : "No se pudo iniciar sesión.",
+      );
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="relative h-screen overflow-hidden bg-gradient-to-br from-[var(--bg)] via-[var(--bg)] to-[var(--surface-soft)]/20">
@@ -52,7 +57,7 @@ export default function LoginView() {
         {/* Subtle radial glows */}
         <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-[#E07B54]/5 blur-3xl" />
         <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-[#4f8cff]/5 blur-3xl" />
-        
+
         {/* Vignette */}
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-black/5" />
       </div>
@@ -67,7 +72,9 @@ export default function LoginView() {
               {/* Badge */}
               <div className="inline-flex items-center gap-2 rounded-full border border-[#E07B54]/30 bg-[#E07B54]/10 px-4 py-2">
                 <Lock size={16} className="text-[#E07B54]" />
-                <span className="text-xs font-semibold tracking-wide text-[#E07B54]">ÁREA PRIVADA</span>
+                <span className="text-xs font-semibold tracking-wide text-[#E07B54]">
+                  ÁREA PRIVADA
+                </span>
               </div>
 
               {/* Main Title */}
@@ -76,7 +83,8 @@ export default function LoginView() {
                   Accede a tu área privada
                 </h1>
                 <p className="text-base text-[var(--text-muted)] leading-relaxed">
-                  Inicio de sesión para administradores y restaurantes. El sistema te llevará automáticamente al panel correspondiente.
+                  Inicio de sesión para administradores y restaurantes. El
+                  sistema te llevará automáticamente al panel correspondiente.
                 </p>
               </div>
 
@@ -84,10 +92,17 @@ export default function LoginView() {
               <div className="space-y-3">
                 {PRIVATE_FEATURES.map((feature, idx) => (
                   <div key={idx} className="flex gap-3">
-                    <CheckCircle2 size={18} className="mt-0.5 flex-shrink-0 text-[#E07B54]" />
+                    <CheckCircle2
+                      size={18}
+                      className="mt-0.5 flex-shrink-0 text-[#E07B54]"
+                    />
                     <div>
-                      <h3 className="text-sm font-semibold text-[var(--text)]">{feature.title}</h3>
-                      <p className="text-xs text-[var(--text-muted)]">{feature.description}</p>
+                      <h3 className="text-sm font-semibold text-[var(--text)]">
+                        {feature.title}
+                      </h3>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        {feature.description}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -114,7 +129,9 @@ export default function LoginView() {
             <div className="space-y-6 text-center">
               <div className="inline-flex items-center gap-2 rounded-full border border-[#E07B54]/30 bg-[#E07B54]/10 px-4 py-2">
                 <Lock size={16} className="text-[#E07B54]" />
-                <span className="text-xs font-semibold tracking-wide text-[#E07B54]">ÁREA PRIVADA</span>
+                <span className="text-xs font-semibold tracking-wide text-[#E07B54]">
+                  ÁREA PRIVADA
+                </span>
               </div>
 
               <div className="space-y-2">
@@ -143,17 +160,17 @@ export default function LoginView() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 interface LoginCardProps {
-  email: string
-  setEmail: (value: string) => void
-  password: string
-  setPassword: (value: string) => void
-  error: string
-  loading: boolean
-  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void
+  email: string;
+  setEmail: (value: string) => void;
+  password: string;
+  setPassword: (value: string) => void;
+  error: string;
+  loading: boolean;
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
 }
 
 function LoginCard({
@@ -169,7 +186,9 @@ function LoginCard({
     <div className="w-full max-w-sm space-y-5 rounded-2xl border border-[var(--border)]/30 bg-[var(--surface)]/95 p-6 shadow-2xl backdrop-blur-sm">
       {/* Header */}
       <div className="space-y-2 text-center">
-        <h2 className="text-2xl font-bold text-[var(--text)]">Iniciar Sesión</h2>
+        <h2 className="text-2xl font-bold text-[var(--text)]">
+          Iniciar Sesión
+        </h2>
         <p className="text-sm text-[var(--text-muted)]">
           Acceso para administradores y restaurantes de CUISINE AML.
         </p>
@@ -179,7 +198,9 @@ function LoginCard({
       <form className="space-y-4" onSubmit={onSubmit}>
         {/* Email Input */}
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-[var(--text)]">Email</label>
+          <label className="text-sm font-semibold text-[var(--text)]">
+            Email
+          </label>
           <input
             type="email"
             value={email}
@@ -191,12 +212,14 @@ function LoginCard({
 
         {/* Password Input */}
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-[var(--text)]">Contraseña</label>
+          <label className="text-sm font-semibold text-[var(--text)]">
+            Contraseña
+          </label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
+            placeholder="Ingrese su contraseña"
             className="w-full rounded-xl border border-[var(--border)]/50 bg-[var(--surface-soft)] px-4 py-2.5 text-sm font-medium text-[var(--text)] placeholder:text-[var(--text-muted)]/60 outline-none transition-all duration-200 focus:border-[#E07B54]/60 focus:ring-2 focus:ring-[#E07B54]/20"
           />
         </div>
@@ -220,7 +243,7 @@ function LoginCard({
               Accediendo...
             </>
           ) : (
-            'Entrar'
+            "Entrar"
           )}
         </button>
       </form>
@@ -229,9 +252,12 @@ function LoginCard({
       <div className="border-t border-[var(--border)]/20 pt-3">
         <p className="text-center text-xs text-[var(--text-muted)]">
           Acceso restringido a usuarios autorizados de CUISINE AML.
-          <span className="text-[#E07B54]"> Contacta con soporte si tienes dudas.</span>
+          <span className="text-[#E07B54]">
+            {" "}
+            Contacta con soporte si tienes dudas.
+          </span>
         </p>
       </div>
     </div>
-  )
+  );
 }

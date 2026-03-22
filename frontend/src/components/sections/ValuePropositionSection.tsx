@@ -1,4 +1,4 @@
-import { Zap, TrendingUp, Shield, Users } from 'lucide-react'
+﻿import { Zap, TrendingUp, Shield, Users } from 'lucide-react'
 
 export default function ValuePropositionSection() {
   const values = [
@@ -20,7 +20,7 @@ export default function ValuePropositionSection() {
     {
       icon: Users,
       title: 'Comunidad Activa',
-      description: 'Únete a miles de usuarios que descubren y comparten sus mejores experiencias gastronómicas.',
+      description: '�snete a miles de usuarios que descubren y comparten sus mejores experiencias gastronómicas.',
     },
   ]
 
@@ -59,3 +59,4 @@ export default function ValuePropositionSection() {
     </section>
   )
 }
+

@@ -1,4 +1,4 @@
-export const CUISINE_META: Record<string, { label: string }> = {
+﻿export const CUISINE_META: Record<string, { label: string }> = {
   grill: { label: 'Parrilla y Brasa' },
   spanish: { label: 'Cocina Española' },
   mediterranean: { label: 'Cocina Mediterránea' },

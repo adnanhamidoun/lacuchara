@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Test predicción de servicios"""
+"""Test prediction de services"""
 
 import requests
 import json
@@ -24,10 +24,12 @@ payload = {
 }
 
 try:
-    print("🚀 Enviando predicción de servicios...")
+    print("�Ys? Enviando prediction de services...")
     resp = requests.post("http://localhost:8000/predict", json=payload, timeout=10)
-    print(f"✅ Status: {resp.status_code}")
+    print(f"�o. Status: {resp.status_code}")
     print(f"Response:")
     print(json.dumps(resp.json(), indent=2))
 except Exception as e:
-    print(f"❌ Error: {e}")
+    print(f"�O Error: {e}")
+
+

@@ -1,4 +1,4 @@
-import { Search, Filter, CheckCircle } from 'lucide-react'
+﻿import { Search, Filter, CheckCircle } from 'lucide-react'
 
 const steps = [
   {
@@ -96,3 +96,4 @@ export default function HowItWorksSection() {
     </section>
   )
 }
+

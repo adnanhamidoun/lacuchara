@@ -1,37 +1,40 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-Script para crear la tabla fact_prediction_logs en Azure SQL Server
-"""
+"""Create fact_prediction_logs table in Azure SQL Server if it does not exist."""
 
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
-# Cargar variables de entorno desde .env
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env")
 
-# Obtener credenciales desde variables de entorno
-db_server = os.getenv('DB_SERVER', 'azcasqlserver.database.windows.net')
-db_name = os.getenv('DB_NAME', 'azca_db')
-db_user = os.getenv('DB_USER', 'azca_user')
-db_password = os.getenv('DB_PASSWORD')
-db_driver = os.getenv('DB_DRIVER', '{ODBC Driver 17 for SQL Server}')
+db_server = os.getenv("DB_SERVER", "azcasqlserver.database.windows.net")
+db_name = os.getenv("DB_NAME", "azca_db")
+db_user = os.getenv("DB_USER", "azca_user")
+db_password = os.getenv("DB_PASS") or os.getenv("DB_PASSWORD")
+db_driver = os.getenv("DB_DRIVER", "{ODBC Driver 17 for SQL Server}")
 
 if not db_password:
-    raise ValueError("❌ DB_PASSWORD no configurada en .env")
+    raise ValueError("DB_PASS/DB_PASSWORD is not configured in .env")
 
-# Construir connection string de forma segura
-connection_string = f'mssql+pyodbc:///?odbc_connect=DRIVER={db_driver};Server=tcp:{db_server},1433;Database={db_name};Uid={db_user};Pwd={db_password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;'
+connection_string = (
+    "mssql+pyodbc:///?odbc_connect="
+    f"DRIVER={db_driver};"
+    f"Server=tcp:{db_server},1433;"
+    f"Database={db_name};"
+    f"Uid={db_user};"
+    f"Pwd={db_password};"
+    "Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+)
 
 try:
-    print("🔌 Conectando a Azure SQL Server...")
+    print("Connecting to Azure SQL Server...")
     engine = create_engine(connection_string)
-    
+
     with engine.connect() as conn:
-        # Crear tabla fact_prediction_logs
         create_table_sql = """
         IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'fact_prediction_logs')
         BEGIN
@@ -46,26 +49,26 @@ try:
                 latency_ms INT,
                 actual_outcome_json NVARCHAR(MAX) NULL
             );
-            
-            -- Crear índices
+
+            -- Create indexes
             CREATE INDEX idx_restaurant_id ON fact_prediction_logs(restaurant_id);
             CREATE INDEX idx_execution_date ON fact_prediction_logs(execution_date);
             CREATE INDEX idx_prediction_domain ON fact_prediction_logs(prediction_domain);
-            
-            PRINT 'Tabla fact_prediction_logs creada exitosamente';
+
+            PRINT 'Table fact_prediction_logs created successfully';
         END
         ELSE
         BEGIN
-            PRINT 'Tabla fact_prediction_logs ya existe';
+            PRINT 'Table fact_prediction_logs already exists';
         END
         """
-        
-        print("📊 Ejecutando SQL para crear tabla...")
+
+        print("Executing SQL migration...")
         conn.execute(text(create_table_sql))
         conn.commit()
-        print("✅ Tabla fact_prediction_logs verificada/creada exitosamente")
-        
-except Exception as e:
-    print(f"❌ Error: {str(e)}")
+        print("fact_prediction_logs table verified/created successfully")
+except Exception as exc:
+    print(f"Error: {exc}")
     import traceback
+
     traceback.print_exc()

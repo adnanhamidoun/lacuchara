@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+﻿import { createContext, useContext, useState, useEffect } from 'react';
 import { loadUserLocationLocal, saveUserLocationLocal } from '../services/geolocationService';
 
 const LocationContext = createContext(null);
@@ -12,7 +12,7 @@ export function LocationProvider({ children }) {
   useEffect(() => {
     const cached = loadUserLocationLocal(30);
     if (cached) {
-      console.log('📍 Ubicación cargada del cache:', cached);
+      console.log('�Y"� Ubicación cargada del cache:', cached);
       setUserLocation(cached);
     }
   }, []);
@@ -53,3 +53,4 @@ export function useUserLocation() {
   }
   return context;
 }
+

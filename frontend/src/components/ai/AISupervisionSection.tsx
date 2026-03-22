@@ -1,4 +1,4 @@
-// Sección de supervisión y control humano
+﻿// Sección de supervisión y control humano
 // Muestra cómo los usuarios pueden controlar y dar feedback sobre predicciones
 
 export interface AISupervisionSectionProps {
@@ -48,3 +48,4 @@ export default function AISupervisionSection({
     </div>
   )
 }
+

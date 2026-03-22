@@ -1,4 +1,4 @@
-export const mockInscripciones = [
+﻿export const mockInscripciones = [
   {
     inscripcion_id: 101,
     name: 'Bistró Castellana',
@@ -34,3 +34,4 @@ export const mockInscripciones = [
     fecha_solicitud: '2026-03-15T09:10:00',
   },
 ]
+

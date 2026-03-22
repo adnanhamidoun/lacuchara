@@ -1,4 +1,4 @@
-"""
+﻿"""
 Model refresh scheduler.
 
 Downloads both registered models from Azure ML on application startup (if not
@@ -23,7 +23,7 @@ def _seconds_until_next_first_of_month_06utc() -> float:
     now = datetime.now(tz=timezone.utc)
     candidate = now.replace(day=1, hour=6, minute=0, second=0, microsecond=0)
     if candidate <= now:
-        # This month's window has already passed — advance to next month
+        # This month's window has already passed �?" advance to next month
         if now.month == 12:
             candidate = candidate.replace(year=now.year + 1, month=1)
         else:
@@ -48,12 +48,12 @@ async def _monthly_model_refresh_loop(
             f"({wait_seconds / 3600:.1f} h from now)"
         )
         await asyncio.sleep(wait_seconds)
-        print("🔄 Monthly model refresh triggered…")
+        print("�Y"" Monthly model refresh triggered�?�")
         try:
             provider.ensure_models_in_artifacts(model_names, force=True)
-            print("✅ Monthly model refresh complete.")
+            print("�o. Monthly model refresh complete.")
         except Exception as exc:
-            print(f"❌ Monthly model refresh failed: {exc}")
+            print(f"�O Monthly model refresh failed: {exc}")
 
 
 def start_model_refresh_scheduler(
@@ -70,3 +70,4 @@ def start_model_refresh_scheduler(
         name="monthly-model-refresh",
     )
     return task
+

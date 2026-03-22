@@ -1,26 +1,26 @@
-// Componente que explica cuándo y por qué la IA puede fallar
+﻿// Componente que explica cuándo y por qué la IA puede fallar
 
 interface AIFailureScenario {
-  scenario: string
-  probability: 'high' | 'medium' | 'low'
-  example: string
-  whatToDo: string
+  scenario: string;
+  probability: "high" | "medium" | "low";
+  example: string;
+  whatToDo: string;
 }
 
 export interface AIFailureWarningProps {
-  scenarios: AIFailureScenario[]
-  title?: string
+  scenarios: AIFailureScenario[];
+  title?: string;
 }
 
 export default function AIFailureWarning({
   scenarios,
-  title = '⚠️ Cuándo estas predicciones pueden fallar',
+  title = "⚠️ Cuándo estas predicciones pueden fallar",
 }: AIFailureWarningProps) {
   const probabilityColors = {
-    high: { bg: '#FF6B6B', text: 'Probable' },
-    medium: { bg: '#FFB84D', text: 'Posible' },
-    low: { bg: '#4CAF50', text: 'Raro' },
-  }
+    high: { bg: "#FF6B6B", text: "Probable" },
+    medium: { bg: "#FFB84D", text: "Posible" },
+    low: { bg: "#4CAF50", text: "Raro" },
+  };
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]/50 p-6 space-y-4">
@@ -30,7 +30,7 @@ export default function AIFailureWarning({
 
       <div className="space-y-3">
         {scenarios.map((scenario, idx) => {
-          const probColor = probabilityColors[scenario.probability]
+          const probColor = probabilityColors[scenario.probability];
 
           return (
             <div
@@ -39,7 +39,9 @@ export default function AIFailureWarning({
             >
               {/* Encabezado */}
               <div className="flex items-start justify-between gap-3">
-                <p className="font-semibold text-[var(--text)] flex-1">{scenario.scenario}</p>
+                <p className="font-semibold text-[var(--text)] flex-1">
+                  {scenario.scenario}
+                </p>
                 <span
                   className="px-2.5 py-1 rounded-full text-xs font-medium text-white flex-shrink-0"
                   style={{ backgroundColor: probColor.bg }}
@@ -57,15 +59,16 @@ export default function AIFailureWarning({
 
               {/* Qué hacer */}
               <div className="flex gap-2 items-start">
-                <span className="text-lg flex-shrink-0">💡</span>
+                <span className="text-lg flex-shrink-0">�Y'�</span>
                 <p className="text-sm text-[var(--text-muted)]">
-                  <strong className="text-[var(--text)]">Qué hacer:</strong> {scenario.whatToDo}
+                  <strong className="text-[var(--text)]">Qué hacer:</strong>{" "}
+                  {scenario.whatToDo}
                 </p>
               </div>
             </div>
-          )
+          );
         })}
       </div>
     </div>
-  )
+  );
 }

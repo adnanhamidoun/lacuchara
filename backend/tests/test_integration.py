@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from pathlib import Path
 
 from azca.core.engine import PredictionEngine
@@ -35,18 +35,19 @@ def test_integration_e2e():
 
     try:
         prediction = engine.predict("azca_demand_v1", data)
-        print(f"✓ Prediction generated: {prediction} services")
+        print(f"�o" Prediction generated: {prediction} services")
         assert isinstance(prediction, int)
         assert prediction > 0
         return True
     except FileNotFoundError as e:
-        print(f"⚠ Model file not found: {e}")
+        print(f"�s� Model file not found: {e}")
         print("  (This is expected if model.pkl is in artifacts/)")
         return True
     except Exception as e:
-        print(f"✗ Prediction failed: {e}")
+        print(f"�o- Prediction failed: {e}")
         return False
 
 
 if __name__ == "__main__":
     test_integration_e2e()
+

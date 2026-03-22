@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { createInscripcion } from '../../services/inscripcionesService'
 
 const initialForm = {
@@ -229,3 +229,4 @@ export default function RestaurantOnboardingView() {
     </section>
   )
 }
+

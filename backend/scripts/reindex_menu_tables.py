@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import unicodedata
 from pathlib import Path
 
@@ -202,7 +202,7 @@ def main() -> None:
         conn.execute(text(f"DBCC CHECKIDENT ('dbo.fact_menus', RESEED, {max_menu_id})"))
         conn.execute(text(f"DBCC CHECKIDENT ('dbo.fact_menu_items', RESEED, {max_item_id})"))
 
-    print("OK: limpieza y renumeración completadas")
+    print("OK: cleanup and renumbering completed")
 
 
 if __name__ == "__main__":

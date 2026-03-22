@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Test directo de save_prediction_log sin necesidad de servidor HTTP
 """
@@ -16,10 +16,10 @@ from backend.api.main import save_prediction_log
 db = SessionLocal()
 
 print("\n" + "="*80)
-print("🧪 TEST DIRECTO: Llamando save_prediction_log")
+print("�Y�� TEST DIRECTO: Llamando save_prediction_log")
 print("="*80)
 
-# Datos de prueba
+# Datos de test
 test_input = {
     "day_of_week": 0,
     "month": 3,
@@ -40,11 +40,11 @@ test_input = {
 
 test_output = [(1, 0.45), (2, 0.35), (3, 0.20)]
 
-print(f"\n📤 Guardando predicción...")
-print(f"   Restaurante ID: 1")
+print(f"\n�Y"� Saving prediction...")
+print(f"   Restaurant ID: 1")
 print(f"   Tipo: MENU_STARTER")
 print(f"   Entrada: {len(test_input)} features")
-print(f"   Salida: {len(test_output)} platos")
+print(f"   Salida: {len(test_output)} dishes")
 
 try:
     prediction_id = save_prediction_log(
@@ -58,13 +58,13 @@ try:
     )
     
     if prediction_id > 0:
-        print(f"\n✅ GUARDADO EXITOSO!")
+        print(f"\n�o. GUARDADO EXITOSO!")
         print(f"   Prediction ID: {prediction_id}")
     else:
-        print(f"\n❌ FALLO AL GUARDAR (prediction_id = {prediction_id})")
+        print(f"\n�O FALLO AL GUARDAR (prediction_id = {prediction_id})")
         
 except Exception as e:
-    print(f"\n❌ EXCEPCIÓN: {str(e)}")
+    print(f"\n�O EXCEPCI�"N: {str(e)}")
     import traceback
     traceback.print_exc()
 
@@ -72,25 +72,25 @@ finally:
     db.close()
 
 print("\n" + "="*80)
-print("Verificando que se guardó en la BD...")
+print("Verifying it was saved in DB...")
 print("="*80 + "\n")
 
-# Verificar
+# Verify
 from backend.db.models import FactPredictionLog
 
 db2 = SessionLocal()
 try:
     total = db2.query(FactPredictionLog).count()
-    print(f"📊 Total de registros: {total}")
+    print(f"�Y"S Total de registros: {total}")
     
     if total > 0:
         latest = db2.query(FactPredictionLog).order_by(
             FactPredictionLog.prediction_id.desc()
         ).first()
         
-        print(f"\n✅ ÚLTIMO REGISTRO:")
+        print(f"\n�o. �sLTIMO REGISTRO:")
         print(f"   ID: {latest.prediction_id}")
-        print(f"   Fecha: {latest.execution_date}")
+        print(f"   Date: {latest.execution_date}")
         print(f"   Rest: {latest.restaurant_id}")
         print(f"   Tipo: {latest.prediction_domain}")
         print(f"   Modelo: {latest.model_version}")
@@ -100,3 +100,7 @@ finally:
     db2.close()
 
 print("\n")
+
+
+
+

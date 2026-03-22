@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Utility function to convert raw terrace_setup_type values to user-friendly Spanish labels
  * Maps database values to premium, user-facing terrace availability labels
  */
@@ -45,3 +45,4 @@ export function formatTerraceType(terraceValue: string | null | undefined): stri
   // Default: unavailable
   return 'No disponible'
 }
+

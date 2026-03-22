@@ -1,8 +1,8 @@
-/*
-Migración SQL Server:
-- Dejar inscripciones solo con estado pendiente.
-- Estandarizar valores a inglés y una palabra.
-- Añadir restricciones tipo ENUM (CHECK) para segmento, terraza y cuisine_type.
+﻿/*
+Migration SQL Server:
+- Keep inscriptions only with pending status.
+- Standardize values to English and one word.
+- Add ENUM-like (CHECK) constraints for segment, terrace, and cuisine_type.
 */
 
 BEGIN TRY
@@ -13,7 +13,7 @@ BEGIN TRY
     SET estado_inscripcion = 'pendiente'
     WHERE LOWER(LTRIM(RTRIM(COALESCE(estado_inscripcion, '')))) IN ('pendiente');
 
-    /* 2) Eliminar registros no pendientes de inscripciones */
+    /* 2) Delete registros no pendientes de inscripciones */
     DELETE FROM dbo.inscriptions
     WHERE LOWER(LTRIM(RTRIM(COALESCE(estado_inscripcion, '')))) <> 'pendiente';
 
@@ -130,7 +130,7 @@ BEGIN TRY
                 ELSE cuisine_type
         END;
 
-        /* 6) Eliminar filas fuera de catálogo en inscripciones */
+        /* 6) Delete rows outside catalog in inscriptions */
         DELETE FROM dbo.inscriptions
         WHERE restaurant_segment IS NOT NULL
             AND restaurant_segment NOT IN ('gourmet', 'traditional', 'business', 'family');
@@ -156,7 +156,7 @@ BEGIN TRY
         'streetfood'
       );
 
-    /* 7) Re-crear constraints con nuevo catálogo */
+    /* 7) Re-create constraints with new catalog */
     IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'ck_inscripciones_estado_pendiente')
         ALTER TABLE dbo.inscriptions DROP CONSTRAINT ck_inscripciones_estado_pendiente;
     IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'ck_inscripciones_segment')
@@ -239,3 +239,7 @@ BEGIN CATCH
 
     THROW;
 END CATCH;
+
+
+
+

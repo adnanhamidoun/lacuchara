@@ -1,4 +1,4 @@
-"""
+﻿"""
 Manual test script - Run this to interactively verify the system works
 """
 import sys
@@ -21,22 +21,22 @@ def test_1_model_provider():
     
     try:
         provider = ModelProvider()
-        print(f"✓ ModelProvider initialized")
+        print(f"�o" ModelProvider initialized")
         print(f"  Artifacts path: {provider.artifacts_path}")
         print(f"  Cache empty: {len(provider._cache) == 0}")
         
         # Try to load model
         model = provider.get_model("azca_demand_v1")
-        print(f"✓ Model loaded successfully")
+        print(f"�o" Model loaded successfully")
         print(f"  Model type: {type(model).__name__}")
         print(f"  Cache now has: {len(provider._cache)} model(s)")
         
         # Try to get from cache
         model2 = provider.get_model("azca_demand_v1")
-        print(f"✓ Model retrieved from cache (same object: {model is model2})")
+        print(f"�o" Model retrieved from cache (same object: {model is model2})")
         return True
     except Exception as e:
-        print(f"✗ Failed: {e}")
+        print(f"�o- Failed: {e}")
         return False
 
 
@@ -48,7 +48,7 @@ def test_2_pipeline():
     
     try:
         pipeline = InferencePipeline()
-        print(f"✓ Pipeline initialized with defaults")
+        print(f"�o" Pipeline initialized with defaults")
         print(f"  Fixed fields: {len(pipeline.fixed_fields)} fields")
         print(f"  Expected columns: {len(pipeline.MODEL_COLUMNS)} columns")
         
@@ -62,7 +62,7 @@ def test_2_pipeline():
         }
         
         df = pipeline.build_features(data)
-        print(f"✓ Features built successfully")
+        print(f"�o" Features built successfully")
         print(f"  DataFrame shape: {df.shape}")
         print(f"  Columns match: {df.shape[1] == 24}")
         
@@ -76,7 +76,7 @@ def test_2_pipeline():
         
         return True
     except Exception as e:
-        print(f"✗ Failed: {e}")
+        print(f"�o- Failed: {e}")
         return False
 
 
@@ -98,7 +98,7 @@ def test_3_engine_end_to_end():
         }
         
         engine = PredictionEngine(pipeline_config=azca_config)
-        print(f"✓ PredictionEngine initialized for Azca")
+        print(f"�o" PredictionEngine initialized for Azca")
         print(f"  Restaurant ID: {engine.pipeline.fixed_fields['restaurant_id']}")
         print(f"  Menu price: ${engine.pipeline.fixed_fields['menu_price']}")
         
@@ -112,13 +112,13 @@ def test_3_engine_end_to_end():
         }
         
         prediction = engine.predict("azca_demand_v1", data)
-        print(f"✓ Prediction generated successfully")
+        print(f"�o" Prediction generated successfully")
         print(f"  Scenario: Golden day (25°C, no rain, stadium event, payday)")
         print(f"  Predicted services: {prediction}")
         
         return True
     except Exception as e:
-        print(f"✗ Failed: {e}")
+        print(f"�o- Failed: {e}")
         return False
 
 
@@ -176,18 +176,18 @@ def test_4_multiple_scenarios():
             pred = engine.predict("azca_demand_v1", data)
             temp = data["max_temp_c"]
             rain = data.get("precipitation_mm", 0)
-            print(f"  {name:15} | Temp: {temp:5.1f}°C | Rain: {rain:5.1f}mm | → {pred:3d} services")
+            print(f"  {name:15} | Temp: {temp:5.1f}°C | Rain: {rain:5.1f}mm | �?' {pred:3d} services")
         return True
     except Exception as e:
-        print(f"✗ Failed: {e}")
+        print(f"�o- Failed: {e}")
         return False
 
 
 def main():
     print("\n")
-    print("█" * 60)
-    print("█  AZCA ML SYSTEM - MANUAL VERIFICATION")
-    print("█" * 60)
+    print("�-^" * 60)
+    print("�-^  AZCA ML SYSTEM - MANUAL VERIFICATION")
+    print("�-^" * 60)
     
     results = []
     results.append(("ModelProvider", test_1_model_provider()))
@@ -199,16 +199,16 @@ def main():
     print("SUMMARY")
     print("="*60)
     for name, passed in results:
-        status = "✓ PASS" if passed else "✗ FAIL"
+        status = "�o" PASS" if passed else "�o- FAIL"
         print(f"  {status} | {name}")
     
     all_passed = all(r[1] for r in results)
-    print("\n" + ("█" * 60))
+    print("\n" + ("�-^" * 60))
     if all_passed:
-        print("█  ALL TESTS PASSED ✓")
+        print("�-^  ALL TESTS PASSED �o"")
     else:
-        print("█  SOME TESTS FAILED ✗")
-    print("█" * 60 + "\n")
+        print("�-^  SOME TESTS FAILED �o-")
+    print("�-^" * 60 + "\n")
     
     return all_passed
 
@@ -217,3 +217,4 @@ if __name__ == "__main__":
     import sys
     success = main()
     sys.exit(0 if success else 1)
+

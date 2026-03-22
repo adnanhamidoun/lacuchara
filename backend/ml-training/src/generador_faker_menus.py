@@ -1,17 +1,17 @@
-import pandas as pd
+﻿import pandas as pd
 import numpy as np
 import random
 import os
 
-# 1. Cargar el suelo del proyecto
+# 1. Load project root data
 archivo_entrada = 'base_azca.csv'
 if not os.path.exists(archivo_entrada):
-    print(f"❌ Error: No encuentro '{archivo_entrada}'")
+    print(f"�O Error: File not found '{archivo_entrada}'")
     exit()
 
 df_base = pd.read_csv(archivo_entrada)
 
-# 2. Configuración de platos
+# 2. Dish configuration
 menus_config = {
     'Spanish': {
         'first': {
@@ -50,10 +50,10 @@ menus_config = {
 
 # Listas temporales
 headers = [] 
-items_raw = [] # Aquí guardaremos temporalmente nombres para luego normalizar
+items_raw = [] # Temporarily store names before normalization
 menu_id_counter = 1
 
-print("👨‍🍳 Generando cartas variadas y normalizando platos...")
+print("�Y'��?��Y�� Generando cartas variadas y normalizando dishes...")
 
 for index, row in df_base.iterrows():
     rid = row['restaurant_id']
@@ -70,7 +70,7 @@ for index, row in df_base.iterrows():
         'restaurant_id': rid
     })
     
-    # 2. GENERAR PLATOS (Guardando nombres por ahora)
+    # 2. GENERATE DISHES (storing names for now)
     # --- Primeros ---
     pool_first = menus_config[cuisine]['first'][clima_tag]
     seleccion_first = random.sample(pool_first, k=random.randint(2, 3))
@@ -94,26 +94,29 @@ for index, row in df_base.iterrows():
 
     menu_id_counter += 1
 
-# --- PROCESO DE NORMALIZACIÓN (DESACOPLAMIENTO) ---
+# --- PROCESO DE NORMALIZACI�"N (DESACOPLAMIENTO) ---
 df_headers = pd.DataFrame(headers)
 df_items_temp = pd.DataFrame(items_raw)
 
-# A. Crear Catálogo Maestro (dim_dishes)
-# Sacamos los platos únicos (nombre + tipo)
+# A. Create Master Catalog (dim_dishes)
+# Extract unique dishes (name + type)
 df_dishes = df_items_temp[['course_type', 'dish_name']].drop_duplicates().reset_index(drop=True)
 df_dishes.insert(0, 'dish_id', range(1, len(df_dishes) + 1))
 
-# B. Crear Tabla de Hechos (fact_menu_items)
+# B. Create Tabla de Hechos (fact_menu_items)
 # Sustituimos el nombre y tipo por el dish_id
 df_fact_items = df_items_temp.merge(df_dishes, on=['course_type', 'dish_name'])
 df_fact_items = df_fact_items[['menu_id', 'dish_id']] # Solo los IDs
 
-# 4. Guardar los 3 archivos
+# 4. Save the 3 files
 df_headers.to_csv('fact_menus.csv', index=False)
 df_dishes.to_csv('dim_dishes.csv', index=False)
 df_fact_items.to_csv('fact_menu_items.csv', index=False)
 
-print(f"✅ ¡Todo listo! Se han generado 3 archivos:")
-print(f"   1. fact_menus.csv ({len(df_headers)} filas)")
-print(f"   2. dim_dishes.csv ({len(df_dishes)} platos únicos)")
-print(f"   3. fact_menu_items.csv ({len(df_fact_items)} relaciones)")
+print(f"�o. Done! Generated 3 files:")
+print(f"   1. fact_menus.csv ({len(df_headers)} rows)")
+print(f"   2. dim_dishes.csv ({len(df_dishes)} unique dishes)")
+print(f"   3. fact_menu_items.csv ({len(df_fact_items)} relations)")
+
+
+

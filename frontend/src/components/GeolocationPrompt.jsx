@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { MapPin, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import {
   requestGeolocationPermission,
@@ -104,8 +104,8 @@ export function GeolocationPrompt({ onLocationReceived, onDismiss }) {
                 <span className="font-medium">{message}</span>
               </div>
               <p className="text-sm text-gray-600">
-                📍 Latitud: {location?.latitude.toFixed(4)}<br/>
-                📍 Longitud: {location?.longitude.toFixed(4)}
+                �Y"� Latitud: {location?.latitude.toFixed(4)}<br/>
+                �Y"� Longitud: {location?.longitude.toFixed(4)}
               </p>
             </div>
           )}
@@ -155,3 +155,4 @@ export function GeolocationPrompt({ onLocationReceived, onDismiss }) {
 }
 
 export default GeolocationPrompt;
+

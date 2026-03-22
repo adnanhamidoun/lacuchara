@@ -1,4 +1,4 @@
-import { Building2, Check, Clock, Trash2, Users, UtensilsCrossed, Camera, Shield } from 'lucide-react'
+﻿import { Building2, Check, Clock, Trash2, Users, UtensilsCrossed, Camera, Shield } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   approveInscripcion,
@@ -116,7 +116,7 @@ function KpiCard({ label, value, color }: { label: string; value: number; color:
 function EmptyState() {
   return (
     <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] px-6 py-12 text-center">
-      <div className="text-5xl">🍽️</div>
+      <div className="text-5xl">�Y��️</div>
       <p className="mt-3 text-base font-semibold text-[var(--text)]">Todo al día</p>
       <p className="text-sm text-[var(--text-muted)]">No hay solicitudes pendientes por revisar.</p>
     </div>
@@ -596,7 +596,7 @@ export default function AdminDashboardView() {
           {session && (
             <div className="mt-3 flex items-center gap-2">
               <span className="inline-flex items-center gap-1 rounded-full bg-[#E07B54]/20 px-3 py-1 text-xs font-semibold text-[#E07B54]">
-                👑 {session.role === 'admin' ? 'Administrador Royal' : 'Propietario'}
+                �Y'' {session.role === 'admin' ? 'Administrador Royal' : 'Propietario'}
               </span>
               <span className="text-xs text-[var(--text-muted)]">{session.email}</span>
             </div>
@@ -903,3 +903,4 @@ export default function AdminDashboardView() {
     </div>
   )
 }
+

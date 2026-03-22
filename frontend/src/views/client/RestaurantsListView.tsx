@@ -1,4 +1,4 @@
-import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react'
+﻿import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Search, Wifi, Sparkles, Building2, Briefcase, Users, Linkedin, ArrowRight, Crown, Star } from 'lucide-react'
 import { isInPriceRange, type PriceRange, useRestaurants } from '../../hooks/useRestaurants'
@@ -62,8 +62,8 @@ type RestaurantRankingRow = {
 type DishRankingRow = {
   dish_id: number | null
   dish_name: string
-  restaurant_id: number  // ✅ Nuevo
-  restaurant_name: string  // ✅ Nuevo
+  restaurant_id: number  // �o. Nuevo
+  restaurant_name: string  // �o. Nuevo
   avg_rating: number | null
   votes: number
   trend_7d: number | null
@@ -96,9 +96,9 @@ function normalizeSegment(segment: string | null | undefined): string {
 }
 
 function priceRangeLabel(range: PriceRange): string {
-  if (range === 'low') return 'Hasta €15'
-  if (range === 'mid') return '€15 - €25'
-  if (range === 'high') return 'Más de €25'
+  if (range === 'low') return 'Hasta �,�15'
+  if (range === 'mid') return '�,�15 - �,�25'
+  if (range === 'high') return 'Más de �,�25'
   return 'Todos los precios'
 }
 
@@ -202,7 +202,7 @@ const RestaurantCard = memo(function RestaurantCard({ restaurant, index, showOpe
         </div>
 
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-[var(--text-muted)]">~€{Math.round(price)}/menú</p>
+          <p className="text-sm font-semibold text-[var(--text-muted)]">~�,�{Math.round(price)}/menú</p>
           <RatingDisplay rating={rating} />
         </div>
 
@@ -694,7 +694,7 @@ export default function RestaurantsListView() {
             }`}
           >
             <span className="inline-flex items-center gap-1.5">
-              🌿 Con Terraza
+              �YO� Con Terraza
             </span>
           </button>
           </div>
@@ -766,7 +766,7 @@ export default function RestaurantsListView() {
                   : 'hover:brightness-95'
               }`}
             >
-              🗳️ Más votados
+              �Y-�️ Más votados
             </button>
 
             <button
@@ -778,7 +778,7 @@ export default function RestaurantsListView() {
                   : 'hover:brightness-95'
               }`}
             >
-              🔥 Tendencia semanal
+              �Y"� Tendencia semanal
             </button>
           </div>
         </div>
@@ -788,7 +788,7 @@ export default function RestaurantsListView() {
       {error ? <p className="rounded-lg bg-[#E53935]/10 p-3 text-sm text-[#E53935]">{error}</p> : null}
 
       {dishQuery && dishSearchLoading ? (
-        <p className="text-sm text-[var(--text-muted)]">Buscando platos similares a “{dishQuery}”...</p>
+        <p className="text-sm text-[var(--text-muted)]">Buscando platos similares a �?o{dishQuery}�?�...</p>
       ) : null}
 
       {!loading && !error && sortedRestaurants.length === 0 ? (
@@ -874,7 +874,7 @@ export default function RestaurantsListView() {
                           : 'text-[var(--text)] hover:bg-[var(--surface-soft)]'
                       }`}
                     >
-                      🗳️ Votos
+                      �Y-�️ Votos
                     </button>
                   </div>
                 </div>
@@ -914,7 +914,7 @@ export default function RestaurantsListView() {
                                       key={i}
                                       className={`text-xs ${(row.avg_rating ?? 0) > i ? 'text-[#D4AF37]' : 'text-[#D4AF37]/20'}`}
                                     >
-                                      ★
+                                      �~.
                                     </span>
                                   ))}
                                   <span className="ml-0.5 text-xs text-[var(--text-muted)]">{row.avg_rating?.toFixed(1)}</span>
@@ -927,7 +927,7 @@ export default function RestaurantsListView() {
                       <div className="overflow-hidden rounded-2xl border border-[var(--border)]/70 bg-[var(--surface)]/70">
                         <div className="grid grid-cols-12 gap-2 border-b border-[var(--border)]/60 px-4 py-3 text-xs font-semibold text-[var(--text-muted)]">
                           <div className="col-span-1">#</div>
-                          <div className="col-span-11 text-right">Plato – Votos</div>
+                          <div className="col-span-11 text-right">Plato �?" Votos</div>
                         </div>
 
                         {dishRankingRows
@@ -955,7 +955,7 @@ export default function RestaurantsListView() {
                           onClick={() => setDishRankingVisibleCount((prev) => prev + 5)}
                           className="inline-flex items-center rounded-lg border border-[#E07B54]/50 bg-[var(--surface-soft)] px-4 py-2 text-sm font-semibold text-[var(--text)] transition-all hover:border-[#E07B54] hover:bg-[var(--surface-soft)]/80"
                         >
-                          ↓ Cargar más platos
+                          �?" Cargar más platos
                         </button>
                       </div>
                     )}
@@ -1048,3 +1048,4 @@ export default function RestaurantsListView() {
     </section>
   )
 }
+

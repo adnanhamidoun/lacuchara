@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parents[2]
@@ -84,16 +84,16 @@ PECHUGA DE POLLO A LA PLANCHA CON PATATAS O ENSALADA
 LOMOS DE VENTRESCA DE ATUN A LA PLANCHA CON ENSALADA
 
 Incluye pan, bebida, postre o cafe
-14,00 €"""
+14,00 �,�"""
 
     sections = MenuSectionExtractor.extract(raw_text)
 
     assert sections.starter == "FIDEUA NEGRA DE LA CASA A LA MARINERA"
     assert sections.main == "CHULETA DE SAJONIA A LA RIOJANA CON PATATAS FRITAS"
-    assert sections.dessert == "Sin detectar"
+    assert sections.dessert == "Not detected"
     assert sections.starter_options[-1] == "ENSALADA MIXTA"
     assert len(sections.main_options) == 5
-    assert "14,00 €" not in sections.detected_lines
+    assert "14,00 �,�" not in sections.detected_lines
 
 
 def test_extract_menu_without_separators_infers_main_start_and_merges_wrapped_lines():
@@ -109,15 +109,15 @@ CHULETA DE SAJONIA A LA RIOJANA CON PATATAS FRITAS
 PECHUGA DE POLLO EMPANADA CON PATATAS O ENSALADA
 FILETE DE TERNERA A LA PLANCHA CON PATATAS O ENSALADA
 Incluye pan, bebida, postre o cafe
-(Tercio o doble de cerveza +0,50 €)
-14,00 €"""
+(Tercio o doble de cerveza +0,50 �,�)
+14,00 �,�"""
 
     sections = MenuSectionExtractor.extract(raw_text)
 
     assert "PARRILLADA CASERA DE VERDURAS" in sections.starter_options
     assert "ESPARRAGOS SALTEADOS CON HUEVO Y JAMON EN SALSA ROSA" in sections.starter_options
     assert sections.main_options[0] == "CHULETA DE SAJONIA A LA RIOJANA CON PATATAS FRITAS"
-    assert sections.dessert == "Sin detectar"
+    assert sections.dessert == "Not detected"
     assert all("tercio" not in line.lower() for line in sections.detected_lines)
 
 
@@ -145,7 +145,7 @@ PECHUGA DE POLLO EMPANADA CON PATATAS O ENSALADA"""
 
 
 def test_extract_header_first_with_primeros_segundos_postres():
-    raw_text = """MENÚ DEL DÍA
+    raw_text = """MEN�s DEL DÍA
 PRIMEROS:
 Ensalada mixta
 Salmorejo cordobés
@@ -157,7 +157,7 @@ Merluza a la plancha
 POSTRES:
 Flan casero
 Yogur natural
-14,00 €"""
+14,00 �,�"""
 
     sections = MenuSectionExtractor.extract(raw_text)
 
@@ -171,7 +171,7 @@ Yogur natural
 
 def test_extract_header_first_ignores_text_before_first_header():
     raw_text = """MARTES 24 DE FEBRERO DE 2026
-Texto promocional del restaurante
+Texto promocional del restaurant
 PRIMEROS
 Ensaladilla rusa
 SEGUNDOS
@@ -181,7 +181,7 @@ Tarta de queso"""
 
     sections = MenuSectionExtractor.extract(raw_text)
 
-    assert "Texto promocional del restaurante" not in sections.starter_options
+    assert "Texto promocional del restaurant" not in sections.starter_options
     assert sections.starter_options == ["Ensaladilla rusa"]
     assert sections.main_options == ["Filete de ternera"]
     assert sections.dessert_options == ["Tarta de queso"]
@@ -203,7 +203,7 @@ Tarta de manzana Don Camilo
 Crème brûlée a la murciana
 
 Una bebida y café
-25€"""
+25�,�"""
 
     sections = MenuSectionExtractor.extract(raw_text)
 
@@ -216,21 +216,21 @@ Una bebida y café
 
 def test_extract_header_variants_a_elegir_and_postre_o_cafe():
     raw_text = """BONA VISTA
-MENÚ MIÉRCOLES
+MEN�s MI�?RCOLES
 PRIMEROS A ELEGIR
 Acelgas salteadas con ajo, piñones y huevo frito
 Sopa de ajo
 Tomate con capellán
 
 SEGUNDOS A ELEGIR
-Arroz de conejo y serranas a la leña (+4€)
-Codillo al horno (+1€)
+Arroz de conejo y serranas a la leña (+4�,�)
+Codillo al horno (+1�,�)
 Sardinas a la plancha
 
-POSTRE O CAFÉ
+POSTRE O CAF�?
 Tarta de queso, tarta de la abuela, arroz con leche
 
-15,90 €
+15,90 �,�
 Incluye tercio Estrella Damm, tinto de verano, vino de mesa, refresco o agua"""
 
     sections = MenuSectionExtractor.extract(raw_text)
@@ -251,12 +251,12 @@ Incluye tercio Estrella Damm, tinto de verano, vino de mesa, refresco o agua"""
 
 
 def test_extract_inline_header_with_first_dish_attached():
-    raw_text = """MENÚ MIÉRCOLES
+    raw_text = """MEN�s MI�?RCOLES
 PRIMEROS A ELEGIR Acelgas salteadas con ajo, piñones y huevo frito
 Sopa de ajo
-SEGUNDOS A ELEGIR Codillo al horno (+1€)
+SEGUNDOS A ELEGIR Codillo al horno (+1�,�)
 Sardinas a la plancha
-POSTRE O CAFÉ Tarta de queso, arroz con leche"""
+POSTRE O CAF�? Tarta de queso, arroz con leche"""
 
     sections = MenuSectionExtractor.extract(raw_text)
 
@@ -281,7 +281,7 @@ Hummus casero de garbanzos con sticks de zanahoria y totopos
 Principales 1a elegir
 Ensalada de lentejas con boniato asado, espinacas frescas, nueces, queso cottage y vinagreta casera de mostaza-miel
 Arroz chaufa de pollo a baja temperatura con verduras y huevo revuelto
-Codillo al horno (+1€)"""
+Codillo al horno (+1�,�)"""
 
     sections = MenuSectionExtractor.extract(raw_text)
 
@@ -295,7 +295,7 @@ Codillo al horno (+1€)"""
         "Arroz chaufa de pollo a baja temperatura con verduras y huevo revuelto",
         "Codillo al horno",
     ]
-    assert all("(+1€)" not in item for item in sections.main_options)
+    assert all("(+1�,�)" not in item for item in sections.main_options)
     assert "Entrantes 1a elegir" not in sections.starter_options
 
 
@@ -375,7 +375,7 @@ def test_extract_excludes_el_menu_incluye_line():
     raw_text = """POSTRES
 Arroz con leche
 Fruta del tiempo
-El menú incluye una bebida y postre o café"""
+Menu includes one drink and dessert or coffee"""
 
     sections = MenuSectionExtractor.extract(raw_text)
 
@@ -383,11 +383,11 @@ El menú incluye una bebida y postre o café"""
         "Arroz con leche",
         "Fruta del tiempo",
     ]
-    assert all("menú incluye" not in item.lower() for item in sections.dessert_options)
+    assert all("menu incluye" not in item.lower() for item in sections.dessert_options)
 
 
 def test_extract_merges_multiline_dishes_and_excludes_no_incluye():
-    raw_text = """MENÚ
+    raw_text = """MEN�s
 PRIMEROS:
 Corazones de alcachofas salteados con
 chipirones ,ajos y sepia baby
@@ -440,7 +440,7 @@ Presa de Duroc a la plancha"""
 
 
 def test_extract_merges_orphan_fragment_into_previous_dish():
-    raw_text = """MENÚ DEL DÍA
+    raw_text = """MEN�s DEL DÍA
 ENTRANTES
 Lentejas estofadas
 Revuelto de espinacas
@@ -460,3 +460,7 @@ Brownie con helado"""
         "Ensalada de lechugas variadas con queso fresco y aceitunas",
     ]
     assert "aceitunas" not in sections.starter_options
+
+
+
+

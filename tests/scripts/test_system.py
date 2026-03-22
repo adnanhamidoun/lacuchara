@@ -1,8 +1,8 @@
-import requests
+﻿import requests
 import json
 
 print('=' * 60)
-print('PRUEBAS COMPLETAS DEL SISTEMA')
+print('FULL SYSTEM TESTS')
 print('=' * 60)
 
 # Test 1: Admin Login
@@ -14,71 +14,75 @@ response = requests.post('http://localhost:8000/auth/login', json={
 })
 if response.status_code == 200:
     data = response.json()
-    print(f'✅ Status: {response.status_code}')
+    print(f'Status: {response.status_code}')
     print(f'   Role: {data["role"]}')
     print(f'   Email: {data["email"]}')
 else:
-    print(f'❌ Error: {response.status_code}')
+    print(f'Error: {response.status_code}')
 
 # Test 2: Restaurant Login
-print('\n2. LOGIN RESTAURANTE')
+print('\n2. RESTAURANT LOGIN')
 print('-' * 60)
 response = requests.post('http://localhost:8000/auth/login', json={
-    'email': 'test@restaurante.com',
+    'email': 'test@restaurant.com',
     'password': 'testpass123'
 })
 if response.status_code == 200:
     data = response.json()
-    print(f'✅ Status: {response.status_code}')
+    print(f'Status: {response.status_code}')
     print(f'   Role: {data["role"]}')
     print(f'   Restaurant ID: {data["restaurant_id"]}')
     print(f'   Restaurant Name: {data["restaurant_name"]}')
 else:
-    print(f'❌ Error: {response.status_code}')
+    print(f'Error: {response.status_code}')
 
-# Test 3: Get Restaurants
-print('\n3. OBTENER LISTA RESTAURANTES')
+# Test 3: Get restaurants
+print('\n3. GET RESTAURANT LIST')
 print('-' * 60)
 response = requests.get('http://localhost:8000/restaurants')
 if response.status_code == 200:
     data = response.json()
-    print(f'✅ Status: {response.status_code}')
-    print(f'   Total: {data["count"]} restaurantes')
+    print(f'Status: {response.status_code}')
+    print(f'   Total: {data["count"]} restaurants')
 else:
-    print(f'❌ Error')
+    print('Error')
 
 print('\n' + '=' * 60)
-print('FLUJO COMPLETO VINCULADO')
+print('FULL LINKED FLOW')
 print('=' * 60)
 print('''
-FLUJO DE REGISTRO Y APROBACIÓN:
-1. Restaurante se registra en /restaurante/alta
-   - Proporciona email y contraseña
-   - Sistema hashea contraseña y crea inscripción pendiente
+SIGNUP AND APPROVAL FLOW:
+1. Restaurant se registra en /restaurant/alta
+   - Provides email and password
+    - System hashes password and creates a pending registration
 
-2. Admin aprueba en /admin/inscripciones
-   - Mueve restaurante a dim_restaurants
-    - Crea usuario en dbo.users con credenciales hasheadas
+2. Admin tests /admin/inscripciones
+    - Moves restaurant into dim_restaurants
+    - Creates user in dbo.users with hashed credentials
 
-3. Restaurante inicia sesión en /login
-    - Sistema busca en dbo.users
-   - Valida contraseña hasheada
-   - Devuelve token con role "restaurant_owner" y restaurant_id
+3. Restaurant signs in at /login
+    - System queries dbo.users
+    - Validates hashed password
+    - Returns token with role "restaurant_owner" and restaurant_id
 
-4. Restaurante accede a /restaurante/panel
+4. Restaurant accesses /restaurant/panel
    - ProtectedRoute valida rol
-   - Panel muestra opciones del restaurante
-   - Puede actualizar imagen, OCR, etc.
+    - Panel shows restaurant options
+    - Can update image, OCR, etc.
 
-FLUJO ADMIN:
-1. Admin inicia sesión en /login
-    - Busca en dbo.users con restaurant_id=0
-   - Valida contraseña
-   - Devuelve token con role "admin"
+ADMIN FLOW:
+1. Admin signs in at /login
+    - Queries dbo.users with restaurant_id=0
+    - Validates password
+    - Returns token with role "admin"
 
 2. Admin accede a /admin/inscripciones
    - ProtectedRoute valida rol
-   - Ve inscripciones pendientes
-   - Puede aprobar o rechazar
-   - Puede eliminar restaurantes activos
+    - Reviews pending registrations
+    - Can approve or reject
+    - Can delete active restaurants
 ''')
+
+
+
+

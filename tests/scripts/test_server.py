@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """Test server simple sin cargas de modelos complejos"""
 
 from fastapi import FastAPI
@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 Iniciando servidor...")
+    logger.info("�Ys? Iniciando servidor...")
     yield
-    logger.info("🛑 Deteniendo servidor...")
+    logger.info("�Y>' Deteniendo servidor...")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -30,3 +30,4 @@ async def get_restaurant_image(restaurant_id: int):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
+

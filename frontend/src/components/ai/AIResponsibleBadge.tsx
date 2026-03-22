@@ -1,4 +1,4 @@
-// Badge simple para indicar que un componente usa IA responsable
+﻿// Badge simple para indicar que un componente usa IA responsable
 
 export interface AIResponsibleBadgeProps {
   size?: 'small' | 'medium' | 'large'
@@ -27,7 +27,7 @@ export default function AIResponsibleBadge({
           onClick={onClick}
           title={tooltip ? 'Usa IA Responsable - Click para saber más' : undefined}
         >
-          🤖
+          �Y�-
         </span>
       ),
     },
@@ -38,7 +38,7 @@ export default function AIResponsibleBadge({
           onClick={onClick}
           title={tooltip ? 'Usa IA Responsable - Click para saber más' : undefined}
         >
-          <span>🤖</span>
+          <span>�Y�-</span>
           <span>IA Responsable</span>
         </span>
       ),
@@ -50,7 +50,7 @@ export default function AIResponsibleBadge({
           onClick={onClick}
         >
           <p className="text-sm font-semibold text-[#4CAF50] flex items-center gap-2">
-            <span className="text-lg">🤖</span>
+            <span className="text-lg">�Y�-</span>
             IA Responsable
           </p>
           <p className="text-xs text-[var(--text-muted)] mt-1">
@@ -63,3 +63,4 @@ export default function AIResponsibleBadge({
 
   return variants[variant].render
 }
+

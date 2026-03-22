@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 export default function RestaurantsListView() {
@@ -64,3 +64,4 @@ export default function RestaurantsListView() {
     </section>
   )
 }
+
